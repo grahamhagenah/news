@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "*/30 * * * *"
+    # GitHub runs schedules on a best-effort basis and often drops runs at :00 and :30, when everyone's
+    # cron fires. Odd minutes are quieter, and every 15 minutes means a dropped run costs little.
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 permissions:
