@@ -466,7 +466,7 @@ def render_sources(feeds, built_at):
         remove = f"{REPO_URL}/issues/new?" + urlencode({"title": f"Remove {feed['url']}", "body": ISSUE_NOTE})
         rows.append(
             f'<li><a href="{html.escape(feed["url"])}">{html.escape(feed["name"])}</a>'
-            f'<span class="note">{status}</span><a class="remove" href="{html.escape(remove)}">remove</a></li>'
+            f'<span class="note">{status}</span><a class="remove" href="{html.escape(remove)}" target="_blank" rel="noopener">remove</a></li>'
         )
 
     body = f"""<h1>Add a site</h1>
@@ -504,7 +504,9 @@ The current list of posts is also available as <a href="posts.json">JSON</a>.</p
     event.preventDefault();
     const form = event.target;
     const title = ["Add", form.elements.site.value.trim(), form.elements.label.value.trim()].filter(Boolean).join(" ");
-    location.href = form.action + "?" + new URLSearchParams({{ title, body: form.dataset.note }});
+    // Open GitHub in a new tab, and clear the form so this page is ready for the next site.
+    window.open(form.action + "?" + new URLSearchParams({{ title, body: form.dataset.note }}), "_blank", "noopener");
+    form.reset();
   }});
 </script>"""
     return page("Sources", body)
