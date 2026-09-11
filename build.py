@@ -159,6 +159,25 @@ def entry_link(entry):
     return guid if guid.startswith("http") else ""
 
 
+def entry_comments(entry, link, feed_url):
+    """The post's discussion page and comment count, when the feed has them (Hacker News does)."""
+    url, count = None, None
+    # <comments> holds the discussion URL; WordPress's <slash:comments> holds a count.
+    for child in children(entry, "comments"):
+        text = (child.text or "").strip()
+        if text.startswith("http"):
+            url = urljoin(feed_url, text)
+        elif text.isdigit():
+            count = int(text)
+    hnrss_count = re.search(r"# Comments: (\d+)", child_text(entry, "description"))
+    if hnrss_count:
+        count = int(hnrss_count.group(1))
+    # Comments on the post's own page (most blogs, or an Ask HN post) are already one click away.
+    if url and url.split("#")[0] == link.split("#")[0]:
+        return None, None
+    return url, count
+
+
 BLOCK_TAG = re.compile(r"</?(p|div|blockquote|li|ul|ol|h[1-6]|br|pre|table|tr)\b[^>]*>", re.I)
 # hnrss describes link posts with these lines instead of any article text.
 BOILERPLATE = re.compile(r"^(Article URL|Comments URL|Points|# Comments):")
@@ -230,8 +249,17 @@ def read_feed(site):
         link = entry_link(entry)
         date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
         if title and link and (date is None or date >= cutoff):
+            link = urljoin(feed_url, link)
             summary = excerpt(child_text(entry, "encoded", "content", "description", "summary"))
-            posts.append({"title": title, "link": urljoin(feed_url, link), "date": date, "summary": summary})
+            comments, comment_count = entry_comments(entry, link, feed_url)
+            posts.append({
+                "title": title,
+                "link": link,
+                "date": date,
+                "summary": summary,
+                "comments": comments,
+                "comment_count": comment_count,
+            })
 
     return {
         "name": site["name"] or clean(child_text(meta, "title")) or site["url"],
@@ -271,6 +299,7 @@ def render_json(posts, built_at):
                     "link": post["link"],
                     "source": post["source"],
                     "date": post["date"].isoformat() if post["date"] else None,
+                    "comments": post["comments"],
                 }
                 for post in posts
             ],
@@ -287,10 +316,15 @@ def render_index(feeds, posts, built_at):
         preview = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in post["summary"])
         if preview:
             preview = f'<div class="preview">{preview}</div>'
+        comments = ""
+        if post["comments"]:
+            count = post["comment_count"]
+            label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
+            comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         items.append(
             f'<li><span class="source">{html.escape(post["source"])}</span>'
-            f'<div class="headline"><a href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
-            f"{when}{preview}</div></li>"
+            f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
+            f"{when}{comments}{preview}</div></li>"
         )
 
     failed = [feed["name"] for feed in feeds if not feed["posts"]]
@@ -308,7 +342,7 @@ def render_index(feeds, posts, built_at):
 
 
 INDEX_JS = """
-  const links = [...document.querySelectorAll(".posts a")];
+  const links = [...document.querySelectorAll(".posts a.title")];
 
   // Dim posts that were already on the page last time, so new ones stand out. The list lives only in
   // this browser. Reloads within ten minutes count as the same visit, so they don't wipe out what's new.
@@ -464,7 +498,7 @@ def page(title, body):
   .preview.above {{ top: auto; bottom: calc(100% + .5rem); }}
   .preview p {{ margin: 0 0 .7em; }}
   .preview p:last-child {{ margin-bottom: 0; }}
-  .headline a:hover ~ .preview {{ visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }}
+  .headline a.title:hover ~ .preview {{ visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }}
   @media (hover: none) {{ .preview {{ display: none; }} }}
   .new-posts {{ position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
                transform: translateX(-50%); padding: .45rem 1.1rem; border: 0; border-radius: 999px;
@@ -475,7 +509,8 @@ def page(title, body):
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
-  .seen a:link {{ color: #999; }}
+  .seen a.title:link {{ color: #999; }}
+  .comments, .comments:visited {{ margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }}
   a:hover {{ text-decoration: underline; }}
   p a, ol a {{ text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }}
   time, .note {{ margin-left: .6em; white-space: nowrap; }}
