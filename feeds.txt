@@ -35,4 +35,3 @@ https://www.volts.wtf/          Volts   days=14
 https://usa.streetsblog.org/
 
 # Added from the sources page
-https://jvns.ca/ Julia Evans days=60
