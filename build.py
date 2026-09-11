@@ -559,7 +559,10 @@ def page(title, body):
   main {{ max-width: 46rem; margin: 0 auto; }}
   h1 {{ margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
         letter-spacing: .08em; text-transform: uppercase; }}
-  h1:first-child {{ margin-top: 0; }}
+  h1:first-child, header + h1 {{ margin-top: 0; }}
+  header {{ margin-bottom: 2rem; }}
+  .home, .home:visited {{ color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }}
+  .home:hover {{ text-decoration: none; }}
   ul {{ margin: 0; padding: 0; list-style: none; }}
   li {{ padding: .4rem 0; }}
   ol {{ padding-left: 1.25rem; }}
@@ -631,6 +634,7 @@ def page(title, body):
 </head>
 <body>
 <main>
+<header><a class="home" href="./">Newsfeed</a></header>
 {body}
 </main>
 <script>
