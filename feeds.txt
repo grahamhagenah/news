@@ -6,3 +6,5 @@
 https://www.nytimes.com/        The New York Times
 https://kottke.org/
 https://hnrss.org/frontpage?points=150   Hacker News
+https://insideevs.com/          InsideEVs
+https://www.derekthompson.org/  Derek Thompson   days=14
