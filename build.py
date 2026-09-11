@@ -3,7 +3,10 @@
 
 import html
 import re
+import shutil
 import sys
+import time
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -46,10 +49,18 @@ def read_sites():
     return sites
 
 
-def fetch(url):
+def fetch(url, attempts=2):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=20) as response:
-        return response.geturl(), response.read()
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return response.geturl(), response.read()
+        except Exception as error:
+            # Timeouts, dropped connections and 5xx errors are often momentary; a 404 won't change.
+            momentary = not isinstance(error, urllib.error.HTTPError) or error.code >= 500
+            if not momentary or attempt == attempts - 1:
+                raise
+            time.sleep(2)
 
 
 class FeedLinkFinder(HTMLParser):
@@ -221,6 +232,13 @@ MARK_SEEN_JS = """
     }
     localStorage.setItem("reader", JSON.stringify({ before, seen: links.map(a => a.href), at: Date.now() }));
   } catch (error) {}
+
+  // Opened from the home screen there's no pull-to-refresh, so reload on return after five minutes away.
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) hiddenAt = Date.now();
+    else if (hiddenAt && Date.now() - hiddenAt > 5 * 60 * 1000) location.reload();
+  });
 """
 
 
@@ -296,6 +314,15 @@ def page(title, body):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-title" content="Reader">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>{title}</title>
 <style>
   html {{ background: #000; }}
@@ -358,7 +385,7 @@ def main():
         sys.exit("No feeds loaded — not writing the page.")
 
     built_at = datetime.now(timezone.utc)
-    OUT_DIR.mkdir(exist_ok=True)
+    shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
     (OUT_DIR / "index.html").write_text(render_index(feeds, built_at))
     (OUT_DIR / "sources.html").write_text(render_sources(feeds, built_at))
     (OUT_DIR / "feeds.opml").write_text(render_opml(feeds, built_at))
