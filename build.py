@@ -362,18 +362,6 @@ def render_index(feeds, posts, built_at):
 INDEX_JS = """
   const links = [...document.querySelectorAll(".posts a.title")];
 
-  // Dim posts that were already on the page last time, so new ones stand out. The list lives only in
-  // this browser. Reloads within ten minutes count as the same visit, so they don't wipe out what's new.
-  try {
-    const state = JSON.parse(localStorage.getItem("reader") || "{}");
-    const before = Date.now() - (state.at || 0) < 10 * 60 * 1000 ? state.before : state.seen;
-    if (before) {
-      const known = new Set(before);
-      for (const a of links) if (known.has(a.href)) a.closest("li").classList.add("seen");
-    }
-    localStorage.setItem("reader", JSON.stringify({ before, seen: links.map(a => a.href), at: Date.now() }));
-  } catch (error) {}
-
   // Put a green dot beside headlines you haven't clicked. Browsers keep visited links private from pages,
   // so clicks are remembered here instead, in this browser only, for 30 days.
   let clicked = {};
@@ -437,7 +425,7 @@ INDEX_JS = """
   });
 
   // Show one page of posts at a time; ?page=2 shows the next set. Every post is in the page, so the
-  // new-post check and the dimming above still see all of them.
+  // new-post check and the unread dots still see all of them.
   const list = document.querySelector(".posts");
   const pageSize = Number(list.dataset.pageSize);
   const items = [...list.children];
@@ -613,7 +601,6 @@ def page(title, body):
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
-  .seen a.title:link {{ color: #999; }}
   .comments, .comments:visited {{ margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }}
   a:hover {{ text-decoration: underline; }}
   p a, ol a {{ text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }}
