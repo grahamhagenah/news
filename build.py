@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 ROOT = Path(__file__).parent
 FEEDS_FILE = ROOT / "feeds.txt"
@@ -159,6 +159,14 @@ def entry_link(entry):
     return guid if guid.startswith("http") else ""
 
 
+def without_tracking(url):
+    """Drop utm_ tracking parameters, which some feeds add to every link."""
+    parts = urlsplit(url)
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    kept = [(key, value) for key, value in query if not key.startswith("utm_")]
+    return urlunsplit(parts._replace(query=urlencode(kept))) if len(kept) < len(query) else url
+
+
 def entry_comments(entry, link, feed_url):
     """The post's discussion page and comment count, when the feed has them (Hacker News does)."""
     url, count = None, None
@@ -249,7 +257,7 @@ def read_feed(site):
         link = entry_link(entry)
         date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
         if title and link and (date is None or date >= cutoff):
-            link = urljoin(feed_url, link)
+            link = without_tracking(urljoin(feed_url, link))
             summary = excerpt(child_text(entry, "encoded", "content", "description", "summary"))
             comments, comment_count = entry_comments(entry, link, feed_url)
             posts.append({

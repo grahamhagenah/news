@@ -3,9 +3,33 @@
 # Options at the end of a line: limit=5 (at most 5 posts), days=14 (keep posts for 14 days).
 # Defaults are 15 posts from the last 3 days.
 
+# News
 https://www.nytimes.com/        The New York Times
-https://kottke.org/
+https://feeds.bbci.co.uk/news/rss.xml   BBC News   limit=8
+https://www.propublica.org/     ProPublica
+https://restofworld.org/        Rest of World   days=7
+https://www.404media.co/        404 Media
 https://hnrss.org/frontpage?points=150   Hacker News
-https://insideevs.com/          InsideEVs
+
+# The eclectic web
+https://kottke.org/
+https://waxy.org/               Waxy.org   days=7
+https://daringfireball.net/     Daring Fireball
+https://www.themarginalian.org/   The Marginalian
+https://publicdomainreview.org/   The Public Domain Review   days=30
+https://austinkleon.com/        Austin Kleon   days=7
+
+# Economics and ideas
 https://www.derekthompson.org/  Derek Thompson   days=14
+https://www.construction-physics.com/   Construction Physics   days=14
+https://www.noahpinion.blog/    Noahpinion   days=7
+https://worksinprogress.co/     Works in Progress   days=14
+https://marginalrevolution.com/   Marginal Revolution   limit=6
+https://ourworldindata.org/     Our World in Data   days=30
+
+# Energy, EVs and cities
+https://insideevs.com/          InsideEVs
+https://www.canarymedia.com/    Canary Media
+https://heatmap.news/           Heatmap   limit=8
+https://www.volts.wtf/          Volts   days=14
 https://usa.streetsblog.org/
