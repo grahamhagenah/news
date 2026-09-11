@@ -22,6 +22,7 @@ FEEDS_FILE = ROOT / "feeds.txt"
 OUT_DIR = ROOT / "dist"
 REPO_URL = "https://github.com/grahamhagenah/news"
 POSTS_PER_FEED = 15  # Per site; override with limit=N in feeds.txt.
+PAGE_SIZE = 30  # Posts per page of the list.
 DAYS_TO_KEEP = 3  # Older posts are dropped; override with days=N in feeds.txt.
 PREVIEW_CHARS = 600  # Roughly how much text the hover preview shows.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
@@ -343,7 +344,8 @@ def render_index(feeds, posts, built_at):
 
     body = (
         '<button class="new-posts" hidden></button>\n'
-        '<ul class="posts">\n' + "\n".join(items) + "\n</ul>\n"
+        f'<ul class="posts" data-page-size="{PAGE_SIZE}">\n' + "\n".join(items) + "\n</ul>\n"
+        '<nav class="pager"></nav>\n'
         f"<footer>\n{failed_note}"
         f'<p>Updated {render_time(built_at, "updated")} · <a href="sources.html">Add or remove sites</a></p>\n'
         "</footer>\n"
@@ -422,9 +424,29 @@ INDEX_JS = """
   setInterval(checkForNewPosts, 2 * 60 * 1000);
   document.addEventListener("visibilitychange", checkForNewPosts);
   button.addEventListener("click", () => {
+    // New posts arrive at the top, so go to page one. Reloading (rather than following a link)
+    // makes the browser fetch the page fresh instead of from its cache.
+    history.replaceState(null, "", location.pathname);
     scrollTo(0, 0);
     location.reload();
   });
+
+  // Show one page of posts at a time; ?page=2 shows the next set. Every post is in the page, so the
+  // new-post check and the dimming above still see all of them.
+  const list = document.querySelector(".posts");
+  const pageSize = Number(list.dataset.pageSize);
+  const items = [...list.children];
+  const pages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
+  items.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
+  list.classList.add("paged");
+  if (pages > 1) {
+    const link = (n, text) => `<a href="${n === 1 ? location.pathname : "?page=" + n}">${text}</a>`;
+    document.querySelector(".pager").innerHTML =
+      (page > 1 ? link(page - 1, "← Newer") : "<span></span>") +
+      `<span>Page ${page} of ${pages}</span>` +
+      (page < pages ? link(page + 1, "Older →") : "<span></span>");
+  }
 """
 
 
@@ -524,6 +546,10 @@ def page(title, body):
   ol {{ padding-left: 1.25rem; }}
   ol li {{ padding: .3rem 0; }}
   .posts li {{ display: grid; grid-template-columns: 9rem 1fr; gap: 1.25rem; align-items: baseline; }}
+  /* Until the script picks the page, show the first one, so the whole list never flashes up. */
+  .posts:not(.paged) li:nth-child(n+{PAGE_SIZE + 1}), .posts li[hidden] {{ display: none; }}
+  .pager {{ display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }}
+  .pager a, .pager a:visited {{ color: #999; }}
   .source, .note, time, footer {{ color: #666; font-size: .8em; }}
   /* Every row is one line tall: long headlines and source names end in an ellipsis. */
   .headline {{ position: relative; display: flex; align-items: baseline; min-width: 0; }}
