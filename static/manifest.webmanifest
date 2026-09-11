@@ -1,6 +1,6 @@
 {
-  "name": "Reader",
-  "short_name": "Reader",
+  "name": "Newsfeed",
+  "short_name": "Newsfeed",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

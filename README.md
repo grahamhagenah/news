@@ -1,4 +1,4 @@
-# Reader
+# Newsfeed
 
 A plain black-and-white list of the latest posts from a few sites, newest first. Live at https://grahamhagenah.com/news/.
 

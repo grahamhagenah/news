@@ -25,6 +25,8 @@ POSTS_PER_FEED = 15  # Per site; override with limit=N in feeds.txt.
 PAGE_SIZE = 30  # Posts per page of the list.
 DAYS_TO_KEEP = 3  # Older posts are dropped; override with days=N in feeds.txt.
 PREVIEW_CHARS = 600  # Roughly how much text the hover preview shows.
+# What sites see when the build fetches them. Keep it: some sites' bot filters (Marginal Revolution,
+# InsideEVs) block a user agent containing "newsfeed" but allow this one.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 
 FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/rdf+xml"}
@@ -354,7 +356,7 @@ def render_index(feeds, posts, built_at):
         "</footer>\n"
         f"<script>{INDEX_JS}</script>"
     )
-    return page("Reader", body)
+    return page("Newsfeed", body)
 
 
 INDEX_JS = """
@@ -524,7 +526,7 @@ def render_opml(feeds, built_at):
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <head>
-    <title>Reader sources</title>
+    <title>Newsfeed sources</title>
     <dateCreated>{format_datetime(built_at)}</dateCreated>
   </head>
   <body>
@@ -543,7 +545,7 @@ def page(title, body):
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#000000">
-<meta name="apple-mobile-web-app-title" content="Reader">
+<meta name="apple-mobile-web-app-title" content="Newsfeed">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
