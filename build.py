@@ -550,10 +550,9 @@ def page(title, body):
                background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }}
   .new-posts[hidden] {{ display: none; }}
   @media (max-width: 34rem) {{
-    /* On a phone one line is too few words, so every headline gets exactly two. */
+    /* On a phone one line is too few words, so headlines wrap in full. */
     .posts li {{ grid-template-columns: 1fr; gap: 0; }}
-    .headline {{ display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
-                height: 2.9em; }}
+    .headline {{ display: block; }}
     .headline a.title {{ white-space: normal; }}
     .preview {{ display: none; }}
     /* The unread dot moves beside the headline's first line, below the source name. */
