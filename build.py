@@ -2,6 +2,7 @@
 """Fetch every site in feeds.txt and write the latest posts to dist/."""
 
 import html
+import json
 import re
 import shutil
 import sys
@@ -252,11 +253,34 @@ def render_time(date, css_class=""):
     return f'<time{attr} datetime="{date.isoformat()}">{date.strftime("%b %-d")}</time>'
 
 
-def render_index(feeds, built_at):
+def all_posts(feeds):
     posts = [dict(post, source=feed["name"]) for feed in feeds for post in feed["posts"]]
     # Newest first; posts without a date sink to the bottom.
     posts.sort(key=lambda post: post["date"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return posts
 
+
+def render_json(posts, built_at):
+    """The current list, which the open page checks for new posts, and which works as an export."""
+    return json.dumps(
+        {
+            "updated": built_at.isoformat(),
+            "posts": [
+                {
+                    "title": post["title"],
+                    "link": post["link"],
+                    "source": post["source"],
+                    "date": post["date"].isoformat() if post["date"] else None,
+                }
+                for post in posts
+            ],
+        },
+        ensure_ascii=False,
+        indent=1,
+    )
+
+
+def render_index(feeds, posts, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
@@ -273,20 +297,22 @@ def render_index(feeds, built_at):
     failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
 
     body = (
+        '<button class="new-posts" hidden></button>\n'
         '<ul class="posts">\n' + "\n".join(items) + "\n</ul>\n"
         f"<footer>\n{failed_note}"
         f'<p>Updated {render_time(built_at, "updated")} · <a href="sources.html">Add or remove sites</a></p>\n'
         "</footer>\n"
-        f"<script>{MARK_SEEN_JS}</script>"
+        f"<script>{INDEX_JS}</script>"
     )
     return page("Reader", body)
 
 
-# Dims posts that were already on the page last time, so new ones stand out. The list lives only in
-# this browser. Reloads within ten minutes count as the same visit, so they don't wipe out what's new.
-MARK_SEEN_JS = """
+INDEX_JS = """
+  const links = [...document.querySelectorAll(".posts a")];
+
+  // Dim posts that were already on the page last time, so new ones stand out. The list lives only in
+  // this browser. Reloads within ten minutes count as the same visit, so they don't wipe out what's new.
   try {
-    const links = [...document.querySelectorAll(".posts a")];
     const state = JSON.parse(localStorage.getItem("reader") || "{}");
     const before = Date.now() - (state.at || 0) < 10 * 60 * 1000 ? state.before : state.seen;
     if (before) {
@@ -297,7 +323,7 @@ MARK_SEEN_JS = """
   } catch (error) {}
 
   // Show a preview above its headline instead of below when it would run off the bottom of the window.
-  for (const a of document.querySelectorAll(".posts a")) {
+  for (const a of links) {
     a.addEventListener("mouseenter", () => {
       const preview = a.parentElement.querySelector(".preview");
       if (preview) preview.classList.toggle("above", a.getBoundingClientRect().bottom + preview.offsetHeight + 24 > innerHeight);
@@ -309,6 +335,26 @@ MARK_SEEN_JS = """
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) hiddenAt = Date.now();
     else if (hiddenAt && Date.now() - hiddenAt > 5 * 60 * 1000) location.reload();
+  });
+
+  // While the page is on screen, check every two minutes whether a newer build has posts this page
+  // doesn't, and offer a button to load them.
+  const button = document.querySelector(".new-posts");
+  const onPage = new Set(links.map(a => a.href));
+  async function checkForNewPosts() {
+    if (document.hidden) return;
+    try {
+      const latest = await (await fetch("posts.json?" + Date.now(), { cache: "no-store" })).json();
+      const count = latest.posts.filter(post => !onPage.has(new URL(post.link, location.href).href)).length;
+      button.textContent = count === 1 ? "1 new post" : count + " new posts";
+      button.hidden = count === 0;
+    } catch (error) {}
+  }
+  setInterval(checkForNewPosts, 2 * 60 * 1000);
+  document.addEventListener("visibilitychange", checkForNewPosts);
+  button.addEventListener("click", () => {
+    scrollTo(0, 0);
+    location.reload();
   });
 """
 
@@ -349,7 +395,8 @@ options to the end of its line:</p>
 <p>For example: <code>https://www.nytimes.com/ The New York Times limit=8</code></p>
 
 <h1>Export</h1>
-<p><a href="feeds.opml" download>Download these sites as OPML</a>, the file format other feed readers import.</p>
+<p><a href="feeds.opml" download>Download these sites as OPML</a>, the file format other feed readers import.
+The current list of posts is also available as <a href="posts.json">JSON</a>.</p>
 
 <footer><p>Updated {render_time(built_at, "updated")} · <a href="./">Back to the news</a></p></footer>"""
     return page("Sources", body)
@@ -419,6 +466,10 @@ def page(title, body):
   .preview p:last-child {{ margin-bottom: 0; }}
   .headline a:hover ~ .preview {{ visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }}
   @media (hover: none) {{ .preview {{ display: none; }} }}
+  .new-posts {{ position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
+               transform: translateX(-50%); padding: .45rem 1.1rem; border: 0; border-radius: 999px;
+               background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }}
+  .new-posts[hidden] {{ display: none; }}
   @media (max-width: 34rem) {{
     .posts li {{ grid-template-columns: 1fr; gap: 0; }}
   }}
@@ -473,10 +524,12 @@ def main():
 
     built_at = datetime.now(timezone.utc)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
-    (OUT_DIR / "index.html").write_text(render_index(feeds, built_at))
+    posts = all_posts(feeds)
+    (OUT_DIR / "index.html").write_text(render_index(feeds, posts, built_at))
+    (OUT_DIR / "posts.json").write_text(render_json(posts, built_at))
     (OUT_DIR / "sources.html").write_text(render_sources(feeds, built_at))
     (OUT_DIR / "feeds.opml").write_text(render_opml(feeds, built_at))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html, sources.html and feeds.opml")
+    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html, posts.json, sources.html and feeds.opml")
 
 
 if __name__ == "__main__":
