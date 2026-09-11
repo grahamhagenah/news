@@ -556,6 +556,11 @@ def page(title, body):
                 height: 2.9em; }}
     .headline a.title {{ white-space: normal; }}
     .preview {{ display: none; }}
+    /* The unread dot moves beside the headline's first line, below the source name. */
+    .posts li {{ position: relative; }}
+    .unread .source::before {{ display: none; }}
+    .unread::before {{ content: ""; position: absolute; left: -.9rem; top: calc(.4rem + 1.16em + .725em - 1px);
+                      width: 6px; height: 6px; border-radius: 50%; background: #34d399; }}
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
