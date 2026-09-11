@@ -31,25 +31,28 @@ FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/rdf+xm
 COMMON_FEED_PATHS = ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/index.xml"]
 
 
+def is_site_line(line):
+    line = line.strip()
+    return bool(line) and not line.startswith("#")
+
+
+def parse_site(line):
+    """A feeds.txt line: a URL, then an optional name and options like limit=5 or days=14."""
+    url, *words = line.split()
+    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP}
+    name = []
+    for word in words:
+        option = re.fullmatch(r"(limit|days)=(\d+)", word)
+        if option:
+            site[option.group(1)] = int(option.group(2))
+        else:
+            name.append(word)
+    site["name"] = " ".join(name)
+    return site
+
+
 def read_sites():
-    """Each line is a URL, then an optional name and options like limit=5 or days=14."""
-    sites = []
-    for line in FEEDS_FILE.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        url, *words = line.split()
-        site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP}
-        name = []
-        for word in words:
-            option = re.fullmatch(r"(limit|days)=(\d+)", word)
-            if option:
-                site[option.group(1)] = int(option.group(2))
-            else:
-                name.append(word)
-        site["name"] = " ".join(name)
-        sites.append(site)
-    return sites
+    return [parse_site(line) for line in FEEDS_FILE.read_text().splitlines() if is_site_line(line)]
 
 
 def fetch(url, attempts=2, timeout=20):
@@ -450,46 +453,60 @@ INDEX_JS = """
 """
 
 
+ISSUE_NOTE = (
+    "Press Create to make this change. Within a minute a bot updates feeds.txt, replies here, "
+    "and closes this issue."
+)
+
+
 def render_sources(feeds, built_at):
     rows = []
     for feed in feeds:
         status = f'{len(feed["posts"])} posts' if feed["posts"] else "couldn’t load"
+        remove = f"{REPO_URL}/issues/new?" + urlencode({"title": f"Remove {feed['url']}", "body": ISSUE_NOTE})
         rows.append(
             f'<li><a href="{html.escape(feed["url"])}">{html.escape(feed["name"])}</a>'
-            f'<span class="note">{status}</span></li>'
+            f'<span class="note">{status}</span><a class="remove" href="{html.escape(remove)}">remove</a></li>'
         )
 
-    body = f"""<h1>Sources</h1>
+    body = f"""<h1>Add a site</h1>
+<form class="add-site" action="{REPO_URL}/issues/new" data-note="{html.escape(ISSUE_NOTE)}">
+<input name="site" placeholder="https://example.com/" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+<input name="label" placeholder="Name (optional)">
+<button>Add</button>
+</form>
+<p class="help">This opens a pre-filled GitHub issue; press Create. Within a minute a bot finds the site’s feed,
+adds it, and replies on the issue, or tells you if it couldn’t find one. Removing a site works the same way.</p>
+
+<h1>Sources</h1>
 <ul>
 {chr(10).join(rows)}
 </ul>
 
-<h1>Add or remove a site</h1>
-<ol>
-<li>Open <a href="{REPO_URL}/edit/main/feeds.txt">feeds.txt on GitHub</a>, signed in as the repo’s owner.</li>
-<li>To add a site, put its homepage on a new line, like <code>https://kottke.org/</code>.
-The build finds the site’s feed by itself.</li>
-<li>To show a different name, add it after the URL: <code>https://www.nytimes.com/ The New York Times</code>.</li>
-<li>To remove a site, delete its line.</li>
-<li>Click “Commit changes”. This page and the news rebuild within a minute or two.</li>
-</ol>
-<p>If a new site doesn’t show up, its homepage may not point to a feed. Find the site’s RSS or Atom link
-and put that URL in feeds.txt instead. The <a href="{REPO_URL}/actions">build log</a> says what each site returned.</p>
-
 <h1>Give a site more or less room</h1>
-<p>Each site shows up to {POSTS_PER_FEED} posts from the last {DAYS_TO_KEEP} days. Change that for one site by adding
-options to the end of its line:</p>
+<p>Each site shows up to {POSTS_PER_FEED} posts from the last {DAYS_TO_KEEP} days. Change that for one site with
+options after its name, when you add it or in feeds.txt:</p>
 <ul class="options">
 <li><code>limit=5</code> shows at most 5 posts, for sites that post constantly.</li>
 <li><code>days=14</code> keeps posts for 14 days, for blogs that post rarely.</li>
 </ul>
-<p>For example: <code>https://www.nytimes.com/ The New York Times limit=8</code></p>
+<p>For example, a name of <code>The New York Times limit=8</code>. To change a site that’s already here, edit
+<a href="{REPO_URL}/edit/main/feeds.txt">feeds.txt on GitHub</a>. If a site doesn’t show up, the
+<a href="{REPO_URL}/actions">build log</a> says what it returned.</p>
 
 <h1>Export</h1>
 <p><a href="feeds.opml" download>Download these sites as OPML</a>, the file format other feed readers import.
 The current list of posts is also available as <a href="posts.json">JSON</a>.</p>
 
-<footer><p>Updated {render_time(built_at, "updated")} · <a href="./">Back to the news</a></p></footer>"""
+<footer><p>Updated {render_time(built_at, "updated")} · <a href="./">Back to the news</a></p></footer>
+<script>
+  document.querySelector(".add-site").addEventListener("submit", event => {{
+    event.preventDefault();
+    const form = event.target;
+    const title = ["Add", form.elements.site.value.trim(), form.elements.label.value.trim()].filter(Boolean).join(" ");
+    location.href = form.action + "?" + new URLSearchParams({{ title, body: form.dataset.note }});
+  }});
+</script>"""
     return page("Sources", body)
 
 
@@ -594,6 +611,15 @@ def page(title, body):
   a:hover {{ text-decoration: underline; }}
   p a, ol a {{ text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }}
   time, .note {{ margin-left: .6em; white-space: nowrap; }}
+  .remove, .remove:visited {{ margin-left: .8em; color: #666; font-size: .8em; }}
+  .add-site {{ display: flex; flex-wrap: wrap; gap: .5rem; }}
+  .add-site input {{ flex: 1 1 12rem; min-width: 0; padding: .55rem .75rem; border: 1px solid #333; border-radius: 6px;
+                    background: #000; color: #fff; font: inherit; font-size: .9rem; }}
+  .add-site input::placeholder {{ color: #555; }}
+  .add-site input:focus {{ outline: none; border-color: #888; }}
+  .add-site button {{ padding: .55rem 1.3rem; border: 0; border-radius: 999px; background: #fff; color: #000;
+                     font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }}
+  .help {{ color: #777; font-size: .85em; }}
   code {{ color: #ccc; font-size: .9em; }}
   footer {{ margin-top: 4rem; }}
   footer p {{ margin: .4rem 0; }}

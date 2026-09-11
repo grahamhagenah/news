@@ -1,0 +1,54 @@
+name: Add or remove a site
+
+# The sources page opens a pre-filled issue titled "Add <url> [name] [options]" or "Remove <url>".
+# This edits feeds.txt, replies on the issue, closes it, and redeploys. Only the repo owner's issues
+# count, since anyone can open an issue on a public repo.
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: sources
+
+jobs:
+  update:
+    if: >-
+      github.event.issue.user.login == github.repository_owner &&
+      (startsWith(github.event.issue.title, 'Add ') || startsWith(github.event.issue.title, 'Remove '))
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: edit
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: python3 sources.py
+      - if: steps.edit.outputs.changed == 'true'
+        env:
+          SUMMARY: ${{ steps.edit.outputs.summary }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "$SUMMARY (#$NUMBER)"
+          git push
+          # Pushes made from a workflow don't start other workflows, so start the deploy directly.
+          gh workflow run deploy.yml
+      - if: steps.edit.outputs.changed == 'true'
+        run: |
+          gh issue comment "$NUMBER" --body-file reply.md
+          gh issue close "$NUMBER" --reason completed
+      - if: steps.edit.outputs.changed == 'false'
+        run: |
+          gh issue comment "$NUMBER" --body-file reply.md
+          gh issue close "$NUMBER" --reason "not planned"
+      - if: failure()
+        run: >-
+          gh issue comment "$NUMBER" --body "Something went wrong while updating feeds.txt.
+          The log is at $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
