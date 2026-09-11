@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch every site in feeds.txt and write the latest posts to dist/index.html."""
+"""Fetch every site in feeds.txt and write the latest posts to dist/."""
 
 import html
 import re
@@ -15,7 +15,8 @@ from urllib.parse import urljoin
 
 ROOT = Path(__file__).parent
 FEEDS_FILE = ROOT / "feeds.txt"
-OUT_FILE = ROOT / "dist" / "index.html"
+OUT_DIR = ROOT / "dist"
+REPO_URL = "https://github.com/grahamhagenah/news"
 POSTS_PER_FEED = 15
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 
@@ -170,51 +171,100 @@ def render_time(date, css_class=""):
     return f'<time{attr} datetime="{date.isoformat()}">{date.strftime("%b %-d")}</time>'
 
 
-def render(feeds, built_at):
-    sections = []
-    for feed in feeds:
-        items = []
-        for post in feed["posts"]:
-            when = render_time(post["date"]) if post["date"] else ""
-            items.append(
-                f'<li><a href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>{when}</li>'
-            )
-        if not items:
-            items.append('<li class="empty">Couldn’t load this feed.</li>')
-        sections.append(
-            f'<section>\n<h2>{html.escape(feed["name"])}</h2>\n<ul>\n' + "\n".join(items) + "\n</ul>\n</section>"
+def render_index(feeds, built_at):
+    posts = [dict(post, source=feed["name"]) for feed in feeds for post in feed["posts"]]
+    # Newest first; posts without a date sink to the bottom.
+    posts.sort(key=lambda post: post["date"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    items = []
+    for post in posts:
+        when = render_time(post["date"]) if post["date"] else ""
+        items.append(
+            f'<li><span class="source">{html.escape(post["source"])}</span>'
+            f'<span><a href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>{when}</span></li>'
         )
 
+    failed = [feed["name"] for feed in feeds if not feed["posts"]]
+    failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
+
+    body = (
+        '<ul class="posts">\n' + "\n".join(items) + "\n</ul>\n"
+        f"<footer>\n{failed_note}"
+        f'<p>Updated {render_time(built_at, "updated")} · <a href="sources.html">Add or remove sites</a></p>\n'
+        "</footer>"
+    )
+    return page("Reader", body)
+
+
+def render_sources(feeds, built_at):
+    rows = []
+    for feed in feeds:
+        status = f'{len(feed["posts"])} posts' if feed["posts"] else "couldn’t load"
+        rows.append(
+            f'<li><a href="{html.escape(feed["url"])}">{html.escape(feed["name"])}</a>'
+            f'<span class="note">{status}</span></li>'
+        )
+
+    body = f"""<h1>Sources</h1>
+<ul>
+{chr(10).join(rows)}
+</ul>
+
+<h1>Add or remove a site</h1>
+<ol>
+<li>Open <a href="{REPO_URL}/edit/main/feeds.txt">feeds.txt on GitHub</a>, signed in as the repo’s owner.</li>
+<li>To add a site, put its homepage on a new line, like <code>https://kottke.org/</code>.
+The build finds the site’s feed by itself.</li>
+<li>To show a different name, add it after the URL: <code>https://www.nytimes.com/ The New York Times</code>.</li>
+<li>To remove a site, delete its line.</li>
+<li>Click “Commit changes”. This page and the news rebuild within a minute or two.</li>
+</ol>
+<p>If a new site doesn’t show up, its homepage may not point to a feed. Find the site’s RSS or Atom link
+and put that URL in feeds.txt instead. The <a href="{REPO_URL}/actions">build log</a> says what each site returned.</p>
+
+<footer><p>Updated {render_time(built_at, "updated")} · <a href="./">Back to the news</a></p></footer>"""
+    return page("Sources", body)
+
+
+def page(title, body):
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>Reader</title>
+<title>{title}</title>
 <style>
   html {{ background: #000; }}
   body {{ margin: 0; padding: 3rem 1.25rem 4rem; color: #fff; background: #000;
          font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }}
-  main {{ max-width: 40rem; margin: 0 auto; }}
-  h2 {{ margin: 3rem 0 .5rem; color: #777; font-size: .75rem; font-weight: 600;
+  main {{ max-width: 46rem; margin: 0 auto; }}
+  h1 {{ margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
         letter-spacing: .08em; text-transform: uppercase; }}
-  section:first-child h2 {{ margin-top: 0; }}
+  h1:first-child {{ margin-top: 0; }}
   ul {{ margin: 0; padding: 0; list-style: none; }}
   li {{ padding: .4rem 0; }}
+  ol {{ padding-left: 1.25rem; }}
+  ol li {{ padding: .3rem 0; }}
+  .posts li {{ display: grid; grid-template-columns: 9rem 1fr; gap: 1.25rem; align-items: baseline; }}
+  .source, .note, time, footer {{ color: #666; font-size: .8em; }}
+  @media (max-width: 34rem) {{
+    .posts li {{ grid-template-columns: 1fr; gap: 0; }}
+  }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
   a:hover {{ text-decoration: underline; }}
-  time {{ margin-left: .6em; color: #555; font-size: .8em; white-space: nowrap; }}
-  .empty, footer {{ color: #555; }}
-  footer {{ margin-top: 4rem; font-size: .8rem; }}
+  time, .note {{ margin-left: .6em; white-space: nowrap; }}
+  code {{ color: #ccc; font-size: .9em; }}
+  footer {{ margin-top: 4rem; }}
+  footer p {{ margin: .4rem 0; }}
+  footer a, footer a:visited {{ color: #999; }}
   footer time {{ margin: 0; font-size: inherit; }}
 </style>
 </head>
 <body>
 <main>
-{chr(10).join(sections)}
-<footer>Updated {render_time(built_at, "updated")}</footer>
+{body}
 </main>
 <script>
   for (const t of document.querySelectorAll("time")) {{
@@ -242,9 +292,11 @@ def main():
     if not any(feed["posts"] for feed in feeds):
         sys.exit("No feeds loaded — not writing the page.")
 
-    OUT_FILE.parent.mkdir(exist_ok=True)
-    OUT_FILE.write_text(render(feeds, datetime.now(timezone.utc)))
-    print(f"Wrote {OUT_FILE.relative_to(ROOT)}")
+    built_at = datetime.now(timezone.utc)
+    OUT_DIR.mkdir(exist_ok=True)
+    (OUT_DIR / "index.html").write_text(render_index(feeds, built_at))
+    (OUT_DIR / "sources.html").write_text(render_sources(feeds, built_at))
+    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html and sources.html")
 
 
 if __name__ == "__main__":
