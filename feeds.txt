@@ -1,0 +1,6 @@
+# One site per line. A homepage is fine — the build finds its feed.
+# Add a name after the URL to use instead of the feed's own title.
+
+https://www.nytimes.com/        The New York Times
+https://kottke.org/
+https://news.ycombinator.com/   Hacker News
