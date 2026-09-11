@@ -479,7 +479,7 @@ def render_sources(feeds, built_at):
 adds it, and replies on the issue, or tells you if it couldn’t find one. Removing a site works the same way.</p>
 
 <h1>Sources</h1>
-<ul>
+<ul class="sources">
 {chr(10).join(rows)}
 </ul>
 
@@ -617,6 +617,9 @@ def page(title, body):
   p a, ol a {{ text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }}
   time, .note {{ margin-left: .6em; white-space: nowrap; }}
   .remove, .remove:visited {{ margin-left: .8em; color: #666; font-size: .8em; }}
+  .sources {{ columns: 2; column-gap: 2.5rem; }}
+  .sources li {{ break-inside: avoid; }}
+  @media (max-width: 34rem) {{ .sources {{ columns: 1; }} }}
   .add-site {{ display: flex; flex-wrap: wrap; gap: .5rem; }}
   .add-site input {{ flex: 1 1 12rem; min-width: 0; padding: .55rem .75rem; border: 1px solid #333; border-radius: 6px;
                     background: #000; color: #fff; font: inherit; font-size: .9rem; }}
