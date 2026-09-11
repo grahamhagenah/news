@@ -364,6 +364,29 @@ INDEX_JS = """
     localStorage.setItem("reader", JSON.stringify({ before, seen: links.map(a => a.href), at: Date.now() }));
   } catch (error) {}
 
+  // Put a green dot beside headlines you haven't clicked. Browsers keep visited links private from pages,
+  // so clicks are remembered here instead, in this browser only, for 30 days.
+  let clicked = {};
+  try { clicked = JSON.parse(localStorage.getItem("reader-clicked") || "{}"); } catch (error) {}
+  const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  for (const href in clicked) if (clicked[href] < monthAgo) delete clicked[href];
+  const saveClicked = () => {
+    try { localStorage.setItem("reader-clicked", JSON.stringify(clicked)); } catch (error) {}
+  };
+  for (const a of links) {
+    const li = a.closest("li");
+    li.classList.toggle("unread", !clicked[a.href]);
+    const markRead = event => {
+      if (event.button > 1) return; // Right-clicks only open a menu.
+      clicked[a.href] = Date.now();
+      li.classList.remove("unread");
+      saveClicked();
+    };
+    a.addEventListener("click", markRead);
+    a.addEventListener("auxclick", markRead);
+  }
+  saveClicked();
+
   // Show a preview above its headline instead of below when it would run off the bottom of the window.
   for (const a of links) {
     a.addEventListener("mouseenter", () => {
@@ -499,6 +522,8 @@ def page(title, body):
   .posts li {{ display: grid; grid-template-columns: 9rem 1fr; gap: 1.25rem; align-items: baseline; }}
   .source, .note, time, footer {{ color: #666; font-size: .8em; }}
   .headline {{ position: relative; }}
+  .unread .headline::before {{ content: ""; position: absolute; left: -.85rem; top: .55em; width: 6px; height: 6px;
+                              border-radius: 50%; background: #34d399; }}
   .preview {{ position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
              box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
              color: #bbb; font-size: .85em; line-height: 1.5; pointer-events: none;
