@@ -22,6 +22,7 @@ OUT_DIR = ROOT / "dist"
 REPO_URL = "https://github.com/grahamhagenah/news"
 POSTS_PER_FEED = 15  # Per site; override with limit=N in feeds.txt.
 DAYS_TO_KEEP = 3  # Older posts are dropped; override with days=N in feeds.txt.
+PREVIEW_CHARS = 600  # Roughly how much text the hover preview shows.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 
 FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/rdf+xml"}
@@ -49,11 +50,11 @@ def read_sites():
     return sites
 
 
-def fetch(url, attempts=2):
+def fetch(url, attempts=2, timeout=20):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=20) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 return response.geturl(), response.read()
         except Exception as error:
             # Timeouts, dropped connections and 5xx errors are often momentary; a 404 won't change.
@@ -157,6 +158,63 @@ def entry_link(entry):
     return guid if guid.startswith("http") else ""
 
 
+BLOCK_TAG = re.compile(r"</?(p|div|blockquote|li|ul|ol|h[1-6]|br|pre|table|tr)\b[^>]*>", re.I)
+# hnrss describes link posts with these lines instead of any article text.
+BOILERPLATE = re.compile(r"^(Article URL|Comments URL|Points|# Comments):")
+BARE_LINKS = re.compile(r"[\s,]*(https?://\S+[\s,]*)+")
+
+
+def excerpt(markup, max_chars=PREVIEW_CHARS):
+    """The first few paragraphs of an HTML snippet, as plain text, cut to about max_chars."""
+    markup = re.sub(r"(?is)<(script|style|figure)\b.*?</\1>", " ", markup)
+    paragraphs = [clean(part) for part in re.split(r"\n\s*\n", BLOCK_TAG.sub("\n\n", markup))]
+    kept = []
+    budget = max_chars
+    for paragraph in paragraphs:
+        # Skip fragments like lone links, handles and "Thanks!" — they don't say what the post is about.
+        if len(paragraph.split()) < 4 or BOILERPLATE.match(paragraph) or BARE_LINKS.fullmatch(paragraph):
+            continue
+        if len(paragraph) > budget:
+            kept.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
+            break
+        kept.append(paragraph)
+        budget -= len(paragraph)
+        if len(kept) == 3:
+            break
+    return kept
+
+
+class MetaDescriptionFinder(HTMLParser):
+    """Collects the summary a page offers for link previews."""
+
+    KEYS = ("og:description", "twitter:description", "description")
+
+    def __init__(self):
+        super().__init__()
+        self.found = {}
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        key = (attrs.get("property") or attrs.get("name") or "").lower()
+        if tag == "meta" and key in self.KEYS and attrs.get("content"):
+            self.found.setdefault(key, attrs["content"])
+
+
+def page_summary(url):
+    """For posts whose feed has no text, use the linked page's own link-preview summary."""
+    try:
+        _, body = fetch(url, attempts=1, timeout=10)
+    except Exception:
+        return []
+    finder = MetaDescriptionFinder()
+    finder.feed(body[:500_000].decode("utf-8", "replace"))
+    for key in finder.KEYS:
+        # Very short descriptions are usually the site's tagline, not a summary of the page.
+        if len(finder.found.get(key, "")) >= 40:
+            return excerpt(html.escape(finder.found[key]))
+    return []
+
+
 def read_feed(site):
     feed_url, root = find_feed(site["url"])
     channel = children(root, "channel")
@@ -171,7 +229,8 @@ def read_feed(site):
         link = entry_link(entry)
         date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
         if title and link and (date is None or date >= cutoff):
-            posts.append({"title": title, "link": urljoin(feed_url, link), "date": date})
+            summary = excerpt(child_text(entry, "encoded", "content", "description", "summary"))
+            posts.append({"title": title, "link": urljoin(feed_url, link), "date": date, "summary": summary})
 
     return {
         "name": site["name"] or clean(child_text(meta, "title")) or site["url"],
@@ -201,9 +260,13 @@ def render_index(feeds, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
+        preview = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in post["summary"])
+        if preview:
+            preview = f'<div class="preview">{preview}</div>'
         items.append(
             f'<li><span class="source">{html.escape(post["source"])}</span>'
-            f'<span><a href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>{when}</span></li>'
+            f'<div class="headline"><a href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
+            f"{when}{preview}</div></li>"
         )
 
     failed = [feed["name"] for feed in feeds if not feed["posts"]]
@@ -232,6 +295,14 @@ MARK_SEEN_JS = """
     }
     localStorage.setItem("reader", JSON.stringify({ before, seen: links.map(a => a.href), at: Date.now() }));
   } catch (error) {}
+
+  // Show a preview above its headline instead of below when it would run off the bottom of the window.
+  for (const a of document.querySelectorAll(".posts a")) {
+    a.addEventListener("mouseenter", () => {
+      const preview = a.parentElement.querySelector(".preview");
+      if (preview) preview.classList.toggle("above", a.getBoundingClientRect().bottom + preview.offsetHeight + 24 > innerHeight);
+    });
+  }
 
   // Opened from the home screen there's no pull-to-refresh, so reload on return after five minutes away.
   let hiddenAt = 0;
@@ -338,6 +409,16 @@ def page(title, body):
   ol li {{ padding: .3rem 0; }}
   .posts li {{ display: grid; grid-template-columns: 9rem 1fr; gap: 1.25rem; align-items: baseline; }}
   .source, .note, time, footer {{ color: #666; font-size: .8em; }}
+  .headline {{ position: relative; }}
+  .preview {{ position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
+             box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
+             color: #bbb; font-size: .85em; line-height: 1.5; pointer-events: none;
+             visibility: hidden; opacity: 0; transition: opacity .1s, visibility 0s .1s; }}
+  .preview.above {{ top: auto; bottom: calc(100% + .5rem); }}
+  .preview p {{ margin: 0 0 .7em; }}
+  .preview p:last-child {{ margin-bottom: 0; }}
+  .headline a:hover ~ .preview {{ visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }}
+  @media (hover: none) {{ .preview {{ display: none; }} }}
   @media (max-width: 34rem) {{
     .posts li {{ grid-template-columns: 1fr; gap: 0; }}
   }}
@@ -375,11 +456,17 @@ def main():
     with ThreadPoolExecutor(max_workers=8) as pool:
         feeds = list(pool.map(load, sites))
 
+    missing = [post for feed in feeds for post in feed["posts"] if not post["summary"]]
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        for post, summary in zip(missing, pool.map(lambda post: page_summary(post["link"]), missing)):
+            post["summary"] = summary
+
     for feed in feeds:
         if "error" in feed:
             print(f"✗ {feed['url']}: {feed['error']}", file=sys.stderr)
         else:
-            print(f"✓ {feed['name']}: {len(feed['posts'])} posts from {feed['feed_url']}")
+            previews = sum(1 for post in feed["posts"] if post["summary"])
+            print(f"✓ {feed['name']}: {len(feed['posts'])} posts, {previews} with previews, from {feed['feed_url']}")
 
     if not any(feed["posts"] for feed in feeds):
         sys.exit("No feeds loaded — not writing the page.")
