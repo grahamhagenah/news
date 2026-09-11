@@ -7,8 +7,8 @@ import sys
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime, parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin
@@ -17,7 +17,8 @@ ROOT = Path(__file__).parent
 FEEDS_FILE = ROOT / "feeds.txt"
 OUT_DIR = ROOT / "dist"
 REPO_URL = "https://github.com/grahamhagenah/news"
-POSTS_PER_FEED = 15
+POSTS_PER_FEED = 15  # Per site; override with limit=N in feeds.txt.
+DAYS_TO_KEEP = 3  # Older posts are dropped; override with days=N in feeds.txt.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 
 FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/rdf+xml"}
@@ -25,13 +26,23 @@ COMMON_FEED_PATHS = ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/in
 
 
 def read_sites():
+    """Each line is a URL, then an optional name and options like limit=5 or days=14."""
     sites = []
     for line in FEEDS_FILE.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        url, _, name = line.partition(" ")
-        sites.append((url, name.strip()))
+        url, *words = line.split()
+        site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP}
+        name = []
+        for word in words:
+            option = re.fullmatch(r"(limit|days)=(\d+)", word)
+            if option:
+                site[option.group(1)] = int(option.group(2))
+            else:
+                name.append(word)
+        site["name"] = " ".join(name)
+        sites.append(site)
     return sites
 
 
@@ -135,35 +146,35 @@ def entry_link(entry):
     return guid if guid.startswith("http") else ""
 
 
-def read_feed(url, name):
-    feed_url, root = find_feed(url)
+def read_feed(site):
+    feed_url, root = find_feed(site["url"])
     channel = children(root, "channel")
     meta = channel[0] if channel else root
     # RSS 2.0 nests items in <channel>; Atom and RSS 1.0 keep them at the top level.
     entries = children(meta, "item") or children(root, "item") or children(root, "entry")
+    cutoff = datetime.now(timezone.utc) - timedelta(days=site["days"])
 
     posts = []
-    for entry in entries[:POSTS_PER_FEED]:
+    for entry in entries:
         title = clean(child_text(entry, "title"))
         link = entry_link(entry)
-        if title and link:
-            date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
+        date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
+        if title and link and (date is None or date >= cutoff):
             posts.append({"title": title, "link": urljoin(feed_url, link), "date": date})
 
     return {
-        "name": name or clean(child_text(meta, "title")) or url,
-        "url": url,
+        "name": site["name"] or clean(child_text(meta, "title")) or site["url"],
+        "url": site["url"],
         "feed_url": feed_url,
-        "posts": posts,
+        "posts": posts[: site["limit"]],
     }
 
 
 def load(site):
-    url, name = site
     try:
-        return read_feed(url, name)
+        return read_feed(site)
     except Exception as error:
-        return {"name": name or url, "url": url, "error": str(error), "posts": []}
+        return {"name": site["name"] or site["url"], "url": site["url"], "error": str(error), "posts": []}
 
 
 def render_time(date, css_class=""):
@@ -191,9 +202,26 @@ def render_index(feeds, built_at):
         '<ul class="posts">\n' + "\n".join(items) + "\n</ul>\n"
         f"<footer>\n{failed_note}"
         f'<p>Updated {render_time(built_at, "updated")} · <a href="sources.html">Add or remove sites</a></p>\n'
-        "</footer>"
+        "</footer>\n"
+        f"<script>{MARK_SEEN_JS}</script>"
     )
     return page("Reader", body)
+
+
+# Dims posts that were already on the page last time, so new ones stand out. The list lives only in
+# this browser. Reloads within ten minutes count as the same visit, so they don't wipe out what's new.
+MARK_SEEN_JS = """
+  try {
+    const links = [...document.querySelectorAll(".posts a")];
+    const state = JSON.parse(localStorage.getItem("reader") || "{}");
+    const before = Date.now() - (state.at || 0) < 10 * 60 * 1000 ? state.before : state.seen;
+    if (before) {
+      const known = new Set(before);
+      for (const a of links) if (known.has(a.href)) a.closest("li").classList.add("seen");
+    }
+    localStorage.setItem("reader", JSON.stringify({ before, seen: links.map(a => a.href), at: Date.now() }));
+  } catch (error) {}
+"""
 
 
 def render_sources(feeds, built_at):
@@ -222,8 +250,42 @@ The build finds the site’s feed by itself.</li>
 <p>If a new site doesn’t show up, its homepage may not point to a feed. Find the site’s RSS or Atom link
 and put that URL in feeds.txt instead. The <a href="{REPO_URL}/actions">build log</a> says what each site returned.</p>
 
+<h1>Give a site more or less room</h1>
+<p>Each site shows up to {POSTS_PER_FEED} posts from the last {DAYS_TO_KEEP} days. Change that for one site by adding
+options to the end of its line:</p>
+<ul class="options">
+<li><code>limit=5</code> shows at most 5 posts, for sites that post constantly.</li>
+<li><code>days=14</code> keeps posts for 14 days, for blogs that post rarely.</li>
+</ul>
+<p>For example: <code>https://www.nytimes.com/ The New York Times limit=8</code></p>
+
+<h1>Export</h1>
+<p><a href="feeds.opml" download>Download these sites as OPML</a>, the file format other feed readers import.</p>
+
 <footer><p>Updated {render_time(built_at, "updated")} · <a href="./">Back to the news</a></p></footer>"""
     return page("Sources", body)
+
+
+def render_opml(feeds, built_at):
+    def attr(value):
+        return html.escape(value, quote=True)
+
+    outlines = [
+        f'    <outline type="rss" text="{attr(feed["name"])}" title="{attr(feed["name"])}" '
+        f'xmlUrl="{attr(feed.get("feed_url", feed["url"]))}" htmlUrl="{attr(feed["url"])}"/>'
+        for feed in feeds
+    ]
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Reader sources</title>
+    <dateCreated>{format_datetime(built_at)}</dateCreated>
+  </head>
+  <body>
+{chr(10).join(outlines)}
+  </body>
+</opml>
+"""
 
 
 def page(title, body):
@@ -233,6 +295,7 @@ def page(title, body):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
 <title>{title}</title>
 <style>
   html {{ background: #000; }}
@@ -253,7 +316,9 @@ def page(title, body):
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
+  .seen a:link {{ color: #999; }}
   a:hover {{ text-decoration: underline; }}
+  p a, ol a {{ text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }}
   time, .note {{ margin-left: .6em; white-space: nowrap; }}
   code {{ color: #ccc; font-size: .9em; }}
   footer {{ margin-top: 4rem; }}
@@ -296,7 +361,8 @@ def main():
     OUT_DIR.mkdir(exist_ok=True)
     (OUT_DIR / "index.html").write_text(render_index(feeds, built_at))
     (OUT_DIR / "sources.html").write_text(render_sources(feeds, built_at))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html and sources.html")
+    (OUT_DIR / "feeds.opml").write_text(render_opml(feeds, built_at))
+    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html, sources.html and feeds.opml")
 
 
 if __name__ == "__main__":

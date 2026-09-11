@@ -1,6 +1,8 @@
 # One site per line. A homepage is fine — the build finds its feed.
 # Add a name after the URL to use instead of the feed's own title.
+# Options at the end of a line: limit=5 (at most 5 posts), days=14 (keep posts for 14 days).
+# Defaults are 15 posts from the last 3 days.
 
 https://www.nytimes.com/        The New York Times
 https://kottke.org/
-https://news.ycombinator.com/   Hacker News
+https://hnrss.org/frontpage?points=150   Hacker News
