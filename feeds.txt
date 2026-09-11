@@ -16,7 +16,7 @@ https://kottke.org/
 https://waxy.org/               Waxy.org   days=7
 https://daringfireball.net/     Daring Fireball
 https://www.themarginalian.org/   The Marginalian
-https://publicdomainreview.org/   The Public Domain Review   days=30
+https://publicdomainreview.org/   Public Domain Review   days=30
 https://austinkleon.com/        Austin Kleon   days=7
 
 # Economics and ideas

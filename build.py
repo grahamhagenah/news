@@ -321,16 +321,19 @@ def render_index(feeds, posts, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
-        preview = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in post["summary"])
-        if preview:
-            preview = f'<div class="preview">{preview}</div>'
+        # The full headline leads the preview, shown only when the one-line headline is cut off.
+        paragraphs = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in post["summary"])
+        preview = (
+            f'<div class="preview{"" if paragraphs else " title-only"}">'
+            f'<p class="full-title">{html.escape(post["title"])}</p>{paragraphs}</div>'
+        )
         comments = ""
         if post["comments"]:
             count = post["comment_count"]
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         items.append(
-            f'<li><span class="source">{html.escape(post["source"])}</span>'
+            f'<li><span class="source"><span>{html.escape(post["source"])}</span></span>'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
             f"{when}{comments}{preview}</div></li>"
         )
@@ -390,6 +393,7 @@ INDEX_JS = """
   // Show a preview above its headline instead of below when it would run off the bottom of the window.
   for (const a of links) {
     a.addEventListener("mouseenter", () => {
+      a.parentElement.classList.toggle("truncated", a.scrollWidth > a.clientWidth);
       const preview = a.parentElement.querySelector(".preview");
       if (preview) preview.classList.toggle("above", a.getBoundingClientRect().bottom + preview.offsetHeight + 24 > innerHeight);
     });
@@ -521,8 +525,12 @@ def page(title, body):
   ol li {{ padding: .3rem 0; }}
   .posts li {{ display: grid; grid-template-columns: 9rem 1fr; gap: 1.25rem; align-items: baseline; }}
   .source, .note, time, footer {{ color: #666; font-size: .8em; }}
-  .headline {{ position: relative; }}
-  .source {{ position: relative; }}
+  /* Every row is one line tall: long headlines and source names end in an ellipsis. */
+  .headline {{ position: relative; display: flex; align-items: baseline; min-width: 0; }}
+  .headline a.title {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
+  .headline time, .headline .comments {{ flex: none; }}
+  .source {{ position: relative; min-width: 0; }}
+  .source > span {{ display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .unread .source::before {{ content: ""; position: absolute; left: -.9rem; top: .5em; width: 6px; height: 6px;
                             border-radius: 50%; background: #34d399; }}
   .preview {{ position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
@@ -532,6 +540,9 @@ def page(title, body):
   .preview.above {{ top: auto; bottom: calc(100% + .5rem); }}
   .preview p {{ margin: 0 0 .7em; }}
   .preview p:last-child {{ margin-bottom: 0; }}
+  .preview .full-title {{ display: none; color: #fff; }}
+  .truncated .preview .full-title {{ display: block; }}
+  .headline:not(.truncated) .preview.title-only {{ display: none; }}
   .headline a.title:hover ~ .preview {{ visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }}
   @media (hover: none) {{ .preview {{ display: none; }} }}
   .new-posts {{ position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
@@ -539,7 +550,12 @@ def page(title, body):
                background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }}
   .new-posts[hidden] {{ display: none; }}
   @media (max-width: 34rem) {{
+    /* On a phone one line is too few words, so every headline gets exactly two. */
     .posts li {{ grid-template-columns: 1fr; gap: 0; }}
+    .headline {{ display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+                height: 2.9em; }}
+    .headline a.title {{ white-space: normal; }}
+    .preview {{ display: none; }}
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
