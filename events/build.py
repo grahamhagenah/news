@@ -568,11 +568,11 @@ CSS = """
   .icon { color: var(--dot); }
   [data-show="music"], [data-category="music"] { --dot: var(--music); }
   [data-show="film"], [data-category="film"] { --dot: var(--film); }
-  h2 { margin: 2.25rem 0 .3rem; color: #777; font-size: .75rem; line-height: 1; font-weight: 600; letter-spacing: .08em;
+  h2 { margin: 2.25rem 0 .5rem; color: #777; font-size: .75rem; line-height: 1; font-weight: 600; letter-spacing: .08em;
        text-transform: uppercase; }
   /* The first day's heading goes in the space between the filter and the list, so the list starts at the
-     same height as the newsfeed's: its height and margin (.75rem + .3rem) come out of the filter's margin. */
-  main:not(.paged) .day:first-of-type h2, .day.first h2 { margin-top: -1.05rem; }
+     same height as the newsfeed's: its height and margin (.75rem + .5rem) come out of the filter's margin. */
+  main:not(.paged) .day:first-of-type h2, .day.first h2 { margin-top: -1.25rem; }
   /* Until the script picks the page, show the first three days, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+4) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
