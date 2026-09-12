@@ -702,11 +702,13 @@ def page(title, body, header_note=""):
   .headline a.title {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .headline time, .headline .comments {{ flex: none; }}
   .podcast {{ flex: none; width: .8em; height: .8em; margin-left: .55em; color: #666; vertical-align: -.05em; }}
-  .source {{ position: relative; min-width: 0; }}
-  .source > span {{ display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
-  .unread .source::before {{ content: ""; position: absolute; left: -.9rem; top: .5em; width: 6px; height: 6px;
-                            border-radius: 50%; background: var(--article); }}
-  .posts li[data-podcast].unread .source::before, .posts li[data-podcast].unread::before {{ background: var(--podcast); }}
+  /* The unread dot leads the source name, inside the text's left edge. Every name keeps its slot, so
+     names don't shift when a post is read and its dot goes. */
+  .source {{ display: flex; align-items: center; gap: .5em; min-width: 0; }}
+  .source::before {{ content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; }}
+  .unread .source::before {{ background: var(--article); }}
+  .posts li[data-podcast].unread .source::before {{ background: var(--podcast); }}
+  .source > span {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .preview {{ position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
              box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
              color: #bbb; font-size: .85em; line-height: 1.5; pointer-events: none;
@@ -729,11 +731,6 @@ def page(title, body, header_note=""):
     .headline {{ display: block; }}
     .headline a.title {{ white-space: normal; }}
     .preview {{ display: none; }}
-    /* The unread dot moves beside the headline's first line, below the source name. */
-    .posts li {{ position: relative; }}
-    .unread .source::before {{ display: none; }}
-    .unread::before {{ content: ""; position: absolute; left: -.9rem; top: calc(.4rem + 1.16em + .725em - 1px);
-                      width: 6px; height: 6px; border-radius: 50%; background: var(--article); }}
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
