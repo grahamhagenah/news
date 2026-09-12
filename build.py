@@ -401,19 +401,32 @@ def render_json(posts, built_at):
     )
 
 
-PODCAST_ICON = (
-    '<svg class="podcast" viewBox="0 0 16 16" role="img" aria-label="Podcast"><title>Podcast</title>'
-    '<path d="M2.75 10.5V8a5.25 5.25 0 0 1 10.5 0v2.5" fill="none" stroke="currentColor" stroke-width="1.5"/>'
-    '<rect x="1.5" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor"/>'
-    '<rect x="11.25" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor"/></svg>'
-)
+# Each post's mark, before its source: a page of text for an article, headphones for a podcast episode.
+# Drawn once in the page; rows point to the drawing. Unread, it takes its kind's color; read, it goes gray.
+ICON_DRAWINGS = {
+    "article": '<rect x="3" y="1.75" width="10" height="12.5" rx="1.5"/><path d="M5.75 5.5h4.5M5.75 8h4.5M5.75 10.5h2.75"/>',
+    "podcast": '<path d="M2.75 10.5V8a5.25 5.25 0 0 1 10.5 0v2.5"/>'
+               '<rect x="1.5" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>'
+               '<rect x="11.25" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>',
+}
+ICON_SYMBOLS = '<svg class="symbols" aria-hidden="true">' + "".join(
+    f'<symbol id="icon-{name}" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" '
+    f'stroke-linecap="round" stroke-linejoin="round">{drawing}</g></symbol>'
+    for name, drawing in ICON_DRAWINGS.items()
+) + "</svg>"
+
+
+def icon(kind, decorative=False):
+    """A post's mark. Beside a label that already says it (the filter), it's hidden from screen readers."""
+    label = 'aria-hidden="true"' if decorative else f'role="img" aria-label="{kind.capitalize()}"'
+    return f'<svg class="icon" {label}><use href="#icon-{kind}"/></svg>'
 
 
 def render_index(feeds, posts, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
-        icon = PODCAST_ICON if post["podcast"] else ""
+        mark = icon("podcast" if post["podcast"] else "article")
         # The full headline leads the preview, shown only when the one-line headline is cut off.
         paragraphs = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in post["summary"])
         preview = (
@@ -426,9 +439,9 @@ def render_index(feeds, posts, built_at):
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         items.append(
-            f'<li{" data-podcast" if post["podcast"] else ""}><span class="source"><span>{html.escape(post["source"])}</span></span>'
+            f'<li{" data-podcast" if post["podcast"] else ""}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
-            f"{icon}{when}{comments}{preview}</div></li>"
+            f"{when}{comments}{preview}</div></li>"
         )
 
     failed = [feed["name"] for feed in feeds if not feed["posts"]]
@@ -437,7 +450,8 @@ def render_index(feeds, posts, built_at):
     # Only worth offering when there's something to choose between.
     show_filter = (
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
-        '<button data-show="articles">Articles</button><button data-show="podcasts">Podcasts</button></nav>\n'
+        f'<button data-show="articles">{icon("article", decorative=True)}Articles</button>'
+        f'<button data-show="podcasts">{icon("podcast", decorative=True)}Podcasts</button></nav>\n'
         if any(post["podcast"] for post in posts)
         else ""
     )
@@ -664,7 +678,7 @@ def page(title, body, header_note=""):
 <link rel="manifest" href="manifest.webmanifest">
 <title>{title}</title>
 <style>
-  /* Unread dots, and the filter's matching dots: green for articles, violet for podcast episodes. */
+  /* Unread marks, and the filter's matching marks: green for articles, violet for podcast episodes. */
   :root {{ --article: #34d399; --podcast: #a78bfa; }}
   html {{ background: #000; }}
   body {{ margin: 0; padding: 3rem 1.25rem 4rem; color: #fff; background: #000;
@@ -680,10 +694,8 @@ def page(title, body, header_note=""):
   .filter button {{ padding: 0; border: 0; background: none; color: #666; font: inherit; font-size: .8rem; cursor: pointer; }}
   .filter button:hover {{ color: #999; }}
   .filter button[aria-pressed="true"] {{ color: #fff; }}
-  .filter [data-show="articles"]::before, .filter [data-show="podcasts"]::before {{
-    content: ""; display: inline-block; width: 6px; height: 6px; margin-right: .45em; vertical-align: .1em;
-    border-radius: 50%; background: var(--article); }}
-  .filter [data-show="podcasts"]::before {{ background: var(--podcast); }}
+  .filter .icon {{ margin-right: .4em; vertical-align: -1px; color: var(--article); }}
+  .filter [data-show="podcasts"] .icon {{ color: var(--podcast); }}
   .empty {{ color: #666; font-size: .9rem; }}
   /* This page and the events page, as a pair: the one you're on in white, the other a gray link to it. */
   .sites {{ display: flex; gap: .9rem; }}
@@ -694,7 +706,7 @@ def page(title, body, header_note=""):
   li {{ padding: .4rem 0; }}
   ol {{ padding-left: 1.25rem; }}
   ol li {{ padding: .3rem 0; }}
-  .posts li {{ display: grid; grid-template-columns: 9rem 1fr; gap: 1.25rem; align-items: baseline; }}
+  .posts li {{ display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline; }}
   /* Until the script picks the page, show the first one, so the whole list never flashes up. */
   .posts:not(.paged) li:nth-child(n+{PAGE_SIZE + 1}), .posts li[hidden] {{ display: none; }}
   .pager {{ display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }}
@@ -704,13 +716,13 @@ def page(title, body, header_note=""):
   .headline {{ position: relative; display: flex; align-items: baseline; min-width: 0; }}
   .headline a.title {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .headline time, .headline .comments {{ flex: none; }}
-  .podcast {{ flex: none; width: .8em; height: .8em; margin-left: .55em; color: #666; vertical-align: -.05em; }}
-  /* The unread dot leads the source name, inside the text's left edge. Every name keeps its slot, so
-     names don't shift when a post is read and its dot goes. */
+  /* Each post's mark leads its source name, inside the text's left edge: in its kind's color while the
+     post is unread, gray once it's read. */
+  .symbols {{ position: absolute; width: 0; height: 0; overflow: hidden; }}
+  .icon {{ flex: none; width: 12px; height: 12px; color: #555; }}
   .source {{ display: flex; align-items: center; gap: .5em; min-width: 0; }}
-  .source::before {{ content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; }}
-  .unread .source::before {{ background: var(--article); }}
-  .posts li[data-podcast].unread .source::before {{ background: var(--podcast); }}
+  .unread .source .icon {{ color: var(--article); }}
+  .posts li[data-podcast].unread .source .icon {{ color: var(--podcast); }}
   .source > span {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .preview {{ position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
              box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
@@ -734,14 +746,11 @@ def page(title, body, header_note=""):
     .headline {{ display: block; }}
     .headline a.title {{ white-space: normal; }}
     .preview {{ display: none; }}
-    /* The unread dot moves beside the headline's first line, below the source name. It keeps to a slot
-       at the left edge that the source name and headline both start after. */
-    .posts li {{ position: relative; padding-left: calc(6px + .5em); }}
-    .source::before {{ display: none; }}
-    .posts li::before {{ content: ""; position: absolute; left: 0; top: calc(.4rem + 1.16em + .725em - 1px);
-                        width: 6px; height: 6px; border-radius: 50%; }}
-    .unread::before {{ background: var(--article); }}
-    .posts li[data-podcast].unread::before {{ background: var(--podcast); }}
+    /* The mark moves beside the headline's first line, below the source name, into a slot at the left
+       edge that the source name and headline both start after. Its top: the row's padding, then (in the
+       source's text size) 1.45em for the source's line and .9em for half the headline's, less half the mark. */
+    .posts li {{ position: relative; padding-left: calc(12px + .5em); }}
+    .source .icon {{ position: absolute; left: 0; top: calc(.4rem + 2.35em - 6px); }}
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
@@ -769,6 +778,7 @@ def page(title, body, header_note=""):
 </style>
 </head>
 <body>
+{ICON_SYMBOLS}
 <main>
 <header><nav class="sites" aria-label="Sites"><a href="./" aria-current="page">Newsfeed</a><a href="https://events.grahamhagenah.com/">Events</a></nav>{note}</header>
 {body}
