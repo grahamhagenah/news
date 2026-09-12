@@ -1,8 +1,8 @@
 # Newsfeed
 
-A plain black-and-white list of the latest posts from a few sites, newest first. Live at https://grahamhagenah.com/news/.
+A plain black-and-white list of the latest posts from a few sites, newest first. Live at https://news.grahamhagenah.com/.
 
-- Add or remove sites from the [sources page](https://grahamhagenah.com/news/sources.html), which opens a pre-filled issue that the `sources.yml` workflow applies to `feeds.txt`, or edit `feeds.txt` directly. A homepage URL is enough; the build finds the feed. Options like `limit=5` and `days=14` go at the end of a line.
+- Add or remove sites from the [sources page](https://news.grahamhagenah.com/sources.html), which opens a pre-filled issue that the `sources.yml` workflow applies to `feeds.txt`, or edit `feeds.txt` directly. A homepage URL is enough; the build finds the feed. Options like `limit=5` and `days=14` go at the end of a line.
 - Build locally with `python3 build.py`, then open `dist/index.html`. Uses only the Python standard library.
 - Every push to `main` rebuilds and deploys to GitHub Pages.
 
