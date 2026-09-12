@@ -14,7 +14,7 @@ from events.build import fetch
 
 names = sys.argv[1:] or [name.strip() for name in os.environ.get("NAMES", "").split(",") if name.strip()]
 for name in names:
-    query = urlencode({"apikey": os.environ["TICKETMASTER_KEY"], "keyword": name, "stateCode": "MA", "size": 10})
+    query = urlencode({"apikey": os.environ["TICKETMASTER_KEY"].strip(), "keyword": name, "stateCode": "MA", "size": 10})
     found = json.loads(fetch(f"https://app.ticketmaster.com/discovery/v2/venues.json?{query}"))
     venues = (found.get("_embedded") or {}).get("venues", [])
     print(f"{name}:")

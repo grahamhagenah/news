@@ -246,7 +246,7 @@ TICKETMASTER_SEGMENTS = {"Music": "music", "Film": "film"}
 def read_ticketmaster(source):
     """Ticketmaster venues (the Paradise), by Discovery API venue id. The API needs a free key, read from the
     TICKETMASTER_KEY environment variable (a repository secret on GitHub); without one these are skipped."""
-    key = os.environ.get("TICKETMASTER_KEY")
+    key = (os.environ.get("TICKETMASTER_KEY") or "").strip()  # A pasted key can bring a space or line break.
     if not key:
         print(f"  {source['name']}: skipped, no TICKETMASTER_KEY", file=sys.stderr)
         return []
