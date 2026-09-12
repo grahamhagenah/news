@@ -11,6 +11,11 @@ on:
     # cron fires. Odd minutes are quieter, and every 15 minutes means a dropped run costs little.
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
+    inputs:
+      events:
+        description: Rebuild the events page now, not only when it's due
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,12 +45,14 @@ jobs:
         uses: actions/deploy-pages@v4
 
       # The events page, after the newsfeed is out, so a problem with it never holds the newsfeed up. Its
-      # listings change slowly, so it rebuilds every three hours, or at once after a push.
+      # listings change slowly, so it rebuilds every three hours, or at once after a push or when "Run
+      # workflow" is started with its events box ticked.
       - run: python3 -m events.build
         env:
           # A free Ticketmaster Discovery API key, for venues like the Paradise.
           TICKETMASTER_KEY: ${{ secrets.TICKETMASTER_KEY }}
-          EVENTS_EVERY_HOURS: ${{ github.event_name != 'push' && '3' || '' }}
+          # Empty means build now. (In GitHub's `a && b || c`, b can't be empty, so the condition is inverted.)
+          EVENTS_EVERY_HOURS: ${{ (github.event_name != 'push' && !inputs.events) && '3' || '' }}
       - name: Publish the events page
         if: hashFiles('dist/events/index.html') != ''
         env:
