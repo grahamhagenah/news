@@ -29,6 +29,10 @@ PREVIEW_CHARS = 600  # Roughly how much text the hover preview shows.
 # InsideEVs) block a user agent containing "newsfeed" but allow this one.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 
+APPLE_SEARCH_URL = "https://itunes.apple.com/search"
+APPLE_LOOKUP_URL = "https://itunes.apple.com/lookup"
+APPLE_REQUEST_GAP = 3.1  # Seconds between Apple API calls; it allows about 20 a minute.
+
 FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/rdf+xml"}
 COMMON_FEED_PATHS = ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/index.xml"]
 
@@ -192,6 +196,19 @@ def entry_comments(entry, link, feed_url):
     return url, count
 
 
+def entry_audio(entry):
+    """The episode's audio file, when the post is a podcast episode."""
+    # RSS <enclosure>, Media RSS <media:content medium="audio">, or Atom <link rel="enclosure">.
+    for child in children(entry, "enclosure") + children(entry, "content") + children(entry, "link"):
+        if local_name(child.tag) == "link" and child.get("rel") != "enclosure":
+            continue
+        kind = child.get("type") or child.get("medium") or ""
+        url = child.get("url") or child.get("href")
+        if kind.startswith("audio") and url:
+            return url
+    return None
+
+
 BLOCK_TAG = re.compile(r"</?(p|div|blockquote|li|ul|ol|h[1-6]|br|pre|table|tr)\b[^>]*>", re.I)
 # hnrss describes link posts with these lines instead of any article text.
 BOILERPLATE = re.compile(r"^(Article URL|Comments URL|Points|# Comments):")
@@ -273,6 +290,8 @@ def read_feed(site):
                 "summary": summary,
                 "comments": comments,
                 "comment_count": comment_count,
+                "guid": child_text(entry, "guid", "id"),
+                "podcast": entry_audio(entry) is not None,
             })
 
     return {
@@ -288,6 +307,64 @@ def load(site):
         return read_feed(site)
     except Exception as error:
         return {"name": site["name"] or site["url"], "url": site["url"], "error": str(error), "posts": []}
+
+
+last_apple_request = 0.0
+
+
+def apple_api(url, params):
+    global last_apple_request
+    wait = last_apple_request + APPLE_REQUEST_GAP - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    last_apple_request = time.monotonic()
+    _, body = fetch(f"{url}?{urlencode(params)}", attempts=1, timeout=15)
+    return json.loads(body)["results"]
+
+
+def comparable(text):
+    return re.sub(r"\W+", " ", html.unescape(text or "")).strip().lower()
+
+
+def apple_episode_links(feed):
+    """Apple Podcasts links for a podcast's episodes, keyed by guid and by title, and the show's own page."""
+    shows = apple_api(APPLE_SEARCH_URL, {"media": "podcast", "entity": "podcast", "term": feed["name"], "limit": 5})
+    # Try the show whose feed is this one first; a site's feed and its podcast feed can differ, though.
+    shows.sort(key=lambda show: show.get("feedUrl", "").rstrip("/") != feed["feed_url"].rstrip("/"))
+    episodes = [post for post in feed["posts"] if post["podcast"]]
+    for show in shows[:3]:
+        links = {}
+        for result in apple_api(APPLE_LOOKUP_URL, {"id": show["collectionId"], "entity": "podcastEpisode", "limit": 50}):
+            if result.get("wrapperType") == "podcastEpisode" and result.get("trackViewUrl"):
+                # Keep the episode id (?i=…) but drop Apple's referral tag (uo=4).
+                parts = urlsplit(result["trackViewUrl"])
+                query = urlencode([(key, value) for key, value in parse_qsl(parts.query) if key != "uo"])
+                url = urlunsplit(parts._replace(query=query))
+                links[result.get("episodeGuid")] = url
+                links[comparable(result.get("trackName"))] = url
+        # A show with the same name isn't enough: it's the right one only if its episodes are these.
+        if any(post["guid"] in links or comparable(post["title"]) in links for post in episodes):
+            return links, show.get("collectionViewUrl", "").split("?")[0] or None
+    return {}, None
+
+
+def link_to_apple_podcasts(feed):
+    """Point podcast episodes at Apple Podcasts, which opens them in the Podcasts app."""
+    try:
+        links, show_url = apple_episode_links(feed)
+    except Exception as error:
+        print(f"  {feed['name']}: Apple Podcasts lookup failed, keeping web links ({error})", file=sys.stderr)
+        return
+    linked = 0
+    for post in feed["posts"]:
+        if not post["podcast"]:
+            continue
+        episode_url = links.get(post["guid"]) or links.get(comparable(post["title"]))
+        linked += bool(episode_url)
+        # An episode Apple hasn't picked up yet opens the show, where it will appear.
+        post["link"] = episode_url or show_url or post["link"]
+    total = sum(post["podcast"] for post in feed["posts"])
+    print(f"  {feed['name']}: {linked} of {total} episodes linked to Apple Podcasts")
 
 
 def render_time(date, css_class=""):
@@ -314,6 +391,7 @@ def render_json(posts, built_at):
                     "source": post["source"],
                     "date": post["date"].isoformat() if post["date"] else None,
                     "comments": post["comments"],
+                    "podcast": post["podcast"],
                 }
                 for post in posts
             ],
@@ -323,10 +401,19 @@ def render_json(posts, built_at):
     )
 
 
+PODCAST_ICON = (
+    '<svg class="podcast" viewBox="0 0 16 16" role="img" aria-label="Podcast"><title>Podcast</title>'
+    '<path d="M2.75 10.5V8a5.25 5.25 0 0 1 10.5 0v2.5" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+    '<rect x="1.5" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor"/>'
+    '<rect x="11.25" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor"/></svg>'
+)
+
+
 def render_index(feeds, posts, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
+        icon = PODCAST_ICON if post["podcast"] else ""
         # The full headline leads the preview, shown only when the one-line headline is cut off.
         paragraphs = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in post["summary"])
         preview = (
@@ -341,7 +428,7 @@ def render_index(feeds, posts, built_at):
         items.append(
             f'<li><span class="source"><span>{html.escape(post["source"])}</span></span>'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
-            f"{when}{comments}{preview}</div></li>"
+            f"{icon}{when}{comments}{preview}</div></li>"
         )
 
     failed = [feed["name"] for feed in feeds if not feed["posts"]]
@@ -570,6 +657,7 @@ def page(title, body, header_note=""):
   .headline {{ position: relative; display: flex; align-items: baseline; min-width: 0; }}
   .headline a.title {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .headline time, .headline .comments {{ flex: none; }}
+  .podcast {{ flex: none; width: .8em; height: .8em; margin-left: .55em; color: #666; vertical-align: -.05em; }}
   .source {{ position: relative; min-width: 0; }}
   .source > span {{ display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .unread .source::before {{ content: ""; position: absolute; left: -.9rem; top: .5em; width: 6px; height: 6px;
@@ -663,6 +751,11 @@ def main():
 
     if not any(feed["posts"] for feed in feeds):
         sys.exit("No feeds loaded — not writing the page.")
+
+    # One podcast at a time: Apple's API limits how often it can be called.
+    for feed in feeds:
+        if any(post["podcast"] for post in feed["posts"]):
+            link_to_apple_podcasts(feed)
 
     built_at = datetime.now(timezone.utc)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
