@@ -1,6 +1,6 @@
 """Tests for build.py, against saved samples of real feeds (tests/fixtures), so they run offline and a change
-that breaks the feed reader fails here instead of on the live page. Run with:
-python3 -m unittest discover -s tests
+that breaks the feed reader fails here instead of on the live page. Run from the repo's top folder with:
+python3 -m unittest
 
 The samples are real feeds trimmed to a few posts. When a feed changes and the reader is updated for it,
 save a fresh sample alongside the fix.
@@ -16,9 +16,9 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import build  # noqa: E402
+from news import build  # noqa: E402
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent / "fixtures" / "news"
 # Which sample stands in for which address. The homepage names its feed, for feed discovery.
 ROUTES = {
     "https://www.nytimes.com/": "nyt.xml",
@@ -183,35 +183,12 @@ class Page(unittest.TestCase):
         posts = build.all_posts(feeds)
         page = build.render_index(feeds, posts, ["Broken Blog"], [("Slow Site", datetime.now(timezone.utc))], datetime.now(timezone.utc))
         self.assertEqual(page.count('<span class="source">'), len(posts))
-        self.assertEqual(page.count("<li data-podcast>"), sum(post["podcast"] for post in posts))
+        self.assertEqual(page.count("<li class=\"row\" data-podcast>"), sum(post["podcast"] for post in posts))
         self.assertIn('data-show="podcasts"', page)
         self.assertIn("Couldn’t load Broken Blog", page)
         self.assertIn("Couldn’t reach Slow Site", page)
 
 
-class Alerts(unittest.TestCase):
-    def test_opens_for_outages_and_closes_on_recovery(self):
-        import alerts
-
-        now = datetime.now(timezone.utc)
-        failing = {
-            "Kottke": {"since": (now - timedelta(hours=7)).isoformat(), "error": "HTTP Error 520"},
-            "Waxy.org": {"since": (now - timedelta(hours=1)).isoformat(), "error": "timed out"},
-        }
-        calls = []
-
-        def gh(*args):
-            calls.append(args)
-            return json.dumps([{"number": 3, "title": "Source failing: Volts"}]) if args[:2] == ("issue", "list") else ""
-
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as record:
-            json.dump({"failing": failing}, record)
-        with mock.patch.object(alerts, "gh", gh), mock.patch.object(sys, "argv", ["alerts.py", record.name]):
-            alerts.main()
-        os.unlink(record.name)
-
-        self.assertEqual([args[3] for args in calls if args[:2] == ("issue", "create")], ["Source failing: Kottke"])
-        self.assertEqual([args[2] for args in calls if args[:2] == ("issue", "close")], ["3"])
 
 
 if __name__ == "__main__":

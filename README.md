@@ -1,19 +1,50 @@
-# Newsfeed
+# Newsfeed and Events
 
-A plain black-and-white list of the latest posts from a few sites, newest first. Live at https://news.grahamhagenah.com/.
+Two plain, black pages built from the same code:
 
-- Add or remove sites from the [sources page](https://news.grahamhagenah.com/sources.html), which opens a pre-filled issue that the `sources.yml` workflow applies to `feeds.txt`, or edit `feeds.txt` directly. A homepage URL is enough; the build finds the feed. Options like `limit=5` and `days=14` go at the end of a line.
-- Each build also publishes `feeds.json`, every feed's posts as the page used them. When a feed fails, or suddenly returns nothing while it had posts in its window, the next build uses its posts from there instead, if they're under two days old, and says so at the bottom of the page. A feed that's just quiet isn't a failure.
-- A feed that fails every build for six hours gets a "Source failing" issue here (so GitHub emails about it), opened by `alerts.py` after each build and closed once it loads again.
-- `python3 -m unittest discover -s tests` checks the reader against saved samples of real feeds (`tests/fixtures`: RSS, Atom, Hacker News, a podcast, a newsletter, a homepage to find the feed of, Pocket Casts), and the fallback rules. It runs before every deploy, so a change that breaks the reader isn't published.
-- Build locally with `python3 build.py`, then open `dist/index.html`. Uses only the Python standard library.
-- Every push to `main` rebuilds and deploys to GitHub Pages.
+- **Newsfeed**, the latest posts and podcast episodes from a few sites, newest first: https://news.grahamhagenah.com/
+- **Events**, concerts and films in Boston, Cambridge and Somerville over the next 30 days, grouped by day: https://events.grahamhagenah.com/
+
+## What's where
+
+- `news/`: the newsfeed. `feeds.txt` lists its sites; `build.py` reads their feeds (and links podcast episodes to Pocket Casts); `sources.py` is the bot behind the "Add a site" page.
+- `events/`: the events page. `sources.txt` lists its venues and how to read each; `build.py` has a reader for each kind of source and combines a film showing at several theaters into one row; `find_venue.py` looks up Ticketmaster venue ids.
+- `shared/`: what both use. `site.py` has the page around each list (head, header, the styles they share, icons, the script that ages timestamps), fetching with retries, and the fallback and failure bookkeeping; `alerts.py` opens and closes "Source failing" issues.
+- `tests/`: each page's readers against saved samples of real sources (`tests/fixtures/news`, `tests/fixtures/events`), the fallback rules, and the shared page and alerts.
+
+Run everything from this top folder, with only the Python standard library:
+
+- `python3 -m news.build` and `python3 -m events.build` write `dist/news` and `dist/events`; open their `index.html`.
+- `python3 -m unittest` runs the tests.
+
+## The newsfeed
+
+- Add or remove sites from the [sources page](https://news.grahamhagenah.com/sources.html), which opens a pre-filled issue that the `sources.yml` workflow applies to `news/feeds.txt`, or edit that file directly. A homepage URL is enough; the build finds the feed. Options like `limit=5` and `days=14` go at the end of a line, and `pocketcasts=<id>` ties a podcast to its Pocket Casts show when its feed address isn't the one Pocket Casts knows.
+
+## The events page
+
+- Venues rarely publish feeds, so the build uses the most dependable thing each offers: AEG's event data (Roadrunner), an event feed (The Sinclair), schema.org event data (the Brattle, House of Blues), the schedule data behind a theater chain's site (Alamo Drafthouse, Landmark's Kendall Square), Ticketmaster (the Paradise, Brighton Music Hall, the Crystal Ballroom, the Somerville Theatre), or the page itself (the Coolidge, TicketWeb listings at the Middle East).
+- Ticketmaster venues need a free [Ticketmaster Discovery API](https://developer.ticketmaster.com/) key, kept as this repo's `TICKETMASTER_KEY` secret. To add one, find its venue id with Actions → "Find a Ticketmaster venue".
+
+## When a source fails
+
+- Each build publishes what its page was built from, `feeds.json` and `listings.json`. When a source fails, or suddenly returns nothing while it had items coming up, the next build uses its items from there instead, if they're under two days old, and says so at the bottom of the page. A feed that's just quiet isn't a failure.
+- A source that fails every build for six hours gets a "Source failing: <name> (<page>)" issue here, so GitHub emails about it. It closes itself once the source loads again.
+- When a site changes and its reader is fixed, save a fresh sample of it in `tests/fixtures` too.
+
+## Publishing
+
+`deploy.yml` runs the tests, then builds and publishes both pages:
+
+- The newsfeed is this repo's GitHub Pages site.
+- A repo can publish only one Pages site, so the events page is pushed to the `gh-pages` branch of [grahamhagenah/events](https://github.com/grahamhagenah/events), whose Pages site is events.grahamhagenah.com. The push uses a deploy key that can write to that repo only, kept as the `EVENTS_DEPLOY_KEY` secret here (its public half is under that repo's Settings → Deploy keys). Deploy keys don't expire.
+- The newsfeed rebuilds every run; the events page every three hours, since listings change slowly and the theaters' sites are small. A push rebuilds both at once.
 
 ## Scheduled builds
 
-GitHub's own `schedule` trigger skips most runs, so a [cron-job.org](https://cron-job.org) job named "Newsfeed build" starts the deploy every 15 minutes instead. The schedule in `deploy.yml` stays as a backup.
+GitHub's own `schedule` trigger skips most runs, so a [cron-job.org](https://cron-job.org) job named "Newsfeed build" starts the deploy every 15 minutes instead, for both pages. The schedule in `deploy.yml` stays as a backup.
 
 - **The job:** `POST https://api.github.com/repos/grahamhagenah/news/actions/workflows/deploy.yml/dispatches` with body `{"ref":"main"}` and headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`, `Content-Type: application/json`, and `User-Agent: cron-job.org`. GitHub answers 204. Without the User-Agent header it answers 403.
 - **The token:** a fine-grained token on the grahamhagenah account, limited to this repo with **Actions: Read and write** only. It can start and cancel builds but can't read or change code. It expires; renew it at github.com/settings/personal-access-tokens and paste the new one into the job's Authorization header.
-- **If the page goes stale:** check cron-job.org's history or failure emails. A 401 means the token expired or was revoked, and a 403 means a missing permission or header.
+- **If the pages go stale:** check cron-job.org's history or failure emails. A 401 means the token expired or was revoked, and a 403 means a missing permission or header.
 - **Keep-alive:** GitHub disables a workflow after 60 days without a commit, which would also block the job. So on scheduled and dispatched runs, the `keepalive` job makes an empty commit if the repo has been quiet for 50 days.

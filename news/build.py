@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fetch every site in feeds.txt and write the latest posts to dist/."""
+"""Fetch every site in feeds.txt and write the latest posts to dist/news. Run from the repo's top folder:
+python3 -m news.build"""
 
 import gzip
 import html
@@ -7,8 +8,6 @@ import json
 import re
 import shutil
 import sys
-import time
-import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -18,9 +17,11 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
+from shared import site as shared
+
 ROOT = Path(__file__).parent
 FEEDS_FILE = ROOT / "feeds.txt"
-OUT_DIR = ROOT / "dist"
+OUT_DIR = ROOT.parent / "dist" / "news"
 REPO_URL = "https://github.com/grahamhagenah/news"
 POSTS_PER_FEED = 15  # Per site; override with limit=N in feeds.txt.
 PAGE_SIZE = 30  # Posts per page of the list.
@@ -70,18 +71,8 @@ def read_sites():
 
 
 def fetch(url, attempts=3, timeout=20):
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    for attempt in range(attempts):
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                return response.geturl(), response.read()
-        except Exception as error:
-            # Timeouts, dropped connections and 5xx errors are often momentary; a 404 won't change. Wait a
-            # little longer each time.
-            momentary = not isinstance(error, urllib.error.HTTPError) or error.code >= 500
-            if not momentary or attempt == attempts - 1:
-                raise
-            time.sleep(2 * (attempt + 1))
+    """The address the request ended at, and the body."""
+    return shared.fetch(url, USER_AGENT, attempts, timeout)
 
 
 class FeedLinkFinder(HTMLParser):
@@ -414,17 +405,12 @@ ICON_DRAWINGS = {
                '<rect x="1.5" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>'
                '<rect x="11.25" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>',
 }
-ICON_SYMBOLS = '<svg class="symbols" aria-hidden="true">' + "".join(
-    f'<symbol id="icon-{name}" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" '
-    f'stroke-linecap="round" stroke-linejoin="round">{drawing}</g></symbol>'
-    for name, drawing in ICON_DRAWINGS.items()
-) + "</svg>"
+ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 
 
 def icon(kind, decorative=False):
     """A post's mark. Beside a label that already says it (the filter), it's hidden from screen readers."""
-    label = 'aria-hidden="true"' if decorative else f'role="img" aria-label="{kind.capitalize()}"'
-    return f'<svg class="icon" {label}><use href="#icon-{kind}"/></svg>'
+    return shared.icon(kind, None if decorative else kind.capitalize())
 
 
 def render_index(feeds, posts, failed, stale, built_at):
@@ -444,7 +430,7 @@ def render_index(feeds, posts, failed, stale, built_at):
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         items.append(
-            f'<li{" data-podcast" if post["podcast"] else ""}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
+            f'<li class="row"{" data-podcast" if post["podcast"] else ""}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
             f"{when}{comments}{preview}</div></li>"
         )
@@ -475,7 +461,7 @@ def render_index(feeds, posts, failed, stale, built_at):
         "</footer>\n"
         f"<script>{INDEX_JS}</script>"
     )
-    return page("Newsfeed", body, header_note=f'Updated {render_time(built_at, "updated")}')
+    return page("Newsfeed", body, updated=built_at)
 
 
 INDEX_JS = """
@@ -630,7 +616,7 @@ options after its name, when you add it or in feeds.txt:</p>
 <li><code>days=14</code> keeps posts for 14 days, for blogs that post rarely.</li>
 </ul>
 <p>For example, a name of <code>The New York Times limit=8</code>. To change a site that’s already here, edit
-<a href="{REPO_URL}/edit/main/feeds.txt">feeds.txt on GitHub</a>. If a site doesn’t show up, the
+<a href="{REPO_URL}/edit/main/news/feeds.txt">feeds.txt on GitHub</a>. If a site doesn’t show up, the
 <a href="{REPO_URL}/actions">build log</a> says what it returned.</p>
 
 <h1>Export</h1>
@@ -673,141 +659,71 @@ def render_opml(feeds, built_at):
 """
 
 
-def page(title, body, header_note=""):
-    note = f'<span class="header-note">{header_note}</span>' if header_note else ""
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#000000">
-<meta name="apple-mobile-web-app-title" content="Newsfeed">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+HEAD = """<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="manifest" href="manifest.webmanifest">
-<title>{title}</title>
-<style>
+<link rel="manifest" href="manifest.webmanifest">"""
+
+# The newsfeed's own styles, on top of the ones it shares with the events page (shared/site.py).
+CSS = """
   /* Unread marks, and the filter's matching marks: green for articles, violet for podcast episodes. */
-  :root {{ --article: #34d399; --podcast: #a78bfa; }}
-  html {{ background: #000; }}
-  body {{ margin: 0; padding: 3rem 1.25rem 4rem; color: #fff; background: #000;
-         font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }}
-  main {{ max-width: 46rem; margin: 0 auto; }}
-  h1 {{ margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
-        letter-spacing: .08em; text-transform: uppercase; }}
-  h1:first-child, header + h1 {{ margin-top: 0; }}
-  header {{ display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 2rem; }}
-  .header-note {{ color: #666; font-size: .8rem; white-space: nowrap; }}
-  .header-note time {{ margin: 0; font-size: inherit; }}
-  .filter {{ display: flex; gap: 1.1rem; margin: -.75rem 0 1.75rem; }}
-  .filter button {{ padding: 0; border: 0; background: none; color: #666; font: inherit; font-size: .8rem; cursor: pointer; }}
-  .filter button:hover {{ color: #999; }}
-  .filter button[aria-pressed="true"] {{ color: #fff; }}
-  .filter .icon {{ margin-right: .4em; vertical-align: -1px; color: var(--article); }}
-  .filter [data-show="podcasts"] .icon {{ color: var(--podcast); }}
-  .empty {{ color: #666; font-size: .9rem; }}
-  /* This page and the events page, as a pair: the one you're on in white, the other a gray link to it. */
-  .sites {{ display: flex; gap: .9rem; }}
-  .sites a, .sites a:visited {{ color: #555; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }}
-  .sites a:hover {{ color: #999; }}
-  .sites a[aria-current], .sites a[aria-current]:hover {{ color: #fff; }}
-  ul {{ margin: 0; padding: 0; list-style: none; }}
-  li {{ padding: .4rem 0; }}
-  ol {{ padding-left: 1.25rem; }}
-  ol li {{ padding: .3rem 0; }}
-  .posts li {{ display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline; }}
+  :root { --article: #34d399; --podcast: #a78bfa; }
+  h1 { margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
+       letter-spacing: .08em; text-transform: uppercase; }
+  h1:first-child, header + h1 { margin-top: 0; }
+  .filter .icon { color: var(--article); }
+  .filter [data-show="podcasts"] .icon { color: var(--podcast); }
+  li { padding: .4rem 0; }
+  ol { padding-left: 1.25rem; }
+  ol li { padding: .3rem 0; }
   /* Until the script picks the page, show the first one, so the whole list never flashes up. */
-  .posts:not(.paged) li:nth-child(n+{PAGE_SIZE + 1}), .posts li[hidden] {{ display: none; }}
-  .pager {{ display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }}
-  .pager a, .pager a:visited {{ color: #999; }}
-  .source, .note, time, footer {{ color: #666; font-size: .8em; }}
-  /* Every row is one line tall: long headlines and source names end in an ellipsis. */
-  .headline {{ position: relative; display: flex; align-items: baseline; min-width: 0; }}
-  .headline a.title {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
-  .headline time, .headline .comments {{ flex: none; }}
-  /* Each post's mark leads its source name, inside the text's left edge: in its kind's color while the
-     post is unread, gray once it's read. */
-  .symbols {{ position: absolute; width: 0; height: 0; overflow: hidden; }}
-  .icon {{ flex: none; width: 12px; height: 12px; color: #555; }}
-  .source {{ display: flex; align-items: center; gap: .5em; min-width: 0; }}
-  .unread .source .icon {{ color: var(--article); }}
-  .posts li[data-podcast].unread .source .icon {{ color: var(--podcast); }}
-  .source > span {{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
-  .preview {{ position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
+  .posts:not(.paged) li:nth-child(n+PAGE_START) { display: none; }
+  .note, time { color: #666; font-size: .8em; }
+  .headline { position: relative; }
+  .headline time, .headline .comments { flex: none; }
+  /* Each post's icon: in its kind's color while the post is unread, gray once it's read. */
+  .source .icon { color: #555; }
+  .unread .source .icon { color: var(--article); }
+  .row[data-podcast].unread .source .icon { color: var(--podcast); }
+  .preview { position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
              box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
              color: #bbb; font-size: .85em; line-height: 1.5; pointer-events: none;
-             visibility: hidden; opacity: 0; transition: opacity .1s, visibility 0s .1s; }}
-  .preview.above {{ top: auto; bottom: calc(100% + .5rem); }}
-  .preview p {{ margin: 0 0 .7em; }}
-  .preview p:last-child {{ margin-bottom: 0; }}
-  .preview .full-title {{ display: none; color: #fff; }}
-  .truncated .preview .full-title {{ display: block; }}
-  .headline:not(.truncated) .preview.title-only {{ display: none; }}
-  .headline a.title:hover ~ .preview {{ visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }}
-  @media (hover: none) {{ .preview {{ display: none; }} }}
-  .new-posts {{ position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
+             visibility: hidden; opacity: 0; transition: opacity .1s, visibility 0s .1s; }
+  .preview.above { top: auto; bottom: calc(100% + .5rem); }
+  .preview p { margin: 0 0 .7em; }
+  .preview p:last-child { margin-bottom: 0; }
+  .preview .full-title { display: none; color: #fff; }
+  .truncated .preview .full-title { display: block; }
+  .headline:not(.truncated) .preview.title-only { display: none; }
+  .headline a.title:hover ~ .preview { visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }
+  @media (hover: none), (max-width: 34rem) { .preview { display: none; } }
+  .new-posts { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
                transform: translateX(-50%); padding: .45rem 1.1rem; border: 0; border-radius: 999px;
-               background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }}
-  .new-posts[hidden] {{ display: none; }}
-  @media (max-width: 34rem) {{
-    /* On a phone one line is too few words, so headlines wrap in full. */
-    .posts li {{ grid-template-columns: 1fr; gap: 0; }}
-    .headline {{ display: block; }}
-    .headline a.title {{ white-space: normal; }}
-    .preview {{ display: none; }}
-    /* The mark moves beside the headline's first line, below the source name, into a slot at the left
-       edge that the source name and headline both start after. Its top: the row's padding, then (in the
-       source's text size) 1.45em for the source's line and .9em for half the headline's, less half the mark. */
-    .posts li {{ position: relative; padding-left: calc(12px + .5em); }}
-    .source .icon {{ position: absolute; left: 0; top: calc(.4rem + 2.35em - 6px); }}
-  }}
-  a {{ color: #fff; text-decoration: none; }}
-  a:visited {{ color: #666; }}
-  .comments, .comments:visited {{ margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }}
-  a:hover {{ text-decoration: underline; }}
-  p a, ol a {{ text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }}
-  time, .note {{ margin-left: .6em; white-space: nowrap; }}
-  .remove, .remove:visited {{ margin-left: .8em; color: #666; font-size: .8em; }}
-  .sources {{ columns: 2; column-gap: 2.5rem; }}
-  .sources li {{ break-inside: avoid; }}
-  @media (max-width: 34rem) {{ .sources {{ columns: 1; }} }}
-  .add-site {{ display: flex; flex-wrap: wrap; gap: .5rem; }}
-  .add-site input {{ flex: 1 1 12rem; min-width: 0; padding: .55rem .75rem; border: 1px solid #333; border-radius: 6px;
-                    background: #000; color: #fff; font: inherit; font-size: .9rem; }}
-  .add-site input::placeholder {{ color: #555; }}
-  .add-site input:focus {{ outline: none; border-color: #888; }}
-  .add-site button {{ padding: .55rem 1.3rem; border: 0; border-radius: 999px; background: #fff; color: #000;
-                     font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }}
-  .help {{ color: #777; font-size: .85em; }}
-  code {{ color: #ccc; font-size: .9em; }}
-  footer {{ margin-top: 4rem; }}
-  footer p {{ margin: .4rem 0; }}
-  footer a, footer a:visited {{ color: #999; }}
-  footer time {{ margin: 0; font-size: inherit; }}
-</style>
-</head>
-<body>
-{ICON_SYMBOLS}
-<main>
-<header><nav class="sites" aria-label="Sites"><a href="./" aria-current="page">Newsfeed</a><a href="https://events.grahamhagenah.com/">Events</a></nav>{note}</header>
-{body}
-</main>
-<script>
-  for (const t of document.querySelectorAll("time")) {{
-    const s = Math.max(60, (Date.now() - new Date(t.dateTime)) / 1000);
-    const age = s < 3600 ? Math.round(s / 60) + "m" : s < 86400 ? Math.round(s / 3600) + "h" : Math.round(s / 86400) + "d";
-    t.textContent = t.classList.contains("updated") ? age + " ago" : age;
-  }}
-</script>
-</body>
-</html>
-"""
+               background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
+  a:visited { color: #666; }
+  .comments, .comments:visited { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
+  p a, ol a { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
+  time, .note { margin-left: .6em; white-space: nowrap; }
+  footer time { margin: 0; font-size: inherit; }
+  /* The sources page. */
+  .remove, .remove:visited { margin-left: .8em; color: #666; font-size: .8em; }
+  .sources { columns: 2; column-gap: 2.5rem; }
+  .sources li { break-inside: avoid; }
+  @media (max-width: 34rem) { .sources { columns: 1; } }
+  .add-site { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .add-site input { flex: 1 1 12rem; min-width: 0; padding: .55rem .75rem; border: 1px solid #333; border-radius: 6px;
+                    background: #000; color: #fff; font: inherit; font-size: .9rem; }
+  .add-site input::placeholder { color: #555; }
+  .add-site input:focus { outline: none; border-color: #888; }
+  .add-site button { padding: .55rem 1.3rem; border: 0; border-radius: 999px; background: #fff; color: #000;
+                     font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
+  .help { color: #777; font-size: .85em; }
+  code { color: #ccc; font-size: .9em; }
+""".replace("PAGE_START", str(PAGE_SIZE + 1))
+
+
+def page(title, body, updated=None):
+    return shared.page("news", title, body, css=CSS, head=HEAD, symbols=ICON_SYMBOLS, updated=updated)
 
 
 def saved(post):
@@ -820,13 +736,8 @@ def restored(kept):
 
 
 def previous_build():
-    """The live page's feeds.json: each feed's posts from the last build, and which feeds were failing.
-    Empty if it can't be had."""
-    try:
-        return json.loads(fetch(FEEDS_URL)[1])
-    except Exception as error:
-        print(f"  no earlier build to fall back on ({error})", file=sys.stderr)
-        return {}
+    """The live page's feeds.json: each feed's posts from the last build, and which feeds were failing."""
+    return shared.previous_build(FEEDS_URL, USER_AGENT)
 
 
 def gather(sites, feeds, previous, built_at):
@@ -866,14 +777,7 @@ def gather(sites, feeds, previous, built_at):
     return gathered, failed, stale, errors
 
 
-def still_failing(errors, previous, built_at):
-    """Each failing feed's error and when it started failing, carried over from build to build, so
-    alerts.py can tell a hiccup from an outage."""
-    before = previous.get("failing", {})
-    return {
-        name: {"since": before.get(name, {}).get("since", built_at.isoformat()), "error": error}
-        for name, error in errors.items()
-    }
+still_failing = shared.still_failing
 
 
 def main():
@@ -902,7 +806,7 @@ def main():
         if not feed.get("restored") and any(post["podcast"] for post in feed["posts"]):
             link_to_pocket_casts(feed)
 
-    OUT_DIR.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
     posts = all_posts(feeds)
     (OUT_DIR / "index.html").write_text(render_index(feeds, posts, failed, stale, built_at))
@@ -918,7 +822,7 @@ def main():
         "failing": still_failing(errors, previous, built_at),
     }
     (OUT_DIR / "feeds.json").write_text(json.dumps(record, ensure_ascii=False))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html, posts.json, sources.html, feeds.opml and feeds.json")
+    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html, posts.json, sources.html, feeds.opml and feeds.json")
 
 
 if __name__ == "__main__":

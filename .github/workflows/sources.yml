@@ -1,7 +1,7 @@
 name: Add or remove a site
 
 # The sources page opens a pre-filled issue titled "Add <url> [name] [options]" or "Remove <url>".
-# This edits feeds.txt, replies on the issue, closes it, and redeploys. Only the repo owner's issues
+# This edits news/feeds.txt, replies on the issue, closes it, and redeploys. Only the repo owner's issues
 # count, since anyone can open an issue on a public repo.
 on:
   issues:
@@ -29,7 +29,7 @@ jobs:
       - id: edit
         env:
           ISSUE_TITLE: ${{ github.event.issue.title }}
-        run: python3 sources.py
+        run: python3 -m news.sources
       - if: steps.edit.outputs.changed == 'true'
         env:
           SUMMARY: ${{ steps.edit.outputs.summary }}
@@ -50,5 +50,5 @@ jobs:
           gh issue close "$NUMBER" --reason "not planned"
       - if: failure()
         run: >-
-          gh issue comment "$NUMBER" --body "Something went wrong while updating feeds.txt.
+          gh issue comment "$NUMBER" --body "Something went wrong while updating news/feeds.txt.
           The log is at $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

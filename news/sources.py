@@ -9,7 +9,7 @@ import os
 import re
 from pathlib import Path
 
-import build
+from news import build
 
 ADDED_HEADING = "# Added from the sources page"
 
