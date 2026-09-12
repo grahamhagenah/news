@@ -685,8 +685,11 @@ def page(title, body, header_note=""):
     border-radius: 50%; background: var(--article); }}
   .filter [data-show="podcasts"]::before {{ background: var(--podcast); }}
   .empty {{ color: #666; font-size: .9rem; }}
-  .home, .home:visited {{ color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }}
-  .home:hover {{ text-decoration: none; }}
+  /* This page and the events page, as a pair: the one you're on in white, the other a gray link to it. */
+  .sites {{ display: flex; gap: .9rem; }}
+  .sites a, .sites a:visited {{ color: #555; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }}
+  .sites a:hover {{ color: #999; }}
+  .sites a[aria-current], .sites a[aria-current]:hover {{ color: #fff; }}
   ul {{ margin: 0; padding: 0; list-style: none; }}
   li {{ padding: .4rem 0; }}
   ol {{ padding-left: 1.25rem; }}
@@ -767,7 +770,7 @@ def page(title, body, header_note=""):
 </head>
 <body>
 <main>
-<header><a class="home" href="./">Newsfeed</a>{note}</header>
+<header><nav class="sites" aria-label="Sites"><a href="./" aria-current="page">Newsfeed</a><a href="https://events.grahamhagenah.com/">Events</a></nav>{note}</header>
 {body}
 </main>
 <script>
