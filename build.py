@@ -352,11 +352,11 @@ def render_index(feeds, posts, built_at):
         f'<ul class="posts" data-page-size="{PAGE_SIZE}">\n' + "\n".join(items) + "\n</ul>\n"
         '<nav class="pager"></nav>\n'
         f"<footer>\n{failed_note}"
-        f'<p>Updated {render_time(built_at, "updated")} · <a href="sources.html">Add or remove sites</a></p>\n'
+        '<p><a href="sources.html">Add or remove sites</a></p>\n'
         "</footer>\n"
         f"<script>{INDEX_JS}</script>"
     )
-    return page("Newsfeed", body)
+    return page("Newsfeed", body, header_note=f'Updated {render_time(built_at, "updated")}')
 
 
 INDEX_JS = """
@@ -524,7 +524,8 @@ def render_opml(feeds, built_at):
 """
 
 
-def page(title, body):
+def page(title, body, header_note=""):
+    note = f'<span class="header-note">{header_note}</span>' if header_note else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -550,7 +551,9 @@ def page(title, body):
   h1 {{ margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
         letter-spacing: .08em; text-transform: uppercase; }}
   h1:first-child, header + h1 {{ margin-top: 0; }}
-  header {{ margin-bottom: 2rem; }}
+  header {{ display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 2rem; }}
+  .header-note {{ color: #666; font-size: .8rem; white-space: nowrap; }}
+  .header-note time {{ margin: 0; font-size: inherit; }}
   .home, .home:visited {{ color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }}
   .home:hover {{ text-decoration: none; }}
   ul {{ margin: 0; padding: 0; list-style: none; }}
@@ -626,7 +629,7 @@ def page(title, body):
 </head>
 <body>
 <main>
-<header><a class="home" href="./">Newsfeed</a></header>
+<header><a class="home" href="./">Newsfeed</a>{note}</header>
 {body}
 </main>
 <script>
