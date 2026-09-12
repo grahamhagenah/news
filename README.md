@@ -3,6 +3,9 @@
 A plain black-and-white list of the latest posts from a few sites, newest first. Live at https://news.grahamhagenah.com/.
 
 - Add or remove sites from the [sources page](https://news.grahamhagenah.com/sources.html), which opens a pre-filled issue that the `sources.yml` workflow applies to `feeds.txt`, or edit `feeds.txt` directly. A homepage URL is enough; the build finds the feed. Options like `limit=5` and `days=14` go at the end of a line.
+- Each build also publishes `feeds.json`, every feed's posts as the page used them. When a feed fails, or suddenly returns nothing while it had posts in its window, the next build uses its posts from there instead, if they're under two days old, and says so at the bottom of the page. A feed that's just quiet isn't a failure.
+- A feed that fails every build for six hours gets a "Source failing" issue here (so GitHub emails about it), opened by `alerts.py` after each build and closed once it loads again.
+- `python3 -m unittest discover -s tests` checks the reader against saved samples of real feeds (`tests/fixtures`: RSS, Atom, Hacker News, a podcast, a newsletter, a homepage to find the feed of, Pocket Casts), and the fallback rules. It runs before every deploy, so a change that breaks the reader isn't published.
 - Build locally with `python3 build.py`, then open `dist/index.html`. Uses only the Python standard library.
 - Every push to `main` rebuilds and deploys to GitHub Pages.
 

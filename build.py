@@ -26,6 +26,10 @@ POSTS_PER_FEED = 15  # Per site; override with limit=N in feeds.txt.
 PAGE_SIZE = 30  # Posts per page of the list.
 DAYS_TO_KEEP = 3  # Older posts are dropped; override with days=N in feeds.txt.
 PREVIEW_CHARS = 600  # Roughly how much text the hover preview shows.
+# Each build publishes its feeds' posts beside the page; a feed that fails next time falls back to its copy
+# there, if it's no older than this.
+FEEDS_URL = "https://news.grahamhagenah.com/feeds.json"
+FALLBACK_LIMIT = timedelta(days=2)
 # What sites see when the build fetches them. Keep it: some sites' bot filters (Marginal Revolution,
 # InsideEVs) block a user agent containing "newsfeed" but allow this one.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
@@ -65,18 +69,19 @@ def read_sites():
     return [parse_site(line) for line in FEEDS_FILE.read_text().splitlines() if is_site_line(line)]
 
 
-def fetch(url, attempts=2, timeout=20):
+def fetch(url, attempts=3, timeout=20):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for attempt in range(attempts):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return response.geturl(), response.read()
         except Exception as error:
-            # Timeouts, dropped connections and 5xx errors are often momentary; a 404 won't change.
+            # Timeouts, dropped connections and 5xx errors are often momentary; a 404 won't change. Wait a
+            # little longer each time.
             momentary = not isinstance(error, urllib.error.HTTPError) or error.code >= 500
             if not momentary or attempt == attempts - 1:
                 raise
-            time.sleep(2)
+            time.sleep(2 * (attempt + 1))
 
 
 class FeedLinkFinder(HTMLParser):
@@ -422,7 +427,7 @@ def icon(kind, decorative=False):
     return f'<svg class="icon" {label}><use href="#icon-{kind}"/></svg>'
 
 
-def render_index(feeds, posts, built_at):
+def render_index(feeds, posts, failed, stale, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
@@ -444,8 +449,12 @@ def render_index(feeds, posts, built_at):
             f"{when}{comments}{preview}</div></li>"
         )
 
-    failed = [feed["name"] for feed in feeds if not feed["posts"]]
+    # Feeds that failed; a feed that just hasn't posted lately isn't one.
     failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
+    failed_note += "".join(
+        f'<p>Couldn’t reach {html.escape(name)}; its posts are from {render_time(fetched, "updated")}.</p>\n'
+        for name, fetched in stale
+    )
 
     # Only worth offering when there's something to choose between.
     show_filter = (
@@ -586,7 +595,13 @@ ISSUE_NOTE = (
 def render_sources(feeds, built_at):
     rows = []
     for feed in feeds:
-        status = f'{len(feed["posts"])} posts' if feed["posts"] else "couldn’t load"
+        count = len(feed["posts"])
+        status = (
+            f"{count} posts, from earlier" if feed.get("restored")
+            else "couldn’t load" if "error" in feed
+            else f"{count} posts" if count
+            else "no recent posts"
+        )
         remove = f"{REPO_URL}/issues/new?" + urlencode({"title": f"Remove {feed['url']}", "body": ISSUE_NOTE})
         rows.append(
             f'<li><a href="{html.escape(feed["url"])}">{html.escape(feed["name"])}</a>'
@@ -795,6 +810,72 @@ def page(title, body, header_note=""):
 """
 
 
+def saved(post):
+    """A post as feeds.json keeps it."""
+    return dict(post, date=post["date"].isoformat() if post["date"] else None)
+
+
+def restored(kept):
+    return dict(kept, date=datetime.fromisoformat(kept["date"]) if kept["date"] else None)
+
+
+def previous_build():
+    """The live page's feeds.json: each feed's posts from the last build, and which feeds were failing.
+    Empty if it can't be had."""
+    try:
+        return json.loads(fetch(FEEDS_URL)[1])
+    except Exception as error:
+        print(f"  no earlier build to fall back on ({error})", file=sys.stderr)
+        return {}
+
+
+def gather(sites, feeds, previous, built_at):
+    """Each feed as it loaded, or, when it failed, its last good posts from the previous build if they're
+    recent enough. Returns the feeds; the ones that failed with nothing to fall back on; the ones shown from
+    before, with when; and why each failing one failed. Saved copies are keyed by the feed's feeds.txt URL,
+    which stays the same when the feed is down."""
+    kept_feeds = previous.get("feeds", {})
+    gathered, failed, stale, errors = [], [], [], {}
+    for site, feed in zip(sites, feeds):
+        cutoff = built_at - timedelta(days=site["days"])
+        kept = kept_feeds.get(site["url"])
+        error = feed.get("error")
+        recent = [post for post in (kept or {}).get("posts", []) if not post["date"] or datetime.fromisoformat(post["date"]) >= cutoff]
+        # A feed that had posts in its window last time and has none now is more likely broken for the
+        # moment (served empty) than suddenly quiet, so it gets the same fallback.
+        if not error and not feed["posts"] and recent:
+            error = "returned no posts"
+        if not error:
+            feed["fetched"] = built_at
+            gathered.append(feed)
+            continue
+        name = (kept or {}).get("name") or feed["name"]
+        errors[name] = str(error)
+        print(f"✗ {name}: {error}", file=sys.stderr)
+        if not kept or built_at - datetime.fromisoformat(kept["fetched"]) > FALLBACK_LIMIT:
+            failed.append(name)
+            gathered.append(feed)
+            continue
+        # Keep its last good posts, and when they were fetched, so they still age out. Their links are
+        # already resolved (to Pocket Casts, for episodes), so the feed isn't looked up again.
+        fetched = datetime.fromisoformat(kept["fetched"])
+        stale.append((name, fetched))
+        print(f"  {name}: showing its posts from {kept['fetched']} instead", file=sys.stderr)
+        gathered.append(dict(feed, name=name, posts=[restored(post) for post in recent][: site["limit"]],
+                             fetched=fetched, restored=True))
+    return gathered, failed, stale, errors
+
+
+def still_failing(errors, previous, built_at):
+    """Each failing feed's error and when it started failing, carried over from build to build, so
+    alerts.py can tell a hiccup from an outage."""
+    before = previous.get("failing", {})
+    return {
+        name: {"since": before.get(name, {}).get("since", built_at.isoformat()), "error": error}
+        for name, error in errors.items()
+    }
+
+
 def main():
     sites = read_sites()
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -806,28 +887,38 @@ def main():
             post["summary"] = summary
 
     for feed in feeds:
-        if "error" in feed:
-            print(f"✗ {feed['url']}: {feed['error']}", file=sys.stderr)
-        else:
+        if "error" not in feed:
             previews = sum(1 for post in feed["posts"] if post["summary"])
             print(f"✓ {feed['name']}: {len(feed['posts'])} posts, {previews} with previews, from {feed['feed_url']}")
 
-    if not any(feed["posts"] for feed in feeds):
+    built_at = datetime.now(timezone.utc)
+    previous = previous_build()
+    feeds, failed, stale, errors = gather(sites, feeds, previous, built_at)
+    if len(failed) + len(stale) == len(sites) or not any(feed["posts"] for feed in feeds):
         sys.exit("No feeds loaded — not writing the page.")
 
     # One podcast at a time, to go easy on an API that isn't meant for public use.
     for feed in feeds:
-        if any(post["podcast"] for post in feed["posts"]):
+        if not feed.get("restored") and any(post["podcast"] for post in feed["posts"]):
             link_to_pocket_casts(feed)
 
-    built_at = datetime.now(timezone.utc)
+    OUT_DIR.mkdir(exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
     posts = all_posts(feeds)
-    (OUT_DIR / "index.html").write_text(render_index(feeds, posts, built_at))
+    (OUT_DIR / "index.html").write_text(render_index(feeds, posts, failed, stale, built_at))
     (OUT_DIR / "posts.json").write_text(render_json(posts, built_at))
     (OUT_DIR / "sources.html").write_text(render_sources(feeds, built_at))
     (OUT_DIR / "feeds.opml").write_text(render_opml(feeds, built_at))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html, posts.json, sources.html and feeds.opml")
+    record = {
+        "built": built_at.isoformat(),
+        "feeds": {
+            feed["url"]: {"name": feed["name"], "fetched": feed["fetched"].isoformat(), "posts": [saved(post) for post in feed["posts"]]}
+            for feed in feeds if "fetched" in feed
+        },
+        "failing": still_failing(errors, previous, built_at),
+    }
+    (OUT_DIR / "feeds.json").write_text(json.dumps(record, ensure_ascii=False))
+    print(f"Wrote {OUT_DIR.relative_to(ROOT)}/index.html, posts.json, sources.html, feeds.opml and feeds.json")
 
 
 if __name__ == "__main__":
