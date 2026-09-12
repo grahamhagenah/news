@@ -31,11 +31,36 @@ https://ourworldindata.org/     Our World in Data   days=30
 https://insideevs.com/          InsideEVs
 https://www.canarymedia.com/    Canary Media
 https://heatmap.news/           Heatmap   limit=8
-https://www.volts.wtf/          Volts   days=14
 https://usa.streetsblog.org/
+
+# Podcasts (episodes open in Pocket Casts). days= roughly matches how often each show posts.
+https://feeds.npr.org/510318/podcast.xml   Up First
+https://feeds.megaphone.fm/GLT1412515089   The Joe Rogan Experience
+https://feeds.simplecast.com/82FI35Px   The Ezra Klein Show   days=7
+https://feeds.megaphone.fm/theezrakleinshow   The Gray Area   days=7
+https://feeds.megaphone.fm/ARML2708405200   Past Present Future   days=7
+https://audioboom.com/channels/5166624.rss   Pod Save America   days=7
+https://api.substack.com/feed/podcast/193024.rss   Volts   days=7
+https://feeds.megaphone.fm/the-big-picture   The Big Picture   days=7
+https://feeds.npr.org/510289/podcast.xml   Planet Money   days=7
+https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/8a94442e-5a74-4fa2-8b8d-ae27003a8d6b/982f5071-765c-403d-969d-ae27003a8d83/podcast.rss   Odd Lots   days=7
+https://feeds.simplecast.com/kphrlDnb   The Opinions   days=7
+https://feeds.simplecast.com/Sl5CSM3S   The Daily   days=14
+https://feeds.simplecast.com/6HKOhNgS   Hard Fork   days=14
+https://rss.libsyn.com/shows/49347/destinations/170891.xml   Talking Headways   days=14
+https://feed.podbean.com/upzoned.strongtowns.org/feed.xml   Upzoned   days=14
+https://audioboom.com/channels/4997224.rss   The Filmcast   days=14
+https://rss.libsyn.com/shows/132228/destinations/807818.xml   The War on Cars   days=14
+https://relay.fm/upgrade/feed   Upgrade   days=14
+https://feeds.acast.com/public/shows/shift-key   Shift Key   days=14
+https://feeds.megaphone.fm/catalyst   Catalyst   days=14
+https://relay.fm/connected/feed   Connected   days=14
+https://feeds.simplecast.com/EmVW7VGp   Radiolab   days=14
+https://feeds.simplecast.com/bS1LZG8m   Interesting Times   days=30
+https://feeds.simplecast.com/TzbxCT1l   Popcast   days=30
+https://feeds.megaphone.fm/QCD6036500916   Philosophize This!   days=30
+https://audioboom.com/channels/5174627.rss   Still Counting   days=30
 
 # Added from the sources page
 https://www.theverge.com/ The Verge
 https://www.slowboring.com/ Slow Boring
-https://audioboom.com/channels/5174627.rss Still Counting
-https://www.nytimes.com/column/ezra-klein-podcast Ezra Klein
