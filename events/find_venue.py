@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Look up Ticketmaster venue ids by name, for ticketmaster lines in sources.txt.
+"""Look up Ticketmaster venue ids by name, for ticketmaster lines in events/sources.txt.
 
 Run it from GitHub (Actions → Find a Ticketmaster venue), where the TICKETMASTER_KEY secret is, or locally:
 TICKETMASTER_KEY=… python3 -m events.find_venue "Brighton Music Hall" "Crystal Ballroom"
