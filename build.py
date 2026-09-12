@@ -731,6 +731,14 @@ def page(title, body, header_note=""):
     .headline {{ display: block; }}
     .headline a.title {{ white-space: normal; }}
     .preview {{ display: none; }}
+    /* The unread dot moves beside the headline's first line, below the source name. It keeps to a slot
+       at the left edge that the source name and headline both start after. */
+    .posts li {{ position: relative; padding-left: calc(6px + .5em); }}
+    .source::before {{ display: none; }}
+    .posts li::before {{ content: ""; position: absolute; left: 0; top: calc(.4rem + 1.16em + .725em - 1px);
+                        width: 6px; height: 6px; border-radius: 50%; }}
+    .unread::before {{ background: var(--article); }}
+    .posts li[data-podcast].unread::before {{ background: var(--podcast); }}
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
