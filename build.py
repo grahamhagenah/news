@@ -664,6 +664,8 @@ def page(title, body, header_note=""):
 <link rel="manifest" href="manifest.webmanifest">
 <title>{title}</title>
 <style>
+  /* Unread dots, and the filter's matching dots: green for articles, violet for podcast episodes. */
+  :root {{ --article: #34d399; --podcast: #a78bfa; }}
   html {{ background: #000; }}
   body {{ margin: 0; padding: 3rem 1.25rem 4rem; color: #fff; background: #000;
          font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }}
@@ -678,6 +680,10 @@ def page(title, body, header_note=""):
   .filter button {{ padding: 0; border: 0; background: none; color: #666; font: inherit; font-size: .8rem; cursor: pointer; }}
   .filter button:hover {{ color: #999; }}
   .filter button[aria-pressed="true"] {{ color: #fff; }}
+  .filter [data-show="articles"]::before, .filter [data-show="podcasts"]::before {{
+    content: ""; display: inline-block; width: 6px; height: 6px; margin-right: .45em; vertical-align: .1em;
+    border-radius: 50%; background: var(--article); }}
+  .filter [data-show="podcasts"]::before {{ background: var(--podcast); }}
   .empty {{ color: #666; font-size: .9rem; }}
   .home, .home:visited {{ color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }}
   .home:hover {{ text-decoration: none; }}
@@ -699,7 +705,8 @@ def page(title, body, header_note=""):
   .source {{ position: relative; min-width: 0; }}
   .source > span {{ display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
   .unread .source::before {{ content: ""; position: absolute; left: -.9rem; top: .5em; width: 6px; height: 6px;
-                            border-radius: 50%; background: #34d399; }}
+                            border-radius: 50%; background: var(--article); }}
+  .posts li[data-podcast].unread .source::before, .posts li[data-podcast].unread::before {{ background: var(--podcast); }}
   .preview {{ position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
              box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
              color: #bbb; font-size: .85em; line-height: 1.5; pointer-events: none;
@@ -726,7 +733,7 @@ def page(title, body, header_note=""):
     .posts li {{ position: relative; }}
     .unread .source::before {{ display: none; }}
     .unread::before {{ content: ""; position: absolute; left: -.9rem; top: calc(.4rem + 1.16em + .725em - 1px);
-                      width: 6px; height: 6px; border-radius: 50%; background: #34d399; }}
+                      width: 6px; height: 6px; border-radius: 50%; background: var(--article); }}
   }}
   a {{ color: #fff; text-decoration: none; }}
   a:visited {{ color: #666; }}
