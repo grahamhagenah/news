@@ -532,14 +532,12 @@ INDEX_JS = """
         shown += !li.hidden;
       }
       day.hidden = true;
-      day.classList.remove("first");
       if (shown) shownDays.push(day);
     }
     const pages = Math.max(1, Math.ceil(shownDays.length / DAYS_PER_PAGE));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     const onPage = shownDays.slice((page - 1) * DAYS_PER_PAGE, page * DAYS_PER_PAGE);
     for (const day of onPage) day.hidden = false;
-    onPage[0]?.classList.add("first");
     const link = (n, text) => `<a href="${n === 1 ? location.pathname : "?page=" + n}">${text}</a>`;
     pager.innerHTML = pages < 2 ? "" :
       (page > 1 ? link(page - 1, "← Earlier") : "<span></span>") +
@@ -568,11 +566,7 @@ CSS = """
   .icon { color: var(--dot); }
   [data-show="music"], [data-category="music"] { --dot: var(--music); }
   [data-show="film"], [data-category="film"] { --dot: var(--film); }
-  h2 { margin: 2.25rem 0 .5rem; color: #777; font-size: .75rem; line-height: 1; font-weight: 600; letter-spacing: .08em;
-       text-transform: uppercase; }
-  /* The first day's heading goes in the space between the filter and the list, so the list starts at the
-     same height as the newsfeed's: its height and margin (.75rem + .5rem) come out of the filter's margin. */
-  main:not(.paged) .day:first-of-type h2, .day.first h2 { margin-top: -1.25rem; }
+  h2 { margin: 2.25rem 0 .5rem; color: #777; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   /* Until the script picks the page, show the first three days, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+4) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
