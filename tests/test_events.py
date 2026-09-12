@@ -30,6 +30,9 @@ ROUTES = [
     ("boxofficeapi/movies", "landmark_movies.json"),
     ("app.ticketmaster.com", "ticketmaster.json"),
     ("cambridgema.gov", "cambridge.ics"),
+    ("dice.fm", "dice.html"),
+    ("tockify.com", "midway.ics"),
+    ("lizardloungeclub.com", "lizardlounge.json"),
 ]
 
 
@@ -113,8 +116,28 @@ class Readers(unittest.TestCase):
         with mock.patch.dict(os.environ, {"TICKETMASTER_KEY": ""}):
             self.assertEqual(build.read_ticketmaster(source("ticketmaster", "X")), [])
 
+    def test_jsonld_dice(self):
+        found = self.read("jsonld", "https://dice.fm/venue/deep-cuts-nd6q")
+        self.assertEqual(len(found), 3)
+        self.assertEqual(found[0]["times"], [time(19, 0)])
+        self.assertTrue(all(item["link"].startswith("https://dice.fm/event/") for item in found))
+
     def test_ics(self):
         self.read("ics", "https://www.cambridgema.gov/arts/Calendar.ics", "film")
+
+    def test_ics_tockify_times_in_boston(self):
+        found = self.read("ics", "https://tockify.com/api/feeds/ics/midwaycafejp")
+        # 01:30 UTC on Sep 12 is 9:30pm on Sep 11 in Boston.
+        self.assertEqual((found[0]["date"], found[0]["times"]), (date(2026, 9, 11), [time(21, 30)]))
+        self.assertEqual(found[0]["title"], "CAVA (Germany) w/ Lupo Citta")
+
+    def test_tribe_skips_what_isnt_a_show(self):
+        found = self.read("tribe", "https://lizardloungeclub.com/wp-json/tribe/events/v1/events")
+        titles = [item["title"] for item in found]
+        self.assertEqual(len(titles), 4)
+        self.assertIn("The Gravel Project/Lara Cwass", titles)
+        self.assertFalse(any("No Event" in title or "Poetry Jam" in title for title in titles))
+        self.assertTrue(all(item["times"] for item in found))
 
 
 class Films(unittest.TestCase):

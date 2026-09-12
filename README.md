@@ -23,7 +23,7 @@ Run everything from this top folder, with only the Python standard library:
 
 ## The events page
 
-- Venues rarely publish feeds, so the build uses the most dependable thing each offers: AEG's event data (Roadrunner), an event feed (The Sinclair), schema.org event data (the Brattle, House of Blues), the schedule data behind a theater chain's site (Alamo Drafthouse, Landmark's Kendall Square), Ticketmaster (the Paradise, Brighton Music Hall, the Crystal Ballroom, the Somerville Theatre), or the page itself (the Coolidge, TicketWeb listings at the Middle East).
+- Venues rarely publish feeds, so the build uses the most dependable thing each offers: AEG's event data (Roadrunner), an event feed (The Sinclair), schema.org event data (the Brattle, House of Blues, Deep Cuts' page on DICE), a calendar feed (Midway Cafe), a WordPress calendar's API (Lizard Lounge, The Rockwell's music), the schedule data behind a theater chain's site (Alamo Drafthouse, Landmark's Kendall Square), Ticketmaster (the Paradise, Brighton Music Hall, the Crystal Ballroom, the Somerville Theatre), or the page itself (the Coolidge, TicketWeb listings at the Middle East).
 - Ticketmaster venues need a free [Ticketmaster Discovery API](https://developer.ticketmaster.com/) key, kept as this repo's `TICKETMASTER_KEY` secret. To add one, find its venue id with Actions → "Find a Ticketmaster venue".
 
 ## When a source fails

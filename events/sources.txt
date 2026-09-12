@@ -3,13 +3,16 @@
 #   aeg        an AEG Presents venue's events.json (Roadrunner)
 #   rss        an event feed whose titles end in the date, "… on Sep 12, 2026" (AXS venues like The Sinclair)
 #   ticketweb  a venue page with TicketWeb's event listing (The Middle East)
-#   jsonld     a page with schema.org Event data in it (the Brattle's Coming Soon page, House of Blues)
+#   jsonld     a page with schema.org Event data in it (the Brattle's Coming Soon page, House of Blues, a
+#              venue's page on DICE)
 #   coolidge   the Coolidge Corner Theatre's showtimes page
 #   ticketmaster  a Ticketmaster venue id in place of the URL (the Paradise); needs the TICKETMASTER_KEY secret.
 #                 Find a venue's id with Actions → "Find a Ticketmaster venue" on GitHub.
 #   alamo      an Alamo Drafthouse market's schedule JSON (Boston, which is the Seaport)
 #   landmark   a Landmark Theatres theater id in place of the URL (Kendall Square)
-#   ics        an iCalendar feed
+#   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
+#   tribe      a WordPress site's The Events Calendar API, /wp-json/tribe/events/v1/events, optionally with
+#              ?categories=<slug> to keep one kind of event (Lizard Lounge, The Rockwell)
 
 # Music
 aeg        https://aegwebprod.blob.core.windows.net/json/events/219/events.json   music   Roadrunner
@@ -20,6 +23,10 @@ ticketmaster  KovZpZA11JtA   music   Paradise
 ticketmaster  KovZpapwne   music   Brighton Music Hall
 ticketmaster  KovZ917AJnQ   music   Crystal Ballroom
 ticketmaster  KovZpZAaFnJA   music   Somerville Theatre
+jsonld     https://dice.fm/venue/deep-cuts-nd6q   music   Deep Cuts
+ics        https://tockify.com/api/feeds/ics/midwaycafejp   music   Midway Cafe
+tribe      https://lizardloungeclub.com/wp-json/tribe/events/v1/events   music   Lizard Lounge
+tribe      https://therockwell.org/wp-json/tribe/events/v1/events?categories=music   music   The Rockwell
 
 # Film
 jsonld     https://brattlefilm.org/coming-soon/   film   Brattle

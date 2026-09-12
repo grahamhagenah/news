@@ -153,6 +153,8 @@ def read_jsonld(source):
 
     events = []
     for item in found:
+        if str(item.get("eventStatus", "")).endswith("EventCancelled"):
+            continue
         day, start = at_boston(datetime.fromisoformat(item["startDate"]))
         # The Brattle adds the showtime to each name: "Filipiñana - 9/12/26 @ 12:00 pm".
         title = re.sub(r"\s+-\s+\d{1,2}/\d{1,2}/\d{2,4}\s+@.*$", "", html.unescape(item.get("name", "")))
@@ -307,6 +309,31 @@ def read_ics(source):
     return events
 
 
+# Calendar entries that aren't shows: Lizard Lounge's placeholders for its dark nights, and its weekly poetry jam.
+NOT_SHOWS = re.compile(r"^No Event Tonight|Poetry Jam", re.I)
+
+
+def read_tribe(source):
+    """WordPress sites using The Events Calendar (Lizard Lounge, The Rockwell), through its REST API. The URL
+    can pick a category, like ?categories=music for The Rockwell's music among its comedy and theater."""
+    today = datetime.now(BOSTON).date()
+    window = {"start_date": today.isoformat(), "end_date": f"{today + timedelta(days=DAYS_AHEAD)} 23:59:59", "per_page": 50}
+    url = source["url"] + ("&" if "?" in source["url"] else "?") + urlencode(window)
+    events = []
+    while url:
+        data = json.loads(fetch(url))
+        for item in data.get("events", []):
+            title = html.unescape(item["title"])
+            if item.get("hide_from_listings") or NOT_SHOWS.search(title):
+                continue
+            # The venue's own local time, which for these is Boston's.
+            moment = datetime.strptime(item["start_date"], "%Y-%m-%d %H:%M:%S")
+            events.append(event(source, title, moment.date(), None if item.get("all_day") else moment.time(),
+                                link=item.get("url", "")))
+        url = data.get("next_rest_url")  # 50 to a page.
+    return events
+
+
 READERS = {
     "aeg": read_aeg,
     "rss": read_rss,
@@ -317,6 +344,7 @@ READERS = {
     "alamo": read_alamo,
     "landmark": read_landmark,
     "ics": read_ics,
+    "tribe": read_tribe,
 }
 
 
