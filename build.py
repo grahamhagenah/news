@@ -46,12 +46,15 @@ def is_site_line(line):
 def parse_site(line):
     """A feeds.txt line: a URL, then an optional name and options like limit=5 or days=14."""
     url, *words = line.split()
-    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP}
+    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "pocketcasts": ""}
     name = []
     for word in words:
         option = re.fullmatch(r"(limit|days)=(\d+)", word)
+        show = re.fullmatch(r"pocketcasts=([0-9a-f-]{36})", word)
         if option:
             site[option.group(1)] = int(option.group(2))
+        elif show:
+            site["pocketcasts"] = show.group(1)
         else:
             name.append(word)
     site["name"] = " ".join(name)
@@ -301,6 +304,7 @@ def read_feed(site):
         "name": site["name"] or clean(child_text(meta, "title")) or site["url"],
         "url": site["url"],
         "feed_url": feed_url,
+        "pocketcasts": site["pocketcasts"],
         "posts": posts[: site["limit"]],
     }
 
@@ -327,9 +331,11 @@ def comparable(text):
 
 def pocket_casts_links(feed):
     """Pocket Casts links for a podcast's episodes, keyed by audio file and by title, and the show's own page."""
-    # Named "add feed", but for a feed Pocket Casts already has it just returns the show.
-    found = pocket_casts_json(POCKET_CASTS_FIND_URL, {"url": feed["feed_url"]})
-    uuid = ((found.get("result") or {}).get("podcast") or {}).get("uuid")
+    uuid = feed["pocketcasts"]
+    if not uuid:
+        # Named "add feed", but for a feed Pocket Casts already has it just returns the show.
+        found = pocket_casts_json(POCKET_CASTS_FIND_URL, {"url": feed["feed_url"]})
+        uuid = ((found.get("result") or {}).get("podcast") or {}).get("uuid")
     if not uuid:
         return {}, None
     links = {}
