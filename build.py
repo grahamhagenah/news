@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fetch every site in feeds.txt and write the latest posts to dist/."""
 
+import gzip
 import html
 import json
 import re
@@ -29,9 +30,9 @@ PREVIEW_CHARS = 600  # Roughly how much text the hover preview shows.
 # InsideEVs) block a user agent containing "newsfeed" but allow this one.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 
-APPLE_SEARCH_URL = "https://itunes.apple.com/search"
-APPLE_LOOKUP_URL = "https://itunes.apple.com/lookup"
-APPLE_REQUEST_GAP = 3.1  # Seconds between Apple API calls; it allows about 20 a minute.
+# The endpoints Pocket Casts' own web player uses; they're undocumented, so failures fall back to web links.
+POCKET_CASTS_FIND_URL = "https://refresh.pocketcasts.com/author/add_feed_url"
+POCKET_CASTS_EPISODES_URL = "https://podcast-api.pocketcasts.com/podcast/full/{uuid}"
 
 FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/rdf+xml"}
 COMMON_FEED_PATHS = ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/index.xml"]
@@ -277,7 +278,9 @@ def read_feed(site):
     posts = []
     for entry in entries:
         title = clean(child_text(entry, "title"))
-        link = entry_link(entry)
+        audio = entry_audio(entry)
+        # Many podcast feeds give an episode no web page of its own, just the audio file.
+        link = entry_link(entry) or audio
         date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
         if title and link and (date is None or date >= cutoff):
             link = without_tracking(urljoin(feed_url, link))
@@ -290,8 +293,8 @@ def read_feed(site):
                 "summary": summary,
                 "comments": comments,
                 "comment_count": comment_count,
-                "guid": child_text(entry, "guid", "id"),
-                "podcast": entry_audio(entry) is not None,
+                "audio": audio,
+                "podcast": audio is not None,
             })
 
     return {
@@ -309,62 +312,53 @@ def load(site):
         return {"name": site["name"] or site["url"], "url": site["url"], "error": str(error), "posts": []}
 
 
-last_apple_request = 0.0
-
-
-def apple_api(url, params):
-    global last_apple_request
-    wait = last_apple_request + APPLE_REQUEST_GAP - time.monotonic()
-    if wait > 0:
-        time.sleep(wait)
-    last_apple_request = time.monotonic()
-    _, body = fetch(f"{url}?{urlencode(params)}", attempts=1, timeout=15)
-    return json.loads(body)["results"]
+def pocket_casts_json(url, payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    headers = {"User-Agent": USER_AGENT, "Content-Type": "application/json"}
+    with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers), timeout=20) as response:
+        body = response.read()
+    # Episode lists are stored gzipped and served that way whatever the request accepts.
+    return json.loads(gzip.decompress(body) if body[:2] == b"\x1f\x8b" else body)
 
 
 def comparable(text):
     return re.sub(r"\W+", " ", html.unescape(text or "")).strip().lower()
 
 
-def apple_episode_links(feed):
-    """Apple Podcasts links for a podcast's episodes, keyed by guid and by title, and the show's own page."""
-    shows = apple_api(APPLE_SEARCH_URL, {"media": "podcast", "entity": "podcast", "term": feed["name"], "limit": 5})
-    # Try the show whose feed is this one first; a site's feed and its podcast feed can differ, though.
-    shows.sort(key=lambda show: show.get("feedUrl", "").rstrip("/") != feed["feed_url"].rstrip("/"))
+def pocket_casts_links(feed):
+    """Pocket Casts links for a podcast's episodes, keyed by audio file and by title, and the show's own page."""
+    # Named "add feed", but for a feed Pocket Casts already has it just returns the show.
+    found = pocket_casts_json(POCKET_CASTS_FIND_URL, {"url": feed["feed_url"]})
+    uuid = ((found.get("result") or {}).get("podcast") or {}).get("uuid")
+    if not uuid:
+        return {}, None
+    links = {}
+    for episode in pocket_casts_json(POCKET_CASTS_EPISODES_URL.format(uuid=uuid))["podcast"]["episodes"]:
+        url = f"https://pca.st/episode/{episode['uuid']}"
+        links[episode.get("url")] = url
+        links[comparable(episode.get("title"))] = url
+    return links, f"https://pca.st/podcast/{uuid}"
+
+
+def link_to_pocket_casts(feed):
+    """Point podcast episodes at Pocket Casts, whose pca.st links open in the Pocket Casts app."""
     episodes = [post for post in feed["posts"] if post["podcast"]]
-    for show in shows[:3]:
-        links = {}
-        for result in apple_api(APPLE_LOOKUP_URL, {"id": show["collectionId"], "entity": "podcastEpisode", "limit": 50}):
-            if result.get("wrapperType") == "podcastEpisode" and result.get("trackViewUrl"):
-                # Keep the episode id (?i=…) but drop Apple's referral tag (uo=4).
-                parts = urlsplit(result["trackViewUrl"])
-                query = urlencode([(key, value) for key, value in parse_qsl(parts.query) if key != "uo"])
-                url = urlunsplit(parts._replace(query=query))
-                links[result.get("episodeGuid")] = url
-                links[comparable(result.get("trackName"))] = url
-        # A show with the same name isn't enough: it's the right one only if its episodes are these.
-        if any(post["guid"] in links or comparable(post["title"]) in links for post in episodes):
-            return links, show.get("collectionViewUrl", "").split("?")[0] or None
-    return {}, None
-
-
-def link_to_apple_podcasts(feed):
-    """Point podcast episodes at Apple Podcasts, which opens them in the Podcasts app."""
+    # Only whole podcast feeds: the lookup adds feeds Pocket Casts doesn't have yet, and a newsletter
+    # feed with the odd episode in it shouldn't become a podcast there. Those episodes keep web links.
+    if len(episodes) < len(feed["posts"]):
+        return
     try:
-        links, show_url = apple_episode_links(feed)
+        links, show_url = pocket_casts_links(feed)
     except Exception as error:
-        print(f"  {feed['name']}: Apple Podcasts lookup failed, keeping web links ({error})", file=sys.stderr)
+        print(f"  {feed['name']}: Pocket Casts lookup failed, keeping web links ({error})", file=sys.stderr)
         return
     linked = 0
-    for post in feed["posts"]:
-        if not post["podcast"]:
-            continue
-        episode_url = links.get(post["guid"]) or links.get(comparable(post["title"]))
+    for post in episodes:
+        episode_url = links.get(post["audio"]) or links.get(comparable(post["title"]))
         linked += bool(episode_url)
-        # An episode Apple hasn't picked up yet opens the show, where it will appear.
+        # An episode Pocket Casts hasn't picked up yet opens the show, where it will appear.
         post["link"] = episode_url or show_url or post["link"]
-    total = sum(post["podcast"] for post in feed["posts"])
-    print(f"  {feed['name']}: {linked} of {total} episodes linked to Apple Podcasts")
+    print(f"  {feed['name']}: {linked} of {len(episodes)} episodes linked to Pocket Casts")
 
 
 def render_time(date, css_class=""):
@@ -426,7 +420,7 @@ def render_index(feeds, posts, built_at):
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         items.append(
-            f'<li><span class="source"><span>{html.escape(post["source"])}</span></span>'
+            f'<li{" data-podcast" if post["podcast"] else ""}><span class="source"><span>{html.escape(post["source"])}</span></span>'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
             f"{icon}{when}{comments}{preview}</div></li>"
         )
@@ -434,9 +428,18 @@ def render_index(feeds, posts, built_at):
     failed = [feed["name"] for feed in feeds if not feed["posts"]]
     failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
 
+    # Only worth offering when there's something to choose between.
+    show_filter = (
+        '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
+        '<button data-show="articles">Articles</button><button data-show="podcasts">Podcasts</button></nav>\n'
+        if any(post["podcast"] for post in posts)
+        else ""
+    )
+
     body = (
-        '<button class="new-posts" hidden></button>\n'
+        show_filter + '<button class="new-posts" hidden></button>\n'
         f'<ul class="posts" data-page-size="{PAGE_SIZE}">\n' + "\n".join(items) + "\n</ul>\n"
+        '<p class="empty" hidden></p>\n'
         '<nav class="pager"></nav>\n'
         f"<footer>\n{failed_note}"
         '<p><a href="sources.html">Add or remove sites</a></p>\n'
@@ -516,17 +519,41 @@ INDEX_JS = """
   const list = document.querySelector(".posts");
   const pageSize = Number(list.dataset.pageSize);
   const items = [...list.children];
-  const pages = Math.max(1, Math.ceil(items.length / pageSize));
-  const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
-  items.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
-  list.classList.add("paged");
-  if (pages > 1) {
+  const pager = document.querySelector(".pager");
+  const empty = document.querySelector(".empty");
+
+  // The filter shows every post, only articles, or only podcast episodes. The choice is remembered in
+  // this browser, and paging counts only the posts it shows.
+  const filter = document.querySelector(".filter");
+  let show = "all";
+  try { show = (filter && localStorage.getItem("reader-show")) || "all"; } catch (error) {}
+
+  function showPosts() {
+    const shown = items.filter(li => show === "all" || (show === "podcasts") === li.hasAttribute("data-podcast"));
+    const pages = Math.max(1, Math.ceil(shown.length / pageSize));
+    const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
+    items.forEach(li => { li.hidden = true; });
+    shown.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
+    list.classList.add("paged");
     const link = (n, text) => `<a href="${n === 1 ? location.pathname : "?page=" + n}">${text}</a>`;
-    document.querySelector(".pager").innerHTML =
+    pager.innerHTML = pages < 2 ? "" :
       (page > 1 ? link(page - 1, "← Newer") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Older →") : "<span></span>");
+    empty.textContent = show === "podcasts" ? "No podcast episodes right now." : "No articles right now.";
+    empty.hidden = shown.length > 0;
+    if (filter) for (const b of filter.children) b.setAttribute("aria-pressed", b.dataset.show === show);
   }
+  showPosts();
+
+  if (filter) filter.addEventListener("click", event => {
+    const b = event.target.closest("button");
+    if (!b) return;
+    show = b.dataset.show;
+    try { localStorage.setItem("reader-show", show); } catch (error) {}
+    history.replaceState(null, "", location.pathname); // Back to page one.
+    showPosts();
+  });
 """
 
 
@@ -641,6 +668,11 @@ def page(title, body, header_note=""):
   header {{ display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 2rem; }}
   .header-note {{ color: #666; font-size: .8rem; white-space: nowrap; }}
   .header-note time {{ margin: 0; font-size: inherit; }}
+  .filter {{ display: flex; gap: 1.1rem; margin: -.75rem 0 1.75rem; }}
+  .filter button {{ padding: 0; border: 0; background: none; color: #666; font: inherit; font-size: .8rem; cursor: pointer; }}
+  .filter button:hover {{ color: #999; }}
+  .filter button[aria-pressed="true"] {{ color: #fff; }}
+  .empty {{ color: #666; font-size: .9rem; }}
   .home, .home:visited {{ color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }}
   .home:hover {{ text-decoration: none; }}
   ul {{ margin: 0; padding: 0; list-style: none; }}
@@ -752,10 +784,10 @@ def main():
     if not any(feed["posts"] for feed in feeds):
         sys.exit("No feeds loaded — not writing the page.")
 
-    # One podcast at a time: Apple's API limits how often it can be called.
+    # One podcast at a time, to go easy on an API that isn't meant for public use.
     for feed in feeds:
         if any(post["podcast"] for post in feed["posts"]):
-            link_to_apple_podcasts(feed)
+            link_to_pocket_casts(feed)
 
     built_at = datetime.now(timezone.utc)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
