@@ -13,6 +13,7 @@
 #   landmark   a Landmark Theatres theater id in place of the URL (Kendall Square)
 #   hfa        the Harvard Film Archive's calendar page
 #   frenchlibrary  the French Library's upcoming events page: its screenings, talks and exhibitions
+#   ica        the ICA's calendar page: its concerts, screenings, talks, dance and First Fridays
 #   veezi      a theater site hosted by Veezi, from the showtimes its pages load (West Newton Cinema)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   tribe      a WordPress site's The Events Calendar API, /wp-json/tribe/events/v1/events, optionally with
@@ -42,6 +43,7 @@ mit        https://calendar.mit.edu/api/2/events   art   MIT
 bibliocommons  https://gateway.bibliocommons.com/v2/libraries/bpl/rss/events?types=651c3241cb391ed4418ce94f,5a53d3a8ad75682e00e60c1c,5a78b58777a0b42400865b61,5a78af1377a0b42400865a28,5c76ae994700372a27d7a97a,66c49b327cf6463600e38450   art   Boston Public Library
 mfa        https://www.mfa.org/programs   art   MFA
 harvardart https://harvardartmuseums.org/calendar   art   Harvard Art Museums
+ica        https://www.icaboston.org/calendar   art   ICA
 tribe      https://www.sowaboston.com/wp-json/tribe/events/v1/events   art   SoWa
 frenchlibrary  https://frenchlibrary.org/upcoming-events/   art   French Library
 tribe      https://artsemerson.org/wp-json/tribe/events/v1/events   art   ArtsEmerson

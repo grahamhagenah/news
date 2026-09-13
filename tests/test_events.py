@@ -40,6 +40,7 @@ ROUTES = [
     ("harvardfilmarchive.org/calendar", "hfa.html"),
     ("bostonfilmhub.com", "bostonfilmhub.html"),
     ("frenchlibrary.org", "frenchlibrary.html"),
+    ("icaboston.org/calendar", "ica.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
 ]
@@ -264,6 +265,21 @@ class ArtAndTalks(unittest.TestCase):
             "Camelia Latin-Jazz Trio": "music",
         })  # Not the guided tour, member hours, studio class, or the film festival spanning three days.
         self.assertEqual(found[1]["times"], [time(13, 0)])
+
+    def test_ica_by_kind(self):
+        found = build.read_ica(source("ica", "https://www.icaboston.org/calendar", "art", "ICA"))
+        self.assertEqual({item["title"]: item["category"] for item in found}, {
+            "Gallery Talk: Erika Umali on To My Best Friend": "art",
+            "Colin Stetson & Brìghde Chaimbeul": "music",
+            "TCB – The Toni Cade Bambara School of Organizing": "film",
+        })  # Not the kids' workshop, the members' opening, or the online series.
+        talk = found[0]
+        self.assertEqual((talk["date"], talk["times"]), (date(2026, 9, 20), [time(14, 0)]))
+
+    def test_times_from_a_range(self):
+        for when, start in [("12–4 PM", time(12, 0)), ("10 AM–5 PM", time(10, 0)), ("5:30–9:30 PM", time(17, 30)),
+                            ("7 PM", time(19, 0)), ("11–1 PM", time(11, 0)), ("8 PM–12 AM", time(20, 0))]:
+            self.assertEqual(build.clock_range_start(when), start, when)
 
     def test_harvard_art_museums(self):
         listings = __import__("json").loads((FIXTURES / "harvardart.json").read_text())

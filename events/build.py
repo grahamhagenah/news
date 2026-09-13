@@ -317,6 +317,56 @@ def read_hfa(source):
     return events
 
 
+# The ICA's event types, from the tags on each: its concerts go under Music, its screenings under Film, and its
+# talks, dance and First Fridays under Art & talks. Anything for kids, teens or members, online, or only a
+# workshop or party (like its gala) is left out.
+ICA_SKIP = {"ICA Kids", "ICA Teens", "ICA Members", "Virtual events"}
+ICA_KINDS = [("Music", "music"), ("Film", "film"), ("Talks", "art"), ("Talk", "art"), ("Dance", "art"),
+             ("ICA Live", "art"), ("First Fridays", "art")]
+
+
+def clock_range_start(when):
+    """The start of "12–4 PM", "10 AM–5 PM", "5:30–9:30 PM" or "7 PM": a start without its own AM or PM takes
+    the end's, unless that would put it after the end ("11–1 PM" starts at 11 AM)."""
+    found = re.match(r"(\d{1,2})(?::(\d{2}))?\s*([AP]M)?(?:\s*[–-]\s*(\d{1,2})(?::\d{2})?\s*([AP]M))?", when.strip(), re.I)
+    if not found:
+        return None
+    hour, minute, meridiem, end_hour, end_meridiem = found.groups()
+    if not meridiem:
+        if not end_meridiem:
+            return None
+        meridiem = end_meridiem
+        if int(hour) % 12 > int(end_hour) % 12:
+            meridiem = "AM" if end_meridiem.upper() == "PM" else "PM"
+    hour = int(hour) % 12 + (12 if meridiem.upper() == "PM" else 0)
+    return datetime.min.time().replace(hour=hour, minute=int(minute or 0))
+
+
+def read_ica(source):
+    """The ICA's calendar page, a couple of months of events, dated like "Sun, Sep 20, 2 PM" (no year)."""
+    today_ = today()
+    events = []
+    for node in fetch(source["url"]).split('class="ds-1col node node-event')[1:]:
+        title = re.search(r'<h3 class="teaser-title">\s*<a href="([^"]+)">(.*?)</a>', node, re.S)
+        when = re.search(r'class="event-date-display">(.*?)</div>', node, re.S)
+        kinds = {text(tag) for tag in re.findall(r'rel="tag">(.*?)</a>', node, re.S)}
+        category = next((category for kind, category in ICA_KINDS if kind in kinds), None)
+        if not (title and when and category) or kinds & ICA_SKIP:
+            continue
+        day_text, _, clock_text = text(when.group(1)).partition(", ")[2].partition(", ")
+        try:
+            day = datetime.strptime(f"{day_text} {today_.year}", "%b %d %Y").date()
+        except ValueError:
+            continue
+        if day < today_ - timedelta(days=60):  # January's events, listed in December.
+            day = day.replace(year=today_.year + 1)
+        name = text(re.sub(r"<[^>]+>", "", title.group(2)))  # Italics for a work's name, without a gap after.
+        listing = event(source, name, day, clock_range_start(clock_text), link=html.unescape(title.group(1)))
+        listing["category"] = category
+        events.append(listing)
+    return events
+
+
 # The French Library's event types, from the label on each, and where each goes: its screenings are Film,
 # the rest of its programs Art & talks. Its classes, clubs and children's events are left out.
 FRENCH_LIBRARY_KINDS = {"Talks & Discussions": "art", "Arts & Exhibitions": "art", "Performing Arts & Screenings": "art"}
@@ -701,6 +751,7 @@ READERS = {
     "tribe": read_tribe,
     "hfa": read_hfa,
     "frenchlibrary": read_french_library,
+    "ica": read_ica,
     "veezi": read_veezi_site,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
