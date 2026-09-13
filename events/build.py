@@ -11,7 +11,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 from shared import site as shared
@@ -27,7 +27,7 @@ LISTINGS_URL = "https://events.grahamhagenah.com/listings.json"
 FALLBACK_LIMIT = timedelta(days=2)
 BOSTON = ZoneInfo("America/New_York")
 USER_AGENT = "Mozilla/5.0 (compatible; events-feed/1.0)"
-CATEGORIES = {"music": "Music", "film": "Film"}
+CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
 
 def read_sources():
@@ -334,6 +334,181 @@ def read_tribe(source):
     return events
 
 
+def today():
+    return datetime.now(BOSTON).date()
+
+
+def window_end():
+    return today() + timedelta(days=DAYS_AHEAD)
+
+
+def opening(source, title, first, last, link, start=None):
+    """An exhibition, listed once, on the day it opens, with when it closes; one already open is left out, so it
+    isn't at the top of every day for months."""
+    if first < today():
+        return []
+    return [event(source, title, first, start, link=link, detail=f"through {last:%b} {last.day}")]
+
+
+def read_mit(source):
+    """MIT's events calendar (Localist), kept to what's open to the public and about art: exhibitions, and talks
+    from its architecture and humanities schools or listed under the arts. MIT tags many public events for no
+    audience at all, so only events tagged for some other audience alone are left out."""
+    arts = {"School of Architecture and Planning (SA+P)", "School of Humanities, Arts, and Social Sciences (SHASS)"}
+    events, seen, page = [], set(), 1
+    while page:
+        data = json.loads(fetch(f"{source['url']}?{urlencode({'days': DAYS_AHEAD + 1, 'pp': 100, 'page': page})}"))
+        for entry in data.get("events", []):
+            item = entry["event"]
+            tags = {key: {tag["name"] for tag in value} for key, value in (item.get("filters") or {}).items()}
+            types, audience = tags.get("event_types", set()), tags.get("event_audience", set())
+            state = (item.get("geo") or {}).get("state")
+            if ((audience and "Public" not in audience) or item.get("experience") == "virtual"
+                    or item.get("status") == "canceled" or (state and state != "MA")):  # A few are in New York.
+                continue
+            talk = "Conferences/Seminars/Lectures" in types and (
+                tags.get("event_events_by_school", set()) & arts or tags.get("event_events_by_interest", set()) & {"Arts/Music/Film", "MIT Museum"})
+            if not ("Exhibits" in types or talk):
+                continue
+            # A listing per day an event happens; a talk is each of them, an exhibition just its opening.
+            instance = entry["event"]["event_instances"][0]["event_instance"]
+            moment = datetime.fromisoformat(instance["start"])
+            day, start = at_boston(moment)
+            # Midnight is how an event with its time left off comes through.
+            start = None if instance.get("all_day") or (start.hour, start.minute) == (0, 0) else start
+            link = item.get("localist_url") or source["url"]
+            first, last = date.fromisoformat(item["first_date"]), date.fromisoformat(item["last_date"])
+            if "Exhibits" in types and last > first:
+                if item["id"] not in seen:
+                    seen.add(item["id"])
+                    events += opening(source, item["title"], first, last, link)
+                continue
+            events.append(event(source, item["title"], day, start, link=link))
+        page = data.get("page", {}).get("next_page") if page < 20 else None
+    return events
+
+
+# A library's events (BiblioCommons) that aren't talks or exhibitions for grown-ups, by the tags they carry.
+LIBRARY_SKIP = {
+    "Kirstein Business Library & Innovation Center Classes", "Job & Career Success", "Computers/Technology Classes",
+    "Financial Empowerment", "Small Business", "Workshops & Classes", "Story Time", "Early Literacy",
+    "English for Speakers of Other Languages (ESOL)", "Artificial Intelligence (AI)", "Arts & Crafts", "Film",
+    "Health / Fitness", "Human Services",
+}
+LIBRARY_YOUNG = {"Babies (0-24 months)", "Toddlers (Ages 2-3)", "Preschoolers (Ages 3-5)", "Children (Ages 6-12)",
+                 "Tweens (Ages 9-12)", "Teens (Ages 13-18)", "Families"}
+LIBRARY_AUDIENCES = LIBRARY_YOUNG | {"All Adults", "College Students", "Older Adults", "Young Adults (Ages 20-34)", "Visitors"}
+
+
+def read_bibliocommons(source):
+    """A library's events feed from BiblioCommons (the Boston Public Library's), filtered by type in its URL
+    (?types=…), 25 to a page in date order, which the rest of its own filters can't narrow further."""
+    end = window_end()
+    events = []
+    for page in range(1, 21):
+        feed = fetch(f"{source['url']}&page={page}")
+        items = re.findall(r"<item>(.*?)</item>", feed, re.S)
+        for item in items:
+            def field(name):
+                found = re.search(rf"<{name}>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{name}>", item, re.S)
+                return html.unescape(found.group(1).strip()) if found else ""
+            tags = {html.unescape(tag) for tag in re.findall(r"<category>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</category>", item)}
+            audiences = tags & LIBRARY_AUDIENCES
+            day, start = at_boston(datetime.fromisoformat(field("bc:start_date").replace("Z", "+00:00")))
+            if (field("bc:is_cancelled") == "true" or field("bc:is_virtual") == "true" or tags & LIBRARY_SKIP
+                    or (audiences and audiences <= LIBRARY_YOUNG)):
+                continue
+            branch = re.sub(r"\s+in\s+.*$", "", text(field("bc:name")))  # "Central Library in Copley Square"
+            venue = source["name"] if branch.startswith("Central") or not branch else f"{branch} Library"
+            title, link = text(field("title")), field("link")
+            last = date.fromisoformat((field("bc:end_date_local") or day.isoformat())[:10])
+            if "Exhibitions" in tags and last > day:
+                events += [dict(listing, venue=venue) for listing in opening(source, title, day, last, link)]
+            else:
+                events.append(event(source, title, day, start, link=link, venue=venue))
+        if not items or day > end:
+            break
+    return events
+
+
+# The MFA's program types, as the first line of each program's label, and where each goes; the rest (guided
+# tours, studio classes, courses, member hours) are left out.
+MFA_KINDS = [("Lecture", "art"), ("Special Event", "art"), ("Open House", "art"), ("Film", "film"), ("Concert", "music")]
+
+
+def read_mfa(source):
+    """The MFA's program calendar, 25 programs to a page, soonest first. A program spanning several days (a
+    course, a festival) is a heading over its own dated programs, so only single days are kept."""
+    end = window_end()
+    events = []
+    for page in range(30):
+        markup = fetch(f"{source['url']}?page={page}")
+        programs = re.findall(
+            r'<div\s+class="col-lg-8">\s*(.*?)<h2 class="field-content"><a href="([^"]+)">(.*?)</a></h2>'
+            r'\s*<p class="field-content info"><span class="date-display-range">(.*?)</span>', markup, re.S)
+        day = None
+        for label, link, title, when in programs:
+            # "Saturday, September 12, 2026<br>10:00 am–11:15 am"; a span reads "Friday, October 2–Friday, …".
+            single = re.fullmatch(r"\w+, (\w+ \d{1,2}, \d{4})(?:<br>\s*(\d{1,2})(?::(\d{2}))?\s*([ap])m.*)?", when.strip(), re.S)
+            if not single:
+                continue
+            day = datetime.strptime(single.group(1), "%B %d, %Y").date()
+            kind = text(label.split("<br>")[0])
+            category = next((category for name, category in MFA_KINDS if name in kind), None)
+            if not category:
+                continue
+            start = None
+            if single.group(2):
+                hour = int(single.group(2)) % 12 + (12 if single.group(4) == "p" else 0)
+                start = datetime.min.time().replace(hour=hour, minute=int(single.group(3) or 0))
+            listing = event(source, text(title), day, start, link=f"https://www.mfa.org{html.unescape(link)}")
+            listing["category"] = category
+            events.append(listing)
+        if 'rel="next"' not in markup or (day and day > end):
+            break
+    return events
+
+
+# Harvard Art Museums' event types (its calendar page's EVENT_CATEGORIES) that are kept, and where each goes;
+# the rest (student-led spotlight tours, workshops, supporter and special events like classes) are left out.
+HARVARD_ART_KINDS = {2: "art", 3: "art", 4: "art", 9: "art", 10: "art", 13: "film"}
+
+
+def harvard_art_listings(url, months):
+    """Each month's events from Harvard Art Museums' calendar, which the page asks for with a form post that
+    needs its session cookie and the token on the page."""
+    import http.cookiejar
+    import urllib.request
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    opener.addheaders = [("User-Agent", USER_AGENT)]
+    page = opener.open(url, timeout=20).read().decode("utf-8", "replace")
+    token = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
+    listings = []
+    for year, month in months:
+        body = urlencode({"year": year, "month": month - 1, "day": 0}).encode()  # Its months count from 0.
+        request = urllib.request.Request(urljoin(url, "/events/calendar/listings"), data=body, headers={"X-CSRF-TOKEN": token})
+        listings += json.loads(opener.open(request, timeout=20).read())
+    return listings
+
+
+def read_harvard_art(source):
+    months = sorted({(day.year, day.month) for day in (today(), window_end())})
+    events = []
+    for item in harvard_art_listings(source["url"], months):
+        category = HARVARD_ART_KINDS.get(int(item.get("type") or 0))
+        # Its formatted title, with italics for works of art, and no tag leaving a space where it ends.
+        formatted = (item.get("html_attributes") or {}).get("title") or item["title"].replace("_", "")
+        title = text(re.sub(r"<[^>]+>", "", formatted))
+        if not category or re.search(r"\bonline\b|\bcancel", title, re.I):
+            continue
+        moment = datetime.fromisoformat(item["date"].replace("Z", "+00:00")).replace(second=0, microsecond=0)
+        day, start = at_boston(moment)
+        listing = event(source, title, day, start, link=item.get("event_link") or source["url"])
+        listing["category"] = category
+        events.append(listing)
+    return events
+
+
 READERS = {
     "aeg": read_aeg,
     "rss": read_rss,
@@ -345,6 +520,10 @@ READERS = {
     "landmark": read_landmark,
     "ics": read_ics,
     "tribe": read_tribe,
+    "mit": read_mit,
+    "bibliocommons": read_bibliocommons,
+    "mfa": read_mfa,
+    "harvardart": read_harvard_art,
 }
 
 
@@ -415,8 +594,11 @@ def clock(moment):
 
 
 # Each row's mark for its category, in the category's color: two beamed eighth notes for music, a frame of
-# film with sprocket holes down both sides for film. Drawn once in the page; rows point to the drawing.
+# film with sprocket holes down both sides for film, a framed picture of hills and a sun for art & talks. Drawn
+# once in the page; rows point to the drawing.
 ICON_DRAWINGS = {
+    "art": '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M4.5 11l2.75-3 2 2 1.25-1.25 1.5 2.25"/>'
+           '<circle cx="10.5" cy="5.75" r="1" fill="currentColor"/>',
     "music": '<path d="M5.5 12.5V4l8-2v8.5"/><circle cx="3.75" cy="12.5" r="1.75" fill="currentColor"/>'
              '<circle cx="11.75" cy="10.5" r="1.75" fill="currentColor"/>',
     "film": '<rect x="2" y="2" width="12" height="12" rx="1.5"/>'
@@ -589,11 +771,12 @@ INDEX_JS = """
 
 # The events page's own styles, on top of the ones it shares with the newsfeed (shared/site.py).
 CSS = """
-  /* Category colors, for the marks in the list and on the filter: violet music, amber film. */
-  :root { --music: #a78bfa; --film: #fbbf24; }
+  /* Category colors, for the marks in the list and on the filter: violet music, amber film, blue art & talks. */
+  :root { --music: #a78bfa; --film: #fbbf24; --art: #60a5fa; }
   .icon { color: var(--dot); }
   [data-show="music"], [data-category="music"] { --dot: var(--music); }
   [data-show="film"], [data-category="film"] { --dot: var(--film); }
+  [data-show="art"], [data-category="art"] { --dot: var(--art); }
   h2 { margin: 2.25rem 0 .5rem; color: #777; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   /* Until the script picks the page, show the first three days, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+4) { display: none; }

@@ -3,7 +3,7 @@
 Two plain, black pages built from the same code:
 
 - **Newsfeed**, the latest posts and podcast episodes from a few sites, newest first: https://news.grahamhagenah.com/
-- **Events**, concerts and films in Boston, Cambridge and Somerville over the next 30 days, grouped by day: https://events.grahamhagenah.com/
+- **Events**, concerts, films, and art and talks in Boston, Cambridge and Somerville over the next 30 days, grouped by day: https://events.grahamhagenah.com/
 
 ## What's where
 
@@ -24,6 +24,7 @@ Run everything from this top folder, with only the Python standard library:
 ## The events page
 
 - Venues rarely publish feeds, so the build uses the most dependable thing each offers: AEG's event data (Roadrunner), an event feed (The Sinclair), schema.org event data (the Brattle, House of Blues, Deep Cuts' page on DICE), a calendar feed (Midway Cafe), a WordPress calendar's API (Lizard Lounge, The Rockwell's music), the schedule data behind a theater chain's site (Alamo Drafthouse, Landmark's Kendall Square), Ticketmaster (the Paradise, Brighton Music Hall, the Crystal Ballroom, the Somerville Theatre), or the page itself (the Coolidge, TicketWeb listings at the Middle East).
+- Art & talks come from MIT's events calendar (public exhibitions, and talks from its architecture and humanities schools or listed under the arts), the Boston Public Library's events feed (talks, lectures and exhibitions for adults), the MFA's and Harvard Art Museums' calendars (their lectures, talks and special events; their films go under Film), and SoWa's First Fridays. An exhibition is listed on the day it opens, with when it closes.
 - Ticketmaster venues need a free [Ticketmaster Discovery API](https://developer.ticketmaster.com/) key, kept as this repo's `TICKETMASTER_KEY` secret. To add one, find its venue id with Actions → "Find a Ticketmaster venue".
 
 ## When a source fails

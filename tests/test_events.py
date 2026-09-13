@@ -33,6 +33,10 @@ ROUTES = [
     ("dice.fm", "dice.html"),
     ("tockify.com", "midway.ics"),
     ("lizardloungeclub.com", "lizardlounge.json"),
+    ("calendar.mit.edu", "mit.json"),
+    ("rss/events?types=test&page=1", "bpl.xml"),
+    ("gateway.bibliocommons.com", "bpl_end.xml"),  # Every later page: the feed with nothing left in it.
+    ("mfa.org/programs", "mfa.html"),
 ]
 
 
@@ -138,6 +142,69 @@ class Readers(unittest.TestCase):
         self.assertIn("The Gravel Project/Lara Cwass", titles)
         self.assertFalse(any("No Event" in title or "Poetry Jam" in title for title in titles))
         self.assertTrue(all(item["times"] for item in found))
+
+
+class ArtAndTalks(unittest.TestCase):
+    """The art & talks readers, on a fixed day, since their samples' exhibitions open and close on real dates."""
+
+    def setUp(self):
+        for name, value in [("fetch", sample), ("today", lambda: date(2026, 9, 12))]:
+            patcher = mock.patch.object(build, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def titles(self, found):
+        return [item["title"] for item in found]
+
+    def test_mit_keeps_public_art_and_humanities(self):
+        found = Readers.read(self, "mit", "https://calendar.mit.edu/api/2/events", "art")
+        titles = self.titles(found)
+        self.assertEqual(titles, ["Overburden with Gregg Mitman", "TAKK—Mireia Luzárraga", "Art21 Screening with Josh Kline"])
+        self.assertEqual(found[0]["times"], [time(16, 0)])
+        # Left out: a virtual conference, a talk in New York, and a talk and an exhibition for MIT people only.
+
+    def test_mit_exhibition_listed_once_when_it_opens(self):
+        # The sample's running exhibition, which MIT lists for its own community, made public.
+        data = __import__("json").loads(sample("calendar.mit.edu"))
+        for entry in data["events"]:
+            entry["event"]["filters"]["event_audience"] = [{"name": "Public", "id": 98747}]
+        public = __import__("json").dumps(data)
+        with mock.patch.object(build, "today", lambda: date(2026, 8, 1)), mock.patch.object(build, "fetch", lambda url: public):
+            found = build.read_mit(source("mit", "https://calendar.mit.edu/api/2/events", "art", "MIT"))
+        opening = [item for item in found if item["title"].startswith("Howe, Manning & Almy")]
+        self.assertEqual(len(opening), 1)
+        self.assertEqual((opening[0]["date"], opening[0]["times"], opening[0]["detail"]), (date(2026, 8, 19), [], "through May 27"))
+
+    def test_library_talks_by_branch(self):
+        found = Readers.read(self, "bibliocommons", "https://gateway.bibliocommons.com/v2/libraries/bpl/rss/events?types=test",
+                             "art", "Boston Public Library")
+        venues = {item["title"]: item["venue"] for item in found}
+        self.assertEqual(venues["Author Talk: N.K. Jemisin on Revolutionary Ideas in Fantasy Fiction"], "Boston Public Library")
+        self.assertEqual(venues["Author Talk: Ric Calleja - Making Dinner con Amor"], "Faneuil Library")
+        self.assertIn("Great Decisions — Multilateral Institutions", venues)
+        # Left out: a virtual business class, a teens' workshop, and an exhibition open since last year.
+        self.assertFalse([title for title in venues if "Tech Talk" in title or "Adulting" in title or "Becoming Boston" in title])
+
+    def test_mfa_programs_by_kind(self):
+        found = build.read_mfa(source("mfa", "https://www.mfa.org/programs", "art", "MFA"))
+        self.assertEqual({item["title"]: item["category"] for item in found}, {
+            "UNIQLO Free Admission Day": "art",
+            "The Road to Livres d’Artiste": "art",
+            "Deep Quiet Room (深度安靜)": "film",
+            "Camelia Latin-Jazz Trio": "music",
+        })  # Not the guided tour, member hours, studio class, or the film festival spanning three days.
+        self.assertEqual(found[1]["times"], [time(13, 0)])
+
+    def test_harvard_art_museums(self):
+        listings = __import__("json").loads((FIXTURES / "harvardart.json").read_text())
+        with mock.patch.object(build, "harvard_art_listings", lambda url, months: listings):
+            found = build.read_harvard_art(source("harvardart", "https://harvardartmuseums.org/calendar", "art", "Harvard Art Museums"))
+        titles = self.titles(found)
+        self.assertIn("Decompress with Rocky Mountains, “Lander’s Peak”", titles)
+        self.assertIn("Exhibition Opening Program for The Way We Never Were: Barbara Norfleet and Photography at Harvard", titles)
+        self.assertFalse([title for title in titles if "Spotlight Tour" in title or "Online" in title])
+        conserving = next(item for item in found if item["title"].startswith("Art + Science"))
+        self.assertEqual((conserving["date"], conserving["times"]), (date(2026, 9, 15), [time(12, 0)]))
 
 
 class Films(unittest.TestCase):
