@@ -430,8 +430,8 @@ class Page(unittest.TestCase):
         public = build.render_index(found + kept, sources, [], [], built, public=True)
         mine = build.render_index(found + kept, sources, [], [], built)
         self.assertNotIn("Newsfeed", public)
-        self.assertIn('<a href="about.html">About</a> · <a href="contact.html">Contact</a>', public.split("<footer>")[1])
-        self.assertNotIn('href="about.html"', public.split("<footer>")[0], "not in the header")
+        self.assertIn('<a href="/about.html">About</a> · <a href="/contact.html">Contact</a>', public.split("<footer>")[1])
+        self.assertNotIn('href="/about.html"', public.split("<footer>")[0], "not in the header")
         self.assertNotIn("Add a source", public)
         self.assertIn('content="index, follow"', public)
         self.assertIn('content="noindex, nofollow"', mine)
@@ -443,7 +443,7 @@ class Page(unittest.TestCase):
         self.assertIn("Roadrunner", about)
         self.assertNotIn("Theatre via Hub", about)
         self.assertIn("https://formsubmit.co/", build.render_contact())
-        self.assertIn('<a href="contact.html">Contact</a>', about.split("<footer>")[1])
+        self.assertIn('<a href="/contact.html">Contact</a>', about.split("<footer>")[1])
 
     def test_public_page_tells_search_engines_what_it_is(self):
         with mock.patch.object(build, "fetch", sample):
@@ -461,6 +461,31 @@ class Page(unittest.TestCase):
         self.assertEqual(show["location"]["address"]["streetAddress"], "89 Guest St")  # Roadrunner's.
         self.assertRegex(show["startDate"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00-0[45]:00$")
         self.assertEqual(len(data), len(found) + 1)
+
+    def test_category_pages(self):
+        with mock.patch.object(build, "fetch", sample):
+            music = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json", name="Roadrunner"))
+            films = build.read_jsonld(source("jsonld", "https://brattlefilm.org/coming-soon/", "film", "Brattle"))
+        sources = [dict(source("aeg", "x", name="Roadrunner"), public=True), dict(source("jsonld", "y", "film", "Brattle"), public=True)]
+        built = datetime.now(timezone.utc)
+        home = build.render_index(music + films, sources, [], [], built, public=True)
+        film = build.render_index(music + films, sources, [], [], built, public=True, category="film")
+        mine = build.render_index(music + films, sources, [], [], built)
+        # The home page's filter links to each kind's page, and marks All; the film page marks Film.
+        self.assertIn('data-pages data-current="all"', home)
+        self.assertIn('<a data-show="film" href="/film/">', home)
+        self.assertIn('<a data-show="all" href="/" aria-current="page">All</a>', home)
+        self.assertIn('data-current="film"', film)
+        self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}film/">', film)
+        self.assertIn(f"<title>{build.PUBLIC_PAGES['film'][1]}</title>", film)
+        # The film page has only films, and says which sources they're from.
+        self.assertEqual(film.count('class="row" data-category="music"'), 0)
+        self.assertGreater(film.count('data-category="film"><'), 0)
+        self.assertNotIn("Roadrunner", film.split("<footer>")[1])
+        # Your own page keeps its buttons.
+        self.assertIn('<button data-show="film">', mine)
+        self.assertIn('<nav class="filter" aria-label="Show"><button', mine)
+        self.assertIn(f"<loc>{build.PUBLIC_URL}talks/</loc>", build.render_sitemap(built))
 
     def test_event_data_uses_an_events_own_address(self):
         item = build.event(source("bibliocommons", "x", "art", "Boston Public Library"), "A Talk", date(2026, 9, 20),

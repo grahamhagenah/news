@@ -35,9 +35,30 @@ CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 PUBLIC_NAME = "Boston, Daily"
 PUBLIC_DIR = ROOT.parent / "dist" / "public"
 PUBLIC_URL = "https://boston.grahamhagenah.com/"
+# Its pages link to each other from the site's root, since the home page puts a kind's page's address in the
+# address bar without loading it, and a relative link would then go astray.
+PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
+PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."
+# Each kind's own page on the public site, which its filter link goes to: its address, and what it tells
+# search engines and readers it is.
+PUBLIC_PAGES = {
+    "music": ("music", f"Concerts around Boston · {PUBLIC_NAME}",
+              "Concerts at clubs, bars and halls across Boston, Cambridge and Somerville for the next month, "
+              "aggregated from each venue’s calendar.",
+              "Concerts around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."),
+    "film": ("film", f"Movie showtimes and repertory film in Boston · {PUBLIC_NAME}",
+             "Showtimes at the Brattle, the Coolidge, the Harvard Film Archive and more, from repertory screenings "
+             "to new releases, for the next month, aggregated from each theater’s calendar.",
+             "Films around Boston, Cambridge, and Somerville, from repertory screenings to new releases, "
+             "aggregated from each theater’s calendar."),
+    "art": ("talks", f"Art, exhibitions and talks in Boston · {PUBLIC_NAME}",
+            "Artist talks, lectures, exhibition openings and museum nights around Boston, Cambridge and Somerville "
+            "for the next month, aggregated from each venue’s calendar.",
+            "Art and talks around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."),
+}
 PUBLIC_DESCRIPTION = ("Concerts, film screenings and art talks at venues across Boston, Cambridge and Somerville for "
                       "the next month, on one page, from each venue’s own calendar.")
 
@@ -984,11 +1005,17 @@ def render_combined(item):
     )
 
 
-def render_index(events, sources, failed, stale, built_at, public=False):
+def render_index(events, sources, failed, stale, built_at, public=False, category=None):
+    """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
+    page (music/, film/, talks/), holding only that kind's events."""
+    root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
-        sources = [source for source in sources if source["name"] in shown]
         events = [dict(item, about=shorter(item.get("about", []))) for item in events if item["source"] in shown]
+        if category:
+            events = [item for item in events if item["category"] == category]
+            shown = {item["source"] for item in events}
+        sources = [source for source in sources if source["name"] in shown]
         failed = [name for name in failed if name in shown]
         stale = [(name, fetched) for name, fetched in stale if name in shown]
     days = {}
@@ -1009,25 +1036,35 @@ def render_index(events, sources, failed, stale, built_at, public=False):
     buttons = '<button data-show="all">All</button>' + "".join(
         f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>' for key, label in CATEGORIES.items()
     )
+    filter_attributes = ""
+    if public:
+        # Links to each kind's page, the current one marked; on the home page the script shows a kind in place.
+        current = category or "all"
+        links = [("all", root, "All")] + [(key, f"{root}{PUBLIC_PAGES[key][0]}/", f"{icon(key, decorative=True)}{label}")
+                                                  for key, label in CATEGORIES.items()]
+        marked = ' aria-current="page"'
+        buttons = "".join(f'<a data-show="{key}" href="{href}"{marked if key == current else ""}>{label}</a>'
+                          for key, href, label in links)
+        filter_attributes = f' data-pages data-current="{current}"'
     names = ", ".join(html.escape(source["name"]) for source in sources)
     failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
     failed_note += "".join(
         f'<p>Couldn’t reach {html.escape(name)}; its listings are from <time class="ago" datetime="{fetched.isoformat()}"></time>.</p>\n'
         for name, fetched in stale
     )
-    more = ("<p>Listings come from each venue’s own calendar, every few hours.</p>\n" + PUBLIC_LINKS
+    more = ("<p>Listings come from each venue’s own calendar, every few hours.</p>\n" + public_links(root)
             if public else f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n')
     body = (
-        f'<nav class="filter" aria-label="Show">{buttons}{shared.SEARCH}</nav>\n'
+        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n'
         f"<footer>\n{failed_note}<p>From {names}.</p>\n{more}</footer>\n"
         f"<script>{INDEX_JS}</script>"
     )
     if public:
-        tagline = ('<h1 class="tagline">Concerts, films, and talks around Boston, Cambridge, and Somerville, '
-                   'aggregated from each venue’s calendar.</h1>\n')
-        return public_page("", PUBLIC_TITLE, tagline + body, built_at, description=PUBLIC_DESCRIPTION,
+        path, title, description, tagline = (PUBLIC_PAGES[category][0] + "/", *PUBLIC_PAGES[category][1:]) if category else (
+            "", PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
+        return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
 
@@ -1077,19 +1114,22 @@ def shorter(paragraphs):
     return kept
 
 
-# About and Contact, at the foot of each of the public site's pages.
-PUBLIC_LINKS = '<p><a href="about.html">About</a> · <a href="contact.html">Contact</a></p>\n'
+def public_links(root=PUBLIC_ROOT):
+    """About and Contact, at the foot of each of the public site's pages."""
+    return f'<p><a href="{root}about.html">About</a> · <a href="{root}contact.html">Contact</a></p>\n'
 
 
-def public_page(current, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
-    """A page of the public site: its name, the way home, in the header, About and Contact in the footer;
-    search engines welcome, told what the page is, where it lives, and (the listings) its events."""
-    links = [(PUBLIC_NAME, "./", current == "")]
+def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
+    """A page of the public site, at path ("", "about.html", "film/"): its name, the way home, in the header,
+    About and Contact in the footer; search engines welcome, told what the page is, where it lives, and (the
+    listings) its events."""
+    root = PUBLIC_ROOT
+    links = [(PUBLIC_NAME, root, path == "")]
     if "<footer>" not in body:
-        body += f"\n<footer>\n{PUBLIC_LINKS}</footer>"
-    address = PUBLIC_URL + (f"{current}.html" if current else "")
+        body += f"\n<footer>\n{public_links(root)}</footer>"
+    address = PUBLIC_URL + path
     head = "\n".join([
-        '<link rel="icon" href="favicon.svg" type="image/svg+xml">',
+        f'<link rel="icon" href="{root}favicon.svg" type="image/svg+xml">',
         f'<link rel="canonical" href="{address}">',
         f'<meta name="description" content="{html.escape(description)}">',
         # What a link to it shows when shared.
@@ -1124,13 +1164,14 @@ words, in short.</p>
 {groups}
 <p>Know a venue that should be here, or spotted a mistake? <a href="contact.html">Get in touch</a>.</p>
 </div>"""
-    return public_page("about", f"About · {PUBLIC_NAME}", body,
+    return public_page("about.html", f"About · {PUBLIC_NAME}", body,
                        description=f"What {PUBLIC_NAME} is, and the Boston, Cambridge and Somerville venues it lists.")
 
 
 def render_sitemap(built_at):
     """The public site's pages for search engines: the listings, changing every few hours, and the others."""
-    pages = [("", "hourly", "1.0"), ("about.html", "monthly", "0.5"), ("contact.html", "yearly", "0.3")]
+    pages = ([("", "hourly", "1.0")] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
+             + [("about.html", "monthly", "0.5"), ("contact.html", "yearly", "0.3")])
     urls = "".join(
         f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
         f"<changefreq>{often}</changefreq><priority>{priority}</priority></url>\n"
@@ -1162,7 +1203,7 @@ def render_contact():
     document.querySelector(".sent").hidden = false;
   }}
 </script>"""
-    return public_page("contact", f"Contact · {PUBLIC_NAME}", body,
+    return public_page("contact.html", f"Contact · {PUBLIC_NAME}", body,
                        description=f"Suggest a venue for {PUBLIC_NAME}, or tell us about a listing that’s wrong.")
 
 
@@ -1207,7 +1248,9 @@ INDEX_JS = """
     if (!todays.querySelector("li")) todays.remove();
   }
 
-  // The filter shows every category or just one, and is remembered in this browser. The search keeps the events
+  // The filter shows every category or just one. On the public site each is a page of its own (music/, film/,
+  // talks/) its links go to; its home page, which has every event, shows one in place instead, and puts its
+  // page's address in the address bar. Here, the choice is remembered in this browser. The search keeps the events
   // with every word typed somewhere in their name, place or description (accents aside), and is kept in the
   // address (?q=). Fifty of what's shown are on a page, however many days that takes; ?page=2 shows the next
   // fifty. A day split between two pages has its heading on both.
@@ -1219,9 +1262,13 @@ INDEX_JS = """
   const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const allRows = [...document.querySelectorAll(".day > ul > li")];
   const searchable = new Map(allRows.map(li => [li, plain(li.textContent)]));
-  let show = "all";
-  try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
+  const kindPages = filter.hasAttribute("data-pages");
+  const everything = !kindPages || filter.dataset.current === "all";
+  let show = kindPages ? filter.dataset.current : "all";
+  if (!kindPages) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
   search.value = new URLSearchParams(location.search).get("q") || "";
+  const query = () => (search.offsetParent && search.value.trim() ? "?" + new URLSearchParams({ q: search.value.trim() }) : "");
+  for (const a of filter.querySelectorAll("a")) a.dataset.href = a.getAttribute("href");
   const address = page => {
     const params = new URLSearchParams();
     if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
@@ -1248,15 +1295,33 @@ INDEX_JS = """
     empty.textContent = words.length ? `Nothing coming up matches “${search.value.trim()}”.` : "Nothing coming up.";
     empty.hidden = rows.length > 0;
     for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
+    for (const a of filter.querySelectorAll("a")) {
+      if (a.dataset.show === show) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+      a.setAttribute("href", a.dataset.href + query()); // A search goes along to the other pages.
+    }
     document.querySelector("main").classList.add("paged");
   }
   showEvents();
   filter.addEventListener("click", event => {
-    const b = event.target.closest("button");
-    if (!b) return;
+    const b = event.target.closest("[data-show]");
+    // A kind's own page has only its events, so its links go to the others' pages; so does a click to open one
+    // in a new tab.
+    if (!b || !everything || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
     show = b.dataset.show;
-    try { localStorage.setItem("events-show", show); } catch (error) {}
-    history.replaceState(null, "", address(1)); // Back to page one.
+    if (kindPages) history.pushState(null, "", new URL(b.dataset.href, location.href).pathname + query());
+    else {
+      try { localStorage.setItem("events-show", show); } catch (error) {}
+      history.replaceState(null, "", address(1)); // Back to page one.
+    }
+    showEvents();
+  });
+  // Back and forward between the kinds the home page has shown.
+  if (kindPages && everything) addEventListener("popstate", () => {
+    const here = [...filter.querySelectorAll("a")].find(a => new URL(a.dataset.href, location.href).pathname === location.pathname);
+    show = here ? here.dataset.show : "all";
+    search.value = new URLSearchParams(location.search).get("q") || "";
     showEvents();
   });
   search.addEventListener("input", () => {
@@ -1445,9 +1510,13 @@ def main():
     (PUBLIC_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
     (PUBLIC_DIR / "about.html").write_text(render_about(sources, built_at))
     (PUBLIC_DIR / "contact.html").write_text(render_contact())
+    for category, (slug, *_) in PUBLIC_PAGES.items():
+        (PUBLIC_DIR / slug).mkdir(exist_ok=True)
+        (PUBLIC_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
     (PUBLIC_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
     (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, about.html, contact.html, sitemap.xml and robots.txt")
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, "
+          "about.html, contact.html, sitemap.xml and robots.txt")
 
 
 if __name__ == "__main__":

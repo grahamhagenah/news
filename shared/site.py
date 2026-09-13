@@ -130,9 +130,10 @@ BASE_CSS = """
   .sites a:hover { color: #999; }
   .sites a[aria-current], .sites a[aria-current]:hover { color: #fff; }
   .filter { display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; margin: -.75rem 0 1.75rem; }
-  .filter button { padding: 0; border: 0; background: none; color: #666; font: inherit; font-size: .8rem; cursor: pointer; }
-  .filter button:hover { color: #999; }
-  .filter button[aria-pressed="true"] { color: #fff; }
+  .filter button, .filter a { padding: 0; border: 0; background: none; color: #666; font: inherit; font-size: .8rem;
+                              text-decoration: none; cursor: pointer; }
+  .filter button:hover, .filter a:hover { color: #999; text-decoration: none; }
+  .filter button[aria-pressed="true"], .filter a[aria-current="page"] { color: #fff; }
   .filter .icon { margin-right: .4em; vertical-align: -1px; }
   /* Whatever the filter and pager hide stays hidden, however specific the rules that lay it out. */
   [hidden] { display: none !important; }
