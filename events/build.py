@@ -1138,7 +1138,12 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         f'<meta property="og:title" content="{html.escape(title)}">',
         f'<meta property="og:description" content="{html.escape(description)}">',
         f'<meta property="og:url" content="{address}">',
-        '<meta name="twitter:card" content="summary">',
+        # Its card (events/share, made by share_cards.py): a kind's page its own, the rest the site's.
+        f'<meta property="og:image" content="{PUBLIC_URL}share/{path.rstrip("/") if path.endswith("/") else "home"}.png">',
+        '<meta property="og:image:width" content="1200">',
+        '<meta property="og:image:height" content="630">',
+        f'<meta property="og:image:alt" content="{html.escape(PUBLIC_NAME)}: {html.escape(PUBLIC_TAGLINE)}">',
+        '<meta name="twitter:card" content="summary_large_image">',
     ] + [f'<script type="application/ld+json">{json.dumps(data, ensure_ascii=False, separators=(",", ":"))}</script>'] * bool(data))
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
                        updated=built_at, links=links, indexable=True)
@@ -1507,6 +1512,7 @@ def main():
     # The public site, from the same listings.
     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", PUBLIC_DIR, dirs_exist_ok=True)
+    shutil.copytree(ROOT / "share", PUBLIC_DIR / "share", dirs_exist_ok=True)
     (PUBLIC_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
     (PUBLIC_DIR / "about.html").write_text(render_about(sources, built_at))
     (PUBLIC_DIR / "contact.html").write_text(render_contact())

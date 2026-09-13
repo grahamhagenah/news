@@ -477,6 +477,10 @@ class Page(unittest.TestCase):
         self.assertIn('<a data-show="all" href="/" aria-current="page">All</a>', home)
         self.assertIn('data-current="film"', film)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}film/">', film)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png">', film)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/home.png">', home)
+        for card in ("home", "music", "film", "talks"):
+            self.assertTrue((build.ROOT / "share" / f"{card}.png").exists(), f"share/{card}.png")
         self.assertIn(f"<title>{build.PUBLIC_PAGES['film'][1]}</title>", film)
         # The film page has only films, and says which sources they're from.
         self.assertEqual(film.count('class="row" data-category="music"'), 0)
