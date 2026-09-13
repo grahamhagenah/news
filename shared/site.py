@@ -104,6 +104,10 @@ def excerpt(markup, max_chars=600, skip=None, min_words=4, max_paragraphs=3):
     return kept
 
 
+# The search box, at the end of a page's filter row. Each page's own script decides what it matches.
+SEARCH = '<input class="search" type="search" placeholder="Search" aria-label="Search" autocomplete="off" spellcheck="false">'
+
+
 def preview(title, paragraphs):
     """The box that opens under a headline on hover: the full headline, shown only when the one-line one is cut
     off, then the item's first paragraphs. It goes right after the headline's title, which the hover is on."""
@@ -154,6 +158,15 @@ BASE_CSS = """
   .headline:not(.truncated) .preview.title-only { display: none; }
   .headline .title:hover ~ .preview { visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }
   @media (hover: none), (max-width: 34rem) { .preview { display: none; } }
+  /* The search, at the end of the filter's row and as quiet as the filter. Not on phones, where the row has
+     no room; a page ignores its ?q= there, so nothing is hidden by a search that can't be seen. */
+  .search { margin-left: auto; width: 10rem; padding: 0 0 .15rem; border: 0; border-bottom: 1px solid #333;
+            border-radius: 0; background: none; color: #fff; font: inherit; font-size: .8rem; outline: none;
+            -webkit-appearance: none; appearance: none; }
+  .search::placeholder { color: #555; }
+  .search:focus { border-bottom-color: #777; }
+  .search::-webkit-search-cancel-button { display: none; }
+  @media (max-width: 34rem) { .search { display: none; } }
   .pager { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
   .pager a, .pager a:visited { color: #999; }
   .empty { color: #666; font-size: .9rem; }
@@ -200,6 +213,25 @@ PREVIEWS = """
 </script>"""
 
 
+# "/" goes to the search, as on many sites, unless something (a video) is open over the page; Esc empties it.
+SEARCH_KEYS = """
+<script>
+  {
+    const search = document.querySelector(".search");
+    if (search) document.addEventListener("keydown", event => {
+      if (event.key === "/" && document.activeElement !== search && !event.metaKey && !event.ctrlKey
+          && search.offsetParent && !document.querySelector("dialog[open]")) {
+        event.preventDefault();
+        search.focus();
+      } else if (event.key === "Escape" && document.activeElement === search && search.value) {
+        search.value = "";
+        search.dispatchEvent(new Event("input"));
+      }
+    });
+  }
+</script>"""
+
+
 def page(site, title, body, css="", head="", symbols="", updated=None):
     """A whole page: the shared head, header and styles, then this site's styles, icons and body."""
     name = SITES[site][0]
@@ -232,7 +264,7 @@ def page(site, title, body, css="", head="", symbols="", updated=None):
 <main>
 <header><nav class="sites" aria-label="Sites">{links}</nav>{note}</header>
 {body}
-</main>{AGES}{PREVIEWS}
+</main>{AGES}{PREVIEWS}{SEARCH_KEYS}
 </body>
 </html>
 """

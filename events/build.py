@@ -932,9 +932,7 @@ def render_index(events, sources, failed, stale, built_at):
         for name, fetched in stale
     )
     body = (
-        f'<nav class="filter" aria-label="Show">{buttons}'
-        '<input class="search" type="search" placeholder="Search" aria-label="Search events" autocomplete="off" spellcheck="false">'
-        '</nav>\n'
+        f'<nav class="filter" aria-label="Show">{buttons}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n'
         f"<footer>\n{failed_note}<p>From {names}.</p>\n"
@@ -1002,12 +1000,12 @@ INDEX_JS = """
   search.value = new URLSearchParams(location.search).get("q") || "";
   const address = page => {
     const params = new URLSearchParams();
-    if (search.value.trim()) params.set("q", search.value.trim());
+    if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
     if (page > 1) params.set("page", page);
     return params.toString() ? "?" + params : location.pathname;
   };
   function showEvents() {
-    const words = plain(search.value).split(/\s+/).filter(Boolean);
+    const words = plain(search.offsetParent ? search.value : "").split(/\s+/).filter(Boolean); // Hidden on phones.
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
       && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));
@@ -1041,16 +1039,6 @@ INDEX_JS = """
     history.replaceState(null, "", address(1));
     showEvents();
   });
-  // "/" goes to the search, as on many sites; Esc empties it.
-  document.addEventListener("keydown", event => {
-    if (event.key === "/" && document.activeElement !== search && !event.metaKey && !event.ctrlKey) {
-      event.preventDefault();
-      search.focus();
-    } else if (event.key === "Escape" && document.activeElement === search && search.value) {
-      search.value = "";
-      search.dispatchEvent(new Event("input"));
-    }
-  });
 """
 
 
@@ -1066,14 +1054,6 @@ CSS = """
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
-  /* The search, at the end of the filter's row (below it on a phone), as quiet as the filter. */
-  .search { margin-left: auto; width: 10rem; padding: 0 0 .15rem; border: 0; border-bottom: 1px solid #333;
-            border-radius: 0; background: none; color: #fff; font: inherit; font-size: .8rem; outline: none;
-            -webkit-appearance: none; appearance: none; }
-  .search::placeholder { color: #555; }
-  .search:focus { border-bottom-color: #777; }
-  .search::-webkit-search-cancel-button { display: none; }
-  @media (max-width: 34rem) { .search { flex-basis: 100%; margin: .4rem 0 0; } }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
   .times time + time::before { content: ", "; }

@@ -447,7 +447,7 @@ def render_index(feeds, posts, failed, stale, built_at):
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
         f'<button data-show="articles">{icon("article", decorative=True)}Articles</button>'
         + "".join(f'<button data-show="{key}">{icon(mark, decorative=True)}{label}</button>' for key, mark, label, there in kinds if there)
-        + "</nav>\n"
+        + shared.SEARCH + "</nav>\n"
         if any(there for *_, there in kinds)
         else ""
     )
@@ -599,28 +599,43 @@ INDEX_JS = """
   const empty = document.querySelector(".empty");
 
   // The filter shows every post, or only articles, podcast episodes or videos. The choice is remembered in
-  // this browser, and paging counts only the posts it shows.
+  // this browser, and paging counts only the posts it shows. The search keeps the posts with every word typed
+  // somewhere in their headline, source or preview (accents aside), and is kept in the address (?q=); it's
+  // hidden on phones, and ignored there.
   const filter = document.querySelector(".filter");
+  const search = document.querySelector(".search");
   let show = "all";
   try { show = (filter && localStorage.getItem("reader-show")) || "all"; } catch (error) {}
+  const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const searchable = new Map(items.map(li => [li, plain(li.textContent)]));
+  const query = () => (search && search.offsetParent ? search.value.trim() : "");
+  if (search) search.value = new URLSearchParams(location.search).get("q") || "";
+  const address = page => {
+    const params = new URLSearchParams();
+    if (query()) params.set("q", query());
+    if (page > 1) params.set("page", page);
+    return params.toString() ? "?" + params : location.pathname;
+  };
 
   const kind = li => li.hasAttribute("data-podcast") ? "podcasts" : li.dataset.video ? "videos" : "articles";
 
   function showPosts() {
-    const shown = items.filter(li => show === "all" || kind(li) === show);
+    const words = plain(query()).split(/\s+/).filter(Boolean);
+    const shown = items.filter(li => (show === "all" || kind(li) === show) && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(shown.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     items.forEach(li => { li.hidden = true; });
     shown.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
     list.classList.add("paged");
-    const link = (n, text) => `<a href="${n === 1 ? location.pathname : "?page=" + n}">${text}</a>`;
+    const link = (n, text) => `<a href="${address(n)}">${text}</a>`;
     pager.innerHTML = pages < 2 ? "" :
       (page > 1 ? link(page - 1, "← Newer") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Older →") : "<span></span>");
-    empty.textContent = { podcasts: "No podcast episodes right now.", videos: "No videos right now." }[show] || "No articles right now.";
+    empty.textContent = words.length ? `Nothing here matches “${query()}”.`
+      : { podcasts: "No podcast episodes right now.", videos: "No videos right now." }[show] || "No articles right now.";
     empty.hidden = shown.length > 0;
-    if (filter) for (const b of filter.children) b.setAttribute("aria-pressed", b.dataset.show === show);
+    if (filter) for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
   }
   showPosts();
 
@@ -629,7 +644,11 @@ INDEX_JS = """
     if (!b) return;
     show = b.dataset.show;
     try { localStorage.setItem("reader-show", show); } catch (error) {}
-    history.replaceState(null, "", location.pathname); // Back to page one.
+    history.replaceState(null, "", address(1)); // Back to page one.
+    showPosts();
+  });
+  if (search) search.addEventListener("input", () => {
+    history.replaceState(null, "", address(1));
     showPosts();
   });
 """
