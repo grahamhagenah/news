@@ -1427,6 +1427,8 @@ PUBLIC_CSS = """
   .contact button:hover, .contact button:focus-visible { border-color: #ccc; background: #151515; color: #fff; outline: none; }
   .contact button:active { background: #222; }
   .contact .honey { display: none; }
+  /* The footer, set off from the page by a faint line. */
+  footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
   /* The footer's lists of the site's pages: three short columns (two on a phone), headed like the days. */
   .site-links { display: grid; grid-template-columns: repeat(3, minmax(0, 11rem)); gap: 1.75rem 2.5rem; margin: .5rem 0 2rem; }
   .site-links h2 { margin: 0 0 .7rem; }
