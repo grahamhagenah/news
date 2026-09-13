@@ -1039,7 +1039,7 @@ words, in short.</p>
 def render_contact():
     """A form whose messages FormSubmit emails on; its first one asks the address's owner to confirm it."""
     body = f"""<div class="prose">
-<p>A venue to add, a listing that’s wrong, or anything else: send a note.</p>
+<p class="intro">A venue to add, a listing that’s wrong, or anything else: send a note.</p>
 <form class="contact" action="https://formsubmit.co/{PUBLIC_CONTACT}" method="POST">
 <input type="hidden" name="_subject" value="{PUBLIC_NAME}: a message">
 <input type="hidden" name="_next" value="{PUBLIC_URL}contact.html?sent">
@@ -1049,10 +1049,12 @@ def render_contact():
 <label>Message <textarea name="message" rows="6" required></textarea></label>
 <button>Send</button>
 </form>
-<p class="sent" hidden>Thanks, your message is on its way.</p>
+<p class="sent" hidden>Thanks, your message is on its way. We’ll do our best to respond in a timely manner.</p>
 </div>
 <script>
+  // Back from sending: only the thanks.
   if (new URLSearchParams(location.search).has("sent")) {{
+    document.querySelector(".intro").hidden = true;
     document.querySelector(".contact").hidden = true;
     document.querySelector(".sent").hidden = false;
   }}
