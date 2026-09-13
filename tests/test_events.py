@@ -430,7 +430,12 @@ class Page(unittest.TestCase):
         public = build.render_index(found + kept, sources, [], [], built, public=True)
         mine = build.render_index(found + kept, sources, [], [], built)
         self.assertNotIn("Newsfeed", public)
-        self.assertIn('<a href="/about.html">About</a> · <a href="/contact.html">Contact</a>', public.split("<footer>")[1])
+        footer = public.split("<footer>")[1]
+        for label, href in [("All events", "/"), ("Music", "/music/"), ("Film", "/film/"), ("Art &amp; talks", "/talks/"),
+                            ("This weekend", "/weekend/"), ("Next weekend", "/weekend/next/"), ("About", "/about.html"), ("Contact", "/contact.html")]:
+            self.assertIn(f'<a href="{href}"', footer, label)
+        self.assertIn('<a href="/" aria-current="page">All events</a>', footer, "this page marked")
+        self.assertIn("Listings from Roadrunner, aggregated", footer)
         self.assertNotIn('href="/about.html"', public.split("<footer>")[0], "not in the header")
         self.assertNotIn("Add a source", public)
         self.assertIn('content="index, follow"', public)
@@ -511,7 +516,8 @@ class Page(unittest.TestCase):
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
         self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><button', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', page)
-        self.assertIn('<a href="/weekend/">This weekend</a>', build.render_about([venue], built))
+        self.assertIn('<a href="/about.html" aria-current="page">About</a>', build.render_about([venue], built))
+        self.assertIn('<a href="/weekend/" aria-current="page">This weekend</a>', page)
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/</loc>", build.render_sitemap(built))
         self.assertIn('<a href="/weekend/next/">Next weekend, Sep 25–27 →</a>', page)
         following = build.render_index(events, [venue], [], [], built, public=True, weekend=1)

@@ -1086,8 +1086,11 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<p>Couldn’t reach {html.escape(name)}; its listings are from <time class="ago" datetime="{fetched.isoformat()}"></time>.</p>\n'
         for name, fetched in stale
     )
-    more = ("<p>Listings come from each venue’s own calendar, every few hours.</p>\n" + public_links(root)
-            if public else f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n')
+    # Where this page is on the public site: a kind's page, a weekend's, or the home page.
+    path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else f"{PUBLIC_PAGES[category][0]}/" if category else "")
+    footer = (public_footer(path, failed_note, names) if public else
+              f"<footer>\n{failed_note}<p>From {names}.</p>\n"
+              f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n')
     others = ""
     if public and weekend is not None:
         # To the other weekend's page, with its dates.
@@ -1099,16 +1102,13 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     body = (
         f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
-        + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others +
-        
-        f"<footer>\n{failed_note}<p>From {names}.</p>\n{more}</footer>\n"
-        f"<script>{INDEX_JS}</script>"
+        + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
+        + f"<script>{INDEX_JS}</script>"
     )
     if public:
-        path, title, description, tagline = (PUBLIC_PAGES[category][0] + "/", *PUBLIC_PAGES[category][1:]) if category else (
-            "", PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
+        title, description, tagline = PUBLIC_PAGES[category][1:] if category else (PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
         if weekend is not None:
-            path, name, title, description = PUBLIC_WEEKENDS[weekend]
+            _, name, title, description = PUBLIC_WEEKENDS[weekend]
             tagline = (f"{name} around Boston, Cambridge, and Somerville: {friday:%A, %B} {friday.day} to "
                        f"{sunday:%A, %B} {sunday.day}.")
         return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + body, built_at, description=description,
@@ -1161,10 +1161,24 @@ def shorter(paragraphs):
     return kept
 
 
-def public_links(root=PUBLIC_ROOT):
-    """This weekend's page, About and Contact, at the foot of each of the public site's pages."""
-    return (f'<p><a href="{root}weekend/">This weekend</a> · <a href="{root}about.html">About</a> · '
-            f'<a href="{root}contact.html">Contact</a></p>\n')
+def public_footer(path, notes="", names=""):
+    """The foot of each of the public site's pages: any source it couldn't reach, the site's pages in three
+    short lists (this one marked), and, under a list of events, where they come from."""
+    root = PUBLIC_ROOT
+    groups = [
+        ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]),
+        ("Weekends", [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
+        (PUBLIC_NAME, [("About", "about.html"), ("Contact", "contact.html")]),
+    ]
+    marked = ' aria-current="page"'
+    lists = "".join(
+        f'<div><h2>{html.escape(heading)}</h2><ul>' + "".join(
+            f'<li><a href="{root}{href}"{marked if href == path else ""}>{html.escape(label)}</a></li>' for label, href in links)
+        + "</ul></div>"
+        for heading, links in groups
+    )
+    where = f"<p>Listings from {names}, aggregated from each venue’s calendar every few hours.</p>\n" if names else ""
+    return f'<footer>\n{notes}<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n{where}</footer>\n'
 
 
 def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
@@ -1174,7 +1188,7 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
     root = PUBLIC_ROOT
     links = [(PUBLIC_NAME, root, path == "")]
     if "<footer>" not in body:
-        body += f"\n<footer>\n{public_links(root)}</footer>"
+        body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
     head = "\n".join([
         f'<link rel="icon" href="{root}favicon.svg" type="image/svg+xml">',
@@ -1408,6 +1422,14 @@ PUBLIC_CSS = """
   .contact button:hover, .contact button:focus-visible { border-color: #ccc; background: #151515; color: #fff; outline: none; }
   .contact button:active { background: #222; }
   .contact .honey { display: none; }
+  /* The footer's lists of the site's pages: three short columns (two on a phone), headed like the days. */
+  .site-links { display: grid; grid-template-columns: repeat(3, minmax(0, 11rem)); gap: 1.75rem 2.5rem; margin: .5rem 0 2rem; }
+  .site-links h2 { margin: 0 0 .7rem; }
+  .site-links ul { display: grid; gap: .45rem; }
+  footer .site-links a, footer .site-links a:visited { color: #999; font-size: .95rem; text-decoration: none; }
+  footer .site-links a:hover { color: #fff; }
+  footer .site-links a[aria-current="page"] { color: #fff; }
+  @media (max-width: 34rem) { .site-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 """
 
 
