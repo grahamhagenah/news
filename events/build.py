@@ -1068,7 +1068,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     )
     filter_attributes = ""
     if public and weekend is not None:
-        filter_attributes = " data-here"  # Its buttons show a kind of the weekend's events in place, not remembered.
+        # Its buttons show a kind of the weekend's events in place, not remembered; and the whole weekend is on one
+        # page, its pager going between the weekends instead.
+        filter_attributes = " data-here data-one-page"
     elif public:
         # Links to each kind's page, the current one marked; on the home page the script shows a kind in place.
         current = category or "all"
@@ -1092,8 +1094,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         other = 1 - weekend
         days = weekend_span(*weekend_days(built_at.astimezone(BOSTON).date(), other))
         name, href = PUBLIC_WEEKENDS[other][1], root + PUBLIC_WEEKENDS[other][0]
-        others = (f'<nav class="weekends"><a href="{href}">{name}, {days} →</a></nav>\n' if other else
-                  f'<nav class="weekends"><a href="{href}">← {name}, {days}</a></nav>\n')
+        others = (f'<nav class="weekends"><span></span><a href="{href}">{name}, {days} →</a></nav>\n' if other else
+                  f'<nav class="weekends"><a href="{href}">← {name}, {days}</a><span></span></nav>\n')
     body = (
         f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
@@ -1304,8 +1306,8 @@ INDEX_JS = """
   // page's address in the address bar. Here, the choice is remembered in this browser. The search keeps the events
   // with every word typed somewhere in their name, place or description (accents aside), and is kept in the
   // address (?q=). Fifty of what's shown are on a page, however many days that takes; ?page=2 shows the next
-  // fifty. A day split between two pages has its heading on both.
-  const EVENTS_PER_PAGE = 50;
+  // fifty. A day split between two pages has its heading on both. A weekend's page shows all of it.
+  const EVENTS_PER_PAGE = document.querySelector(".filter").hasAttribute("data-one-page") ? 100000 : 50; // A weekend, whole.
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
   const pager = document.querySelector(".pager");
@@ -1388,9 +1390,9 @@ PUBLIC_CSS = """
   /* What the site is, in a line under its name, as quiet as the rest. */
   .tagline { margin: -1rem 0 2.25rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
   .tagline + .filter { margin-top: 0; }
-  /* A weekend page's way to the other weekend, under its list, like the pager. */
-  .weekends { margin-top: 1.5rem; font-size: .8rem; }
-  .weekends a { color: #999; }
+  /* A weekend page's way to the other weekend, where the pager goes on the others: next on the right, back on the left. */
+  .weekends { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
+  .weekends a, .weekends a:visited { color: #999; }
   .prose { max-width: 34rem; color: #ccc; }
   .prose p { margin: 0 0 1em; }
   .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }

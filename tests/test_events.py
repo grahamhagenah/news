@@ -509,7 +509,7 @@ class Page(unittest.TestCase):
                          ["On the 18th", "On the 20th"])
         self.assertIn("Friday, September 18 to Sunday, September 20", page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
-        self.assertIn('<nav class="filter" aria-label="Show" data-here><button', page)
+        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><button', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', page)
         self.assertIn('<a href="/weekend/">This weekend</a>', build.render_about([venue], built))
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/</loc>", build.render_sitemap(built))
