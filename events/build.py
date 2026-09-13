@@ -11,7 +11,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode, urljoin, urlsplit
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 from shared import site as shared
@@ -172,7 +172,10 @@ def read_ticketweb(source):
 
 
 def read_jsonld(source):
-    """Pages that describe their screenings or shows as schema.org Events (the Brattle's Coming Soon page)."""
+    """Pages that describe their screenings or shows as schema.org Events (the Brattle's Coming Soon page).
+    A page listing several places' events (Boston Film Hub's) can be kept to one of them with #venue=<its name>
+    at the end of the URL, which isn't sent to the site; the listings then show that place's name."""
+    place = parse_qs(urlsplit(source["url"]).fragment).get("venue", [""])[0]
     found, works = [], {}
 
     def collect(data):
@@ -199,13 +202,16 @@ def read_jsonld(source):
     for item in found:
         if str(item.get("eventStatus", "")).endswith("EventCancelled"):
             continue
+        location = item.get("location") if isinstance(item.get("location"), dict) else {}
+        if place and location.get("name") != place:
+            continue
         day, start = at_boston(datetime.fromisoformat(item["startDate"]))
         # The Brattle adds the showtime to each name: "Filipiñana - 9/12/26 @ 12:00 pm".
         title = re.sub(r"\s+-\s+\d{1,2}/\d{1,2}/\d{2,4}\s+@.*$", "", html.unescape(item.get("name", "")))
         work = item.get("workPresented") or {}
         work = works.get(work.get("@id"), work) if isinstance(work, dict) else {}
         events.append(event(source, title, day, start if "T" in item["startDate"] else None, link=item.get("url", ""),
-                            about=jsonld_about(item, work)))
+                            about=jsonld_about(item, work), venue=place))
     return events
 
 

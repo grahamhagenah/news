@@ -38,6 +38,7 @@ ROUTES = [
     ("gateway.bibliocommons.com", "bpl_end.xml"),  # Every later page: the feed with nothing left in it.
     ("mfa.org/programs", "mfa.html"),
     ("harvardfilmarchive.org/calendar", "hfa.html"),
+    ("bostonfilmhub.com", "bostonfilmhub.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
 ]
@@ -137,6 +138,12 @@ class Readers(unittest.TestCase):
         # 01:30 UTC on Sep 12 is 9:30pm on Sep 11 in Boston.
         self.assertEqual((found[0]["date"], found[0]["times"]), (date(2026, 9, 11), [time(21, 30)]))
         self.assertEqual(found[0]["title"], "CAVA (Germany) w/ Lupo Citta")
+
+    def test_jsonld_kept_to_one_venue(self):
+        found = self.read("jsonld", "https://bostonfilmhub.com/#venue=Somerville+Theatre", "film", "Somerville Theatre via Boston Film Hub")
+        self.assertEqual([(item["title"], item["venue"]) for item in found], [("Harold and Maude", "Somerville Theatre")])
+        self.assertTrue(found[0]["link"].startswith("https://www.somervilletheatre.com/"))
+        self.assertTrue(found[0]["about"])
 
     def test_hfa_screenings_with_credits(self):
         found = self.read("hfa", "https://harvardfilmarchive.org/calendar", "film")
