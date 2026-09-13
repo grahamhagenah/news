@@ -468,7 +468,7 @@ def render_index(feeds, posts, failed, stale, built_at):
 
 # Where a video plays: over the list, with a way to close it, and nothing else. (The player shows its name.)
 PLAYER = """<dialog class="player" aria-label="Video">
-<button class="player-close" aria-label="Close"><span class="on-keyboard">esc</span><span class="on-touch">close</span></button>
+<button class="player-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
 <div class="player-frame"></div>
 <p class="player-note" hidden>This video can’t be played here. <a href="">Watch it on YouTube</a></p>
 </dialog>
@@ -754,17 +754,13 @@ CSS = """
   .player { width: min(64rem, 100vw - 2.5rem); max-width: none; max-height: none; padding: 0; border: 0;
             background: none; color: #fff; overflow: visible; }
   .player::backdrop { background: #000; }
-  /* Closing it: a small key in the window's corner, shaped like a Mac's esc key (wider than tall, its label
-     low on the left), reading esc, or close where there's no keyboard. */
-  .player-close { position: fixed; top: 1.25rem; right: 1.25rem; display: flex; align-items: flex-end;
-                  box-sizing: border-box; width: 3.4rem; height: 1.75rem; padding: 0 0 .25rem .4rem;
-                  border: 1px solid #333; border-radius: 5px; background: #0a0a0a; box-shadow: inset 0 -1px 0 #1c1c1c;
-                  color: #666; font: inherit; font-size: .62rem; line-height: 1; letter-spacing: .04em; cursor: pointer; }
-  .player-close:hover { border-color: #555; color: #bbb; }
+  /* Closing it: a thin × in the window's corner, in a circle that lights up faintly on hover. */
+  .player-close { position: fixed; top: 1rem; right: 1rem; display: grid; place-items: center; width: 2.25rem;
+                  height: 2.25rem; padding: 0; border: 0; border-radius: 50%; background: none; color: #777; cursor: pointer;
+                  transition: background-color .15s, color .15s; }
+  .player-close svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+  .player-close:hover, .player-close:focus-visible { background: #1a1a1a; color: #fff; }
   .player-close:focus { outline: none; }
-  .player-close:focus-visible { border-color: #777; color: #bbb; }
-  .player-close .on-touch { display: none; }
-  @media (hover: none) { .player-close .on-keyboard { display: none; } .player-close .on-touch { display: inline; } }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
   .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
   .player-note { margin: .75rem 0 0; color: #999; font-size: .85rem; }
