@@ -496,13 +496,15 @@ class Page(unittest.TestCase):
         for day, friday in [(date(2026, 9, 14), date(2026, 9, 18)), (date(2026, 9, 17), date(2026, 9, 18)),
                             (date(2026, 9, 18), date(2026, 9, 18)), (date(2026, 9, 20), date(2026, 9, 18))]:
             self.assertEqual(build.weekend_days(day), (friday, friday + timedelta(days=2)), day)
+        self.assertEqual(build.weekend_days(date(2026, 9, 13), 1), (date(2026, 9, 18), date(2026, 9, 20)))
+        self.assertEqual(build.weekend_span(date(2026, 10, 30), date(2026, 11, 1)), "Oct 30–Nov 1")
 
     def test_weekend_page(self):
         venue = dict(source("tribe", "x", name="Somewhere"), public=True)
         events = [build.event(venue, f"On the {day.day}th", day, time(20, 0)) for day in
                   (date(2026, 9, 17), date(2026, 9, 18), date(2026, 9, 20), date(2026, 9, 21))]
         built = datetime(2026, 9, 14, 12, tzinfo=timezone.utc)  # A Monday.
-        page = build.render_index(events, [venue], [], [], built, public=True, weekend=True)
+        page = build.render_index(events, [venue], [], [], built, public=True, weekend=0)
         self.assertEqual([title for title in ("On the 17th", "On the 18th", "On the 20th", "On the 21th") if title in page],
                          ["On the 18th", "On the 20th"])
         self.assertIn("Friday, September 18 to Sunday, September 20", page)
@@ -511,6 +513,14 @@ class Page(unittest.TestCase):
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', page)
         self.assertIn('<a href="/weekend/">This weekend</a>', build.render_about([venue], built))
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/</loc>", build.render_sitemap(built))
+        self.assertIn('<a href="/weekend/next/">Next weekend, Sep 25–27 →</a>', page)
+        following = build.render_index(events, [venue], [], [], built, public=True, weekend=1)
+        self.assertNotIn("On the 18th", following)
+        self.assertIn("Next weekend around Boston, Cambridge, and Somerville: Friday, September 25", following)
+        self.assertIn('<a href="/weekend/">← This weekend, Sep 18–20</a>', following)
+        self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/next/">', following)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', following)
+        self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/next/</loc>", build.render_sitemap(built))
 
     def test_event_data_uses_an_events_own_address(self):
         item = build.event(source("bibliocommons", "x", "art", "Boston Public Library"), "A Talk", date(2026, 9, 20),

@@ -42,16 +42,29 @@ PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, 
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
 PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."
-# The public site's weekend page: Friday to Sunday, this weekend's or the next's.
-PUBLIC_WEEKEND = ("weekend/", f"Things to do in Boston this weekend · {PUBLIC_NAME}",
-                  "Concerts, films and talks around Boston, Cambridge and Somerville this weekend, Friday to Sunday, "
-                  "aggregated from each venue’s calendar.")
+# The public site's weekend pages, Friday to Sunday: this weekend's (the one it is, or from Monday to Thursday the
+# one coming) and next weekend's. Each: its address, what it's called, its title and description.
+PUBLIC_WEEKENDS = [
+    ("weekend/", "This weekend", f"Things to do in Boston this weekend · {PUBLIC_NAME}",
+     "Concerts, films and talks around Boston, Cambridge and Somerville this weekend, Friday to Sunday, "
+     "aggregated from each venue’s calendar."),
+    ("weekend/next/", "Next weekend", f"Things to do in Boston next weekend · {PUBLIC_NAME}",
+     "Concerts, films and talks around Boston, Cambridge and Somerville next weekend, Friday to Sunday, "
+     "aggregated from each venue’s calendar."),
+]
 
 
-def weekend_days(day):
-    """The Friday and Sunday of the weekend day is in, or, Monday to Thursday, of the one coming."""
+def weekend_days(day, ahead=0):
+    """The Friday and Sunday of the weekend day is in, or, Monday to Thursday, of the one coming; ahead=1 for
+    the weekend after that."""
     friday = day - timedelta(days=day.weekday() - 4) if day.weekday() >= 4 else day + timedelta(days=4 - day.weekday())
+    friday += timedelta(weeks=ahead)
     return friday, friday + timedelta(days=2)
+
+
+def weekend_span(friday, sunday):
+    """"Sep 18–20", or "Sep 30–Oct 2" across months."""
+    return f"{friday:%b} {friday.day}–" + (f"{sunday.day}" if sunday.month == friday.month else f"{sunday:%b} {sunday.day}")
 
 
 # Each kind's own page on the public site, which its filter link goes to: its address, and what it tells
@@ -1017,9 +1030,10 @@ def render_combined(item):
     )
 
 
-def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=False):
+def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
-    page (music/, film/, talks/), holding only that kind's events, or for the weekend, only Friday to Sunday's."""
+    page (music/, film/, talks/), holding only that kind's events, or with weekend (0 for this one, 1 for the
+    next), only Friday to Sunday's."""
     root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
@@ -1027,8 +1041,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         if category:
             events = [item for item in events if item["category"] == category]
             shown = {item["source"] for item in events}
-        if weekend:
-            friday, sunday = weekend_days(built_at.astimezone(BOSTON).date())
+        if weekend is not None:
+            friday, sunday = weekend_days(built_at.astimezone(BOSTON).date(), weekend)
             events = [item for item in events if friday <= item["date"] <= sunday]
             shown = {item["source"] for item in events}
         sources = [source for source in sources if source["name"] in shown]
@@ -1053,7 +1067,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>' for key, label in CATEGORIES.items()
     )
     filter_attributes = ""
-    if public and weekend:
+    if public and weekend is not None:
         filter_attributes = " data-here"  # Its buttons show a kind of the weekend's events in place, not remembered.
     elif public:
         # Links to each kind's page, the current one marked; on the home page the script shows a kind in place.
@@ -1072,19 +1086,28 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     )
     more = ("<p>Listings come from each venue’s own calendar, every few hours.</p>\n" + public_links(root)
             if public else f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n')
+    others = ""
+    if public and weekend is not None:
+        # To the other weekend's page, with its dates.
+        other = 1 - weekend
+        days = weekend_span(*weekend_days(built_at.astimezone(BOSTON).date(), other))
+        name, href = PUBLIC_WEEKENDS[other][1], root + PUBLIC_WEEKENDS[other][0]
+        others = (f'<nav class="weekends"><a href="{href}">{name}, {days} →</a></nav>\n' if other else
+                  f'<nav class="weekends"><a href="{href}">← {name}, {days}</a></nav>\n')
     body = (
         f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
-        + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n'
+        + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others +
+        
         f"<footer>\n{failed_note}<p>From {names}.</p>\n{more}</footer>\n"
         f"<script>{INDEX_JS}</script>"
     )
     if public:
         path, title, description, tagline = (PUBLIC_PAGES[category][0] + "/", *PUBLIC_PAGES[category][1:]) if category else (
             "", PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
-        if weekend:
-            path, title, description = PUBLIC_WEEKEND
-            tagline = (f"This weekend around Boston, Cambridge, and Somerville: {friday:%A, %B} {friday.day} to "
+        if weekend is not None:
+            path, name, title, description = PUBLIC_WEEKENDS[weekend]
+            tagline = (f"{name} around Boston, Cambridge, and Somerville: {friday:%A, %B} {friday.day} to "
                        f"{sunday:%A, %B} {sunday.day}.")
         return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
@@ -1162,7 +1185,7 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         f'<meta property="og:description" content="{html.escape(description)}">',
         f'<meta property="og:url" content="{address}">',
         # Its card (events/share, made by share_cards.py): a kind's page its own, the rest the site's.
-        f'<meta property="og:image" content="{PUBLIC_URL}share/{path.rstrip("/") if path.endswith("/") else "home"}.png">',
+        f'<meta property="og:image" content="{PUBLIC_URL}share/{path.split("/")[0] if path.endswith("/") else "home"}.png">',
         '<meta property="og:image:width" content="1200">',
         '<meta property="og:image:height" content="630">',
         f'<meta property="og:image:alt" content="{html.escape(PUBLIC_NAME)}: {html.escape(PUBLIC_TAGLINE)}">',
@@ -1198,7 +1221,7 @@ words, in short.</p>
 
 def render_sitemap(built_at):
     """The public site's pages for search engines: the listings, changing every few hours, and the others."""
-    pages = ([("", "hourly", "1.0"), ("weekend/", "hourly", "0.9")] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
+    pages = ([("", "hourly", "1.0")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
              + [("about.html", "monthly", "0.5"), ("contact.html", "yearly", "0.3")])
     urls = "".join(
         f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
@@ -1365,6 +1388,9 @@ PUBLIC_CSS = """
   /* What the site is, in a line under its name, as quiet as the rest. */
   .tagline { margin: -1rem 0 2.25rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
   .tagline + .filter { margin-top: 0; }
+  /* A weekend page's way to the other weekend, under its list, like the pager. */
+  .weekends { margin-top: 1.5rem; font-size: .8rem; }
+  .weekends a { color: #999; }
   .prose { max-width: 34rem; color: #ccc; }
   .prose p { margin: 0 0 1em; }
   .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
@@ -1543,11 +1569,12 @@ def main():
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (PUBLIC_DIR / slug).mkdir(exist_ok=True)
         (PUBLIC_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
-    (PUBLIC_DIR / "weekend").mkdir(exist_ok=True)
-    (PUBLIC_DIR / "weekend" / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=True))
+    for ahead, (path, *_) in enumerate(PUBLIC_WEEKENDS):
+        (PUBLIC_DIR / path).mkdir(parents=True, exist_ok=True)
+        (PUBLIC_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
     (PUBLIC_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
     (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, weekend/, "
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, weekend/, weekend/next/, "
           "about.html, contact.html, sitemap.xml and robots.txt")
 
 
