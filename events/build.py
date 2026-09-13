@@ -361,10 +361,32 @@ def read_ica(source):
         if day < today_ - timedelta(days=60):  # January's events, listed in December.
             day = day.replace(year=today_.year + 1)
         name = text(re.sub(r"<[^>]+>", "", title.group(2)))  # Italics for a work's name, without a gap after.
-        listing = event(source, name, day, clock_range_start(clock_text), link=html.unescape(title.group(1)))
+        link = html.unescape(title.group(1))
+        listing = event(source, name, day, clock_range_start(clock_text), link=link, about=ica_about(link))
         listing["category"] = category
         events.append(listing)
     return events
+
+
+def ica_about(link):
+    """What an ICA event's own page says about it, and what tickets cost; the calendar has neither. A page that
+    doesn't load leaves the event without a preview, not the ICA without events."""
+    try:
+        page = fetch(link, attempts=1, timeout=10)
+    except Exception:
+        return []
+
+    def field(name):
+        start = page.find(f"field-name-{name} ")
+        if start < 0:
+            return ""
+        end = page.find('class="field field-name-', start + 1)
+        return page[page.find(">", start) + 1:end if end > 0 else None]
+
+    price = re.sub(r"\s*Get Tickets.*$", "", text(field("field-ticket-price")), flags=re.I)
+    # Not the notice of when tickets go on sale that many start with.
+    described = [line for line in about(field("body")) if not re.match(r"(member |nonmember )?(presale|tickets)", line, re.I)]
+    return described[:2] + ([price] if price else [])
 
 
 # The French Library's event types, from the label on each, and where each goes: its screenings are Film,

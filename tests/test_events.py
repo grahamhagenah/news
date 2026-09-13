@@ -41,6 +41,7 @@ ROUTES = [
     ("bostonfilmhub.com", "bostonfilmhub.html"),
     ("frenchlibrary.org", "frenchlibrary.html"),
     ("icaboston.org/calendar", "ica.html"),
+    ("icaboston.org/events/colin-stetson", "ica_event.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
 ]
@@ -275,6 +276,11 @@ class ArtAndTalks(unittest.TestCase):
         })  # Not the kids' workshop, the members' opening, or the online series.
         talk = found[0]
         self.assertEqual((talk["date"], talk["times"]), (date(2026, 9, 20), [time(14, 0)]))
+        # Its concert's own page gives what it's about and what tickets cost; the talk's, not saved here, nothing.
+        concert = next(item for item in found if item["category"] == "music")
+        self.assertTrue(concert["about"][0].startswith("Colin Stetson and Brìghde Chaimbeul come together"))
+        self.assertEqual(concert["about"][-1], "$30 ICA members / $35 students / $40 nonmembers")
+        self.assertEqual(talk["about"], [])
 
     def test_times_from_a_range(self):
         for when, start in [("12–4 PM", time(12, 0)), ("10 AM–5 PM", time(10, 0)), ("5:30–9:30 PM", time(17, 30)),
