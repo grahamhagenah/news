@@ -2,7 +2,7 @@
 
 Two plain, black pages built from the same code:
 
-- **Newsfeed**, the latest posts and podcast episodes from a few sites, newest first: https://news.grahamhagenah.com/
+- **Newsfeed**, the latest posts, podcast episodes and videos from a few sites, newest first: https://news.grahamhagenah.com/
 - **Events**, concerts, films, and art and talks in Boston, Cambridge and Somerville over the next 30 days, grouped by day: https://events.grahamhagenah.com/
 
 ## What's where
@@ -20,6 +20,7 @@ Run everything from this top folder, with only the Python standard library:
 ## The newsfeed
 
 - Add or remove sites from the [sources page](https://news.grahamhagenah.com/sources.html), which opens a pre-filled issue that the `sources.yml` workflow applies to `news/feeds.txt`, or edit that file directly. A homepage URL is enough; the build finds the feed. Options like `limit=5` and `days=14` go at the end of a line, and `pocketcasts=<id>` ties a podcast to its Pocket Casts show when its feed address isn't the one Pocket Casts knows.
+- YouTube channels work like any site (a channel's page is enough). Their videos, and any post linking straight to a YouTube video, play on the page in YouTube's privacy-enhanced embedded player, in a plain window that closes when the video ends, before YouTube can suggest another. Shorts are left out. Hold a modifier key while clicking to open YouTube instead.
 
 ## The events page
 

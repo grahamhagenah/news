@@ -28,6 +28,7 @@ ROUTES = {
     "https://www.slowboring.com/": "slowboring.xml",
     "https://waxy.org/": "waxy_home.html",
     "https://waxy.org/feed/": "waxy.xml",
+    "https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A": "youtube.xml",
 }
 
 
@@ -71,6 +72,14 @@ class Reading(unittest.TestCase):
         self.assertTrue(all("news.ycombinator.com" in post["comments"] for post in feed["posts"]))
         self.assertTrue(all(isinstance(post["comment_count"], int) for post in feed["posts"]))
         self.assertFalse(any(line.startswith(("Points:", "Article URL")) for post in feed["posts"] for line in post["summary"]))
+
+    def test_youtube_videos_without_shorts(self):
+        feed = self.read("https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A")
+        self.assertEqual([(post["title"], post["video"]) for post in feed["posts"]],
+                         [("Tori Kelly: Tiny Desk Concert", "O8AlOZV0BSI"), ("Ratboys: Tiny Desk Concert", "oRg3Tk3jHno")])
+        self.assertFalse(any(post["podcast"] for post in feed["posts"]))
+        # Its description, from YouTube's <media:group>, without the byline it starts with.
+        self.assertTrue(feed["posts"][0]["summary"][0].startswith("When Tori Kelly pulled up to the Desk"))
 
     def test_podcast_episodes_without_web_pages(self):
         feed = self.read("https://feeds.megaphone.fm/the-big-picture")
@@ -179,12 +188,16 @@ class Fallback(unittest.TestCase):
 class Page(unittest.TestCase):
     def test_renders_posts_filter_and_failures(self):
         with mock.patch.object(build, "fetch", sample):
-            feeds = [build.read_feed(site(url)) for url in ("https://www.nytimes.com/", "https://feeds.megaphone.fm/the-big-picture")]
+            feeds = [build.read_feed(site(url)) for url in ("https://www.nytimes.com/", "https://feeds.megaphone.fm/the-big-picture",
+                                                            "https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A")]
         posts = build.all_posts(feeds)
         page = build.render_index(feeds, posts, ["Broken Blog"], [("Slow Site", datetime.now(timezone.utc))], datetime.now(timezone.utc))
         self.assertEqual(page.count('<span class="source">'), len(posts))
         self.assertEqual(page.count("<li class=\"row\" data-podcast>"), sum(post["podcast"] for post in posts))
         self.assertIn('data-show="podcasts"', page)
+        self.assertIn('data-show="videos"', page)
+        self.assertEqual(page.count('<li class="row" data-video="'), 2)
+        self.assertIn('<dialog class="player"', page)
         self.assertIn("Couldn’t load Broken Blog", page)
         self.assertIn("Couldn’t reach Slow Site", page)
 

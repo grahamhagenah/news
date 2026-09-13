@@ -205,8 +205,23 @@ def entry_audio(entry):
     return None
 
 
-# hnrss describes link posts with these lines instead of any article text.
-BOILERPLATE = re.compile(r"^(Article URL|Comments URL|Points|# Comments):")
+# A YouTube video's address, and its id. Shorts, at youtube.com/shorts/…, aren't among them: they're left out.
+YOUTUBE_VIDEO = re.compile(r"^https://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]{11})")
+
+
+def media_description(entry):
+    """The description YouTube's feeds (and other Media RSS feeds) keep in <media:group>, as plain text with
+    a line to each paragraph."""
+    for group in children(entry, "group"):
+        text = child_text(group, "description")
+        if text:
+            return html.escape(text).replace("\n", "<br>")
+    return ""
+
+
+# hnrss describes link posts with these lines instead of any article text, and Tiny Desk's videos start
+# with a byline, "Ashley Pointer | September 10, 2026".
+BOILERPLATE = re.compile(r"^(Article URL|Comments URL|Points|# Comments):|^[^|]{1,60} \| [A-Z][a-z]+ \d{1,2}, \d{4}$")
 
 
 def excerpt(markup, max_chars=PREVIEW_CHARS):
@@ -260,9 +275,12 @@ def read_feed(site):
         # Many podcast feeds give an episode no web page of its own, just the audio file.
         link = entry_link(entry) or audio
         date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
+        if "youtube.com/shorts/" in link:
+            continue  # Shorts are the endless-scroll kind of video this page is meant to be free of.
         if title and link and (date is None or date >= cutoff):
             link = without_tracking(urljoin(feed_url, link))
-            summary = excerpt(child_text(entry, "encoded", "content", "description", "summary"))
+            video = YOUTUBE_VIDEO.match(link)
+            summary = excerpt(child_text(entry, "encoded", "content", "description", "summary") or media_description(entry))
             comments, comment_count = entry_comments(entry, link, feed_url)
             posts.append({
                 "title": title,
@@ -273,6 +291,7 @@ def read_feed(site):
                 "comment_count": comment_count,
                 "audio": audio,
                 "podcast": audio is not None,
+                "video": video.group(1) if video else None,  # A YouTube video's id, for playing it here.
             })
 
     return {
@@ -367,6 +386,7 @@ def render_json(posts, built_at):
                     "date": post["date"].isoformat() if post["date"] else None,
                     "comments": post["comments"],
                     "podcast": post["podcast"],
+                    "video": post.get("video"),
                 }
                 for post in posts
             ],
@@ -376,13 +396,15 @@ def render_json(posts, built_at):
     )
 
 
-# Each post's mark, before its source: a page of text for an article, headphones for a podcast episode.
+# Each post's mark, before its source: a page of text for an article, headphones for a podcast episode, a
+# screen with a play button for a video.
 # Drawn once in the page; rows point to the drawing. Unread, it takes its kind's color; read, it goes gray.
 ICON_DRAWINGS = {
     "article": '<rect x="3" y="1.75" width="10" height="12.5" rx="1.5"/><path d="M5.75 5.5h4.5M5.75 8h4.5M5.75 10.5h2.75"/>',
     "podcast": '<path d="M2.75 10.5V8a5.25 5.25 0 0 1 10.5 0v2.5"/>'
                '<rect x="1.5" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>'
                '<rect x="11.25" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>',
+    "video": '<rect x="1.5" y="2.75" width="13" height="10.5" rx="2"/><path d="M6.5 5.75v4.5L10.25 8z" fill="currentColor"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 
@@ -396,7 +418,9 @@ def render_index(feeds, posts, failed, stale, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
-        mark = icon("podcast" if post["podcast"] else "article")
+        kind = "podcast" if post["podcast"] else "video" if post.get("video") else "article"
+        mark = icon(kind)
+        marked = " data-podcast" if post["podcast"] else f' data-video="{post["video"]}"' if post.get("video") else ""
         preview = shared.preview(post["title"], post["summary"])
         comments = ""
         if post["comments"]:
@@ -404,7 +428,7 @@ def render_index(feeds, posts, failed, stale, built_at):
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         items.append(
-            f'<li class="row"{" data-podcast" if post["podcast"] else ""}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
+            f'<li class="row"{marked}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
             f"{when}{comments}{preview}</div></li>"
         )
@@ -416,17 +440,21 @@ def render_index(feeds, posts, failed, stale, built_at):
         for name, fetched in stale
     )
 
-    # Only worth offering when there's something to choose between.
+    # Only worth offering when there's something to choose between, and only the kinds there are.
+    kinds = [("podcasts", "podcast", "Podcasts", any(post["podcast"] for post in posts)),
+             ("videos", "video", "Videos", any(post.get("video") for post in posts))]
     show_filter = (
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
         f'<button data-show="articles">{icon("article", decorative=True)}Articles</button>'
-        f'<button data-show="podcasts">{icon("podcast", decorative=True)}Podcasts</button></nav>\n'
-        if any(post["podcast"] for post in posts)
+        + "".join(f'<button data-show="{key}">{icon(mark, decorative=True)}{label}</button>' for key, mark, label, there in kinds if there)
+        + "</nav>\n"
+        if any(there for *_, there in kinds)
         else ""
     )
 
     body = (
         show_filter + '<button class="new-posts" hidden></button>\n'
+        + PLAYER +
         f'<ul class="posts" data-page-size="{PAGE_SIZE}">\n' + "\n".join(items) + "\n</ul>\n"
         '<p class="empty" hidden></p>\n'
         '<nav class="pager"></nav>\n'
@@ -437,6 +465,14 @@ def render_index(feeds, posts, failed, stale, built_at):
     )
     return page("Newsfeed", body, updated=built_at)
 
+
+# Where a video plays: over the list, with a way to close it, and nothing else. (The player shows its name.)
+PLAYER = """<dialog class="player" aria-label="Video">
+<div class="player-bar"><button class="player-close" aria-label="Close">×</button></div>
+<div class="player-frame"></div>
+<p class="player-note" hidden>This video can’t be played here. <a href="">Watch it on YouTube</a></p>
+</dialog>
+"""
 
 INDEX_JS = """
   const links = [...document.querySelectorAll(".posts a.title")];
@@ -463,6 +499,66 @@ INDEX_JS = """
     a.addEventListener("auxclick", markRead);
   }
   saveClicked();
+
+  // Videos play here, in a plain window over the list: no comments, no suggestions, no next video. It's
+  // YouTube's own player, its privacy-enhanced version, loaded the first time a video is opened; when the
+  // video ends the window closes, before YouTube can offer another. A click with a modifier key still opens
+  // YouTube, in a new tab.
+  const dialog = document.querySelector(".player");
+  const note = dialog.querySelector(".player-note");
+  let player = null, youtube = null;
+  const loadYouTube = () => youtube ??= new Promise(resolve => {
+    window.onYouTubeIframeAPIReady = resolve;
+    document.head.append(Object.assign(document.createElement("script"), { src: "https://www.youtube.com/iframe_api" }));
+  });
+  async function play(a) {
+    dialog.setAttribute("aria-label", a.textContent);
+    note.querySelector("a").href = a.href;
+    note.hidden = true;
+    const holder = document.createElement("div");
+    dialog.querySelector(".player-frame").replaceChildren(holder);
+    dialog.showModal();
+    await loadYouTube();
+    if (!dialog.open) return; // Closed while the player loaded.
+    let started = false;
+    player = new YT.Player(holder, {
+      host: "https://www.youtube-nocookie.com",
+      videoId: a.closest("li").dataset.video,
+      width: "100%",
+      height: "100%",
+      // Related videos from the same channel only, no annotations, and inline on phones until made full screen.
+      playerVars: { autoplay: 1, rel: 0, iv_load_policy: 3, playsinline: 1 },
+      events: {
+        onStateChange: event => {
+          // The player takes the keyboard when it starts; give it back once, so Esc closes the window.
+          if (event.data === YT.PlayerState.PLAYING && !started) {
+            started = true;
+            dialog.querySelector(".player-close").focus();
+          }
+          if (event.data === YT.PlayerState.ENDED) dialog.close();
+        },
+        onError: () => { note.hidden = false; }, // Its channel doesn't allow it to play elsewhere, most often.
+      },
+    });
+  }
+  dialog.addEventListener("close", () => {
+    if (player) player.destroy();
+    player = null;
+    dialog.querySelector(".player-frame").replaceChildren();
+  });
+  dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); }); // Outside the video.
+  dialog.querySelector(".player-close").addEventListener("click", () => dialog.close());
+  // Esc, which the dialog closes on by itself in most browsers. Once the video has been clicked, keys go to
+  // YouTube's player instead, and the × or a click outside the video closes it.
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && dialog.open) dialog.close(); });
+  for (const a of links) {
+    if (!a.closest("li").dataset.video) continue;
+    a.addEventListener("click", event => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      play(a);
+    });
+  }
 
   // Opened from the home screen there's no pull-to-refresh, so reload on return after five minutes away.
   let hiddenAt = 0;
@@ -502,14 +598,16 @@ INDEX_JS = """
   const pager = document.querySelector(".pager");
   const empty = document.querySelector(".empty");
 
-  // The filter shows every post, only articles, or only podcast episodes. The choice is remembered in
+  // The filter shows every post, or only articles, podcast episodes or videos. The choice is remembered in
   // this browser, and paging counts only the posts it shows.
   const filter = document.querySelector(".filter");
   let show = "all";
   try { show = (filter && localStorage.getItem("reader-show")) || "all"; } catch (error) {}
 
+  const kind = li => li.hasAttribute("data-podcast") ? "podcasts" : li.dataset.video ? "videos" : "articles";
+
   function showPosts() {
-    const shown = items.filter(li => show === "all" || (show === "podcasts") === li.hasAttribute("data-podcast"));
+    const shown = items.filter(li => show === "all" || kind(li) === show);
     const pages = Math.max(1, Math.ceil(shown.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     items.forEach(li => { li.hidden = true; });
@@ -520,7 +618,7 @@ INDEX_JS = """
       (page > 1 ? link(page - 1, "← Newer") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Older →") : "<span></span>");
-    empty.textContent = show === "podcasts" ? "No podcast episodes right now." : "No articles right now.";
+    empty.textContent = { podcasts: "No podcast episodes right now.", videos: "No videos right now." }[show] || "No articles right now.";
     empty.hidden = shown.length > 0;
     if (filter) for (const b of filter.children) b.setAttribute("aria-pressed", b.dataset.show === show);
   }
@@ -631,13 +729,15 @@ HEAD = """<link rel="icon" href="favicon.svg" type="image/svg+xml">
 
 # The newsfeed's own styles, on top of the ones it shares with the events page (shared/site.py).
 CSS = """
-  /* Unread marks, and the filter's matching marks: green for articles, violet for podcast episodes. */
-  :root { --article: #34d399; --podcast: #a78bfa; }
+  /* Unread marks, and the filter's matching marks: green for articles, violet for podcast episodes, coral for
+     videos. */
+  :root { --article: #34d399; --podcast: #a78bfa; --video: #fb7185; }
   h1 { margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
        letter-spacing: .08em; text-transform: uppercase; }
   h1:first-child, header + h1 { margin-top: 0; }
   .filter .icon { color: var(--article); }
   .filter [data-show="podcasts"] .icon { color: var(--podcast); }
+  .filter [data-show="videos"] .icon { color: var(--video); }
   li { padding: .4rem 0; }
   ol { padding-left: 1.25rem; }
   ol li { padding: .3rem 0; }
@@ -649,6 +749,20 @@ CSS = """
   .source .icon { color: #555; }
   .unread .source .icon { color: var(--article); }
   .row[data-podcast].unread .source .icon { color: var(--podcast); }
+  .row[data-video].unread .source .icon { color: var(--video); }
+  /* The video player: the video at the width of the window, up to a large laptop's, alone on black. */
+  .player { width: min(64rem, 100vw - 2.5rem); max-width: none; max-height: none; padding: 0; border: 0;
+            background: none; color: #fff; overflow: visible; }
+  .player::backdrop { background: #000; }
+  .player-bar { display: flex; justify-content: flex-end; padding: 0 0 .5rem; }
+  .player-close { flex: none; padding: 0 .25rem; border: 0; background: none; color: #888; font: inherit;
+                  font-size: 1.6rem; line-height: 1; cursor: pointer; }
+  .player-close:hover { color: #fff; }
+  .player-frame { aspect-ratio: 16 / 9; background: #111; }
+  .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
+  .player-note { margin: .75rem 0 0; color: #999; font-size: .85rem; }
+  .player-note a { color: #fff; text-decoration: underline; text-underline-offset: .2em; }
+  @media (max-width: 34rem) { .player { width: 100vw; } .player-bar { padding: 0 1rem .75rem; } }
   .new-posts { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
                transform: translateX(-50%); padding: .45rem 1.1rem; border: 0; border-radius: 999px;
                background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }

@@ -28,8 +28,10 @@ def fetch(url, user_agent, attempts=3, timeout=20):
                 return response.geturl(), response.read()
         except Exception as error:
             # Timeouts, dropped connections and 5xx errors (like the 520s Cloudflare gives when a site's own
-            # server stumbles) are often momentary; a 404 won't change. Wait a little longer each time.
-            momentary = not isinstance(error, urllib.error.HTTPError) or error.code >= 500
+            # server stumbles) are often momentary; a 404 won't change, except from YouTube's channel feeds,
+            # which answer 404 now and then for a feed that's fine. Wait a little longer each time.
+            momentary = (not isinstance(error, urllib.error.HTTPError) or error.code >= 500
+                         or (error.code == 404 and "youtube.com/feeds/" in url))
             if not momentary or attempt == attempts - 1:
                 raise
             time.sleep(2 * (attempt + 1))

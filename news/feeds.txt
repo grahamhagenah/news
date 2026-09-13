@@ -64,6 +64,10 @@ https://feeds.simplecast.com/TzbxCT1l   Popcast   days=30
 https://feeds.megaphone.fm/QCD6036500916   Philosophize This!   days=30
 https://audioboom.com/channels/5174627.rss   Still Counting   days=30
 
+# Video (YouTube channels, which play here; a channel's page works too, like https://www.youtube.com/@nprmusic).
+# Shorts are left out. NPR Music's channel is its Tiny Desk concerts, besides those.
+https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A   Tiny Desk   days=30
+
 # Added from the sources page
 https://www.theverge.com/ The Verge
 https://www.slowboring.com/ Slow Boring
