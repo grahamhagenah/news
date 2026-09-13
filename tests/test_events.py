@@ -37,6 +37,9 @@ ROUTES = [
     ("rss/events?types=test&page=1", "bpl.xml"),
     ("gateway.bibliocommons.com", "bpl_end.xml"),  # Every later page: the feed with nothing left in it.
     ("mfa.org/programs", "mfa.html"),
+    ("harvardfilmarchive.org/calendar", "hfa.html"),
+    ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
+    ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
 ]
 
 
@@ -134,6 +137,22 @@ class Readers(unittest.TestCase):
         # 01:30 UTC on Sep 12 is 9:30pm on Sep 11 in Boston.
         self.assertEqual((found[0]["date"], found[0]["times"]), (date(2026, 9, 11), [time(21, 30)]))
         self.assertEqual(found[0]["title"], "CAVA (Germany) w/ Lupo Citta")
+
+    def test_hfa_screenings_with_credits(self):
+        found = self.read("hfa", "https://harvardfilmarchive.org/calendar", "film")
+        self.assertEqual(len(found), 4)
+        snow = next(item for item in found if item["title"] == "Snow White")
+        self.assertEqual((snow["date"], snow["times"]), (date(2026, 9, 14), [time(19, 0)]))
+        self.assertEqual(snow["about"][0], "Directed by João César Monteiro, 2000")
+        self.assertTrue(snow["link"].startswith("https://harvardfilmarchive.org/calendar/snow-white"))
+        self.assertTrue(any("Screening on Film" in line for item in found for line in item["about"]))
+
+    def test_veezi_site_showtimes(self):
+        found = self.read("veezi", "https://www.westnewtoncinema.com/", "film")
+        rebel = next(item for item in found if item["title"] == "Rebel with a Clause")
+        self.assertEqual((rebel["date"], rebel["times"]), (date(2026, 9, 24), [time(19, 0)]))
+        self.assertEqual(rebel["link"], "https://www.westnewtoncinema.com/movie/rebel-with-a-clause")
+        self.assertEqual(rebel["about"][-1], "Directed by Brandt Johnson · 1h 26m")
 
     def test_tribe_skips_what_isnt_a_show(self):
         found = self.read("tribe", "https://lizardloungeclub.com/wp-json/tribe/events/v1/events")

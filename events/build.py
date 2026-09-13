@@ -284,6 +284,59 @@ def read_alamo(source):
     return events
 
 
+def read_hfa(source):
+    """The Harvard Film Archive's calendar page, about four weeks of screenings, each with its series, its
+    director and year, and notes like "New 35mm print" or "Director in Person"."""
+    events = []
+    for block in fetch(source["url"]).split('class="grid-3 m-calendar__spot--event event"')[1:]:
+        when = re.search(r'<time datetime="(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})', block)
+        title = re.search(r'class="event__title">(.*?)</h5>', block, re.S)
+        if not (when and title):
+            continue
+        link = re.search(r'<a href="([^"]+)" class="event__link"', block)
+        series = re.search(r'class="event__series">(.*?)</div>', block, re.S)
+        credit = re.search(r'class="event__info">(.*?)</div>', block, re.S)
+        notes = [text(note) for note in re.findall(r'class="tooltip">(.*?)</span>', block, re.S)]
+        name = text(title.group(1))
+        # "Directed by João César Monteiro, 2000"; the series it's part of, and how it's shown.
+        credit = re.sub(r"\s*,\s*", ", ", text(credit.group(1) if credit else ""))
+        part = re.sub(r"\s*\.\.\.$", "…", text(series.group(1) if series else ""))  # The page cuts long ones short.
+        facts = " · ".join(([f"Part of {part}"] if part and part != name else []) + notes)
+        events.append(event(
+            source, name, date.fromisoformat(when.group(1)),
+            datetime.min.time().replace(hour=int(when.group(2)), minute=int(when.group(3))),
+            link=urljoin(source["url"], html.unescape(link.group(1))) if link else "",
+            about=[line for line in (credit, facts) if line],
+        ))
+    return events
+
+
+def read_veezi_site(source):
+    """Theaters whose sites are Veezi's hosted ones (West Newton Cinema), from the data the site loads: each
+    film playing now or coming soon, with its showtimes and synopsis."""
+    films = {}
+    for listing in ("playing-now", "coming-soon"):
+        for film in json.loads(fetch(urljoin(source["url"], f"/api/movie/{listing}"))):
+            films.setdefault(film["url"], film)
+    events = []
+    for film in films.values():
+        credits = film.get("director") if isinstance(film.get("director"), dict) else {}
+        directors = ", ".join(credits.get("director") or [])
+        minutes = int(film["duration"]) if str(film.get("duration") or "").isdigit() else 0
+        facts = " · ".join(fact for fact in (f"Directed by {directors}" if directors else "",
+                                               f"{minutes // 60}h {minutes % 60}m" if minutes else "") if fact)
+        described = about(film.get("synopsisShort") or film.get("tagline") or "") + ([facts] if facts else [])
+        for session in film.get("sessionTimes") or []:
+            clock_text = re.fullmatch(r"(\d{1,2}):(\d{2}) ?([ap])m", (session.get("time") or "").strip(), re.I)
+            if not session.get("date") or not clock_text:
+                continue
+            hour = int(clock_text.group(1)) % 12 + (12 if clock_text.group(3).lower() == "p" else 0)
+            events.append(event(source, film["title"], date.fromisoformat(session["date"][:10]),
+                                datetime.min.time().replace(hour=hour, minute=int(clock_text.group(2))),
+                                link=urljoin(source["url"], f"/movie/{film['url']}"), about=described))
+    return events
+
+
 LANDMARK_API = "https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi"
 
 
@@ -606,6 +659,8 @@ READERS = {
     "landmark": read_landmark,
     "ics": read_ics,
     "tribe": read_tribe,
+    "hfa": read_hfa,
+    "veezi": read_veezi_site,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
     "mfa": read_mfa,
