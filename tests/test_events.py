@@ -20,7 +20,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "events"
 # Which sample stands in for which address.
 ROUTES = [
     ("aegwebprod", "roadrunner.json"),
-    ("sinclaircambridge.com", "sinclair.xml"),
+    ("sinclaircambridge.com", "sinclair.html"),
     ("mideastclub.com", "mideast.html"),
     ("brattlefilm.org", "brattle.html"),
     ("houseofblues.com", "houseofblues.html"),
@@ -84,9 +84,16 @@ class Readers(unittest.TestCase):
         self.assertTrue(all(item["times"] for item in found))
         self.assertTrue(any(item["detail"].startswith("with ") for item in found))
 
-    def test_rss_dates_from_titles(self):
-        found = self.read("rss", "https://www.sinclaircambridge.com/events/rss")
-        self.assertFalse(any(" on " in item["title"][-15:] for item in found), "the date should come off the title")
+    def test_axs_door_times_without_cancelled_shows(self):
+        found = self.read("axs", "https://www.sinclaircambridge.com/events/all")
+        self.assertEqual([item["title"] for item in found], ["Chanel Beads", "DON WEST", "John Craigie", "The Glitter Boys"])
+        first = found[0]
+        self.assertEqual((first["date"], first["times"]), (date(2026, 9, 13), [time(19, 0)]))
+        self.assertEqual(first["detail"], "with Horse Vision, Ivy Knight")
+        self.assertEqual(first["link"], "https://www.sinclaircambridge.com/events/detail/1460677")
+        self.assertEqual(first["about"], ["Doors 7pm · All Ages"])
+        self.assertEqual(found[2]["about"][0].split(" · ")[0], "Fall 2026", "the tour, first")
+        self.assertEqual(found[3]["detail"], "", "no supporting acts")
 
     def test_ticketweb_venue_without_room(self):
         found = self.read("ticketweb", "https://mideastclub.com/")

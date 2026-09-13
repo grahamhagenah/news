@@ -3,7 +3,7 @@
 # sort a source's listings into other categories themselves, like the MFA's films.
 # How to read it:
 #   aeg        an AEG Presents venue's events.json (Roadrunner)
-#   rss        an event feed whose titles end in the date, "… on Sep 12, 2026" (AXS venues like The Sinclair)
+#   axs        an AXS venue site's full listing page, /events/all, with door times (The Sinclair)
 #   ticketweb  a venue page with TicketWeb's event listing (The Middle East)
 #   jsonld     a page with schema.org Event data in it (the Brattle's Coming Soon page, House of Blues, a
 #              venue's page on DICE)
@@ -27,7 +27,7 @@
 
 # Music
 aeg        https://aegwebprod.blob.core.windows.net/json/events/219/events.json   music   Roadrunner
-rss        https://www.sinclaircambridge.com/events/rss   music   The Sinclair
+axs        https://www.sinclaircambridge.com/events/all   music   The Sinclair
 ticketweb  https://mideastclub.com/   music   The Middle East
 jsonld     https://boston.houseofblues.com/shows   music   House of Blues
 ticketmaster  KovZpZA11JtA   music   Paradise

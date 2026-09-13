@@ -257,17 +257,32 @@ def read_aeg(source):
     return events
 
 
-def read_rss(source):
-    """AXS venue feeds (The Sinclair) give the show date only at the end of the title: "… on Sep 12, 2026"."""
+def read_axs(source):
+    """AXS venue sites' full listing, /events/all (The Sinclair): every show, with its supporting acts and door
+    time. (Their RSS feed has only the next ten, with no times.) The show itself starts on each show's own page,
+    usually an hour later; the time here is the doors', and its preview says so."""
     events = []
-    for item in re.findall(r"<item>(.*?)</item>", fetch(source["url"]), re.S):
-        title = text(re.search(r"<title>(.*?)</title>", item, re.S).group(1))
-        link = text((re.search(r"<link>(.*?)</link>", item, re.S) or re.search(r"()", "")).group(1))
-        match = re.fullmatch(r"(.*) on ([A-Z][a-z]{2} \d{1,2}, \d{4})", title)
-        description = re.search(r"<description>(.*?)</description>", item, re.S)
-        if match:
-            events.append(event(source, match.group(1), datetime.strptime(match.group(2), "%b %d, %Y").date(), link=link,
-                                about=about(html.unescape(re.sub(r"<!\[CDATA\[|\]\]>", "", description.group(1))) if description else "")))
+    for entry in fetch(source["url"]).split('<div class="entry')[1:]:
+        def field(pattern):  # The date and time each come after an icon of their own.
+            found = re.search(pattern, entry, re.S)
+            return text(found.group(1)) if found else ""
+        name = re.search(r'class="carousel_item_title_small">\s*<a href="([^"]+)"[^>]*>(.*?)</a>', entry, re.S)
+        day = re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", field(r'<span class="date">.*?</span>(.*?)</span>'))
+        if not name or not day or field(r'class="btn-tickets[^"]*"[^>]*>(.*?)</a>').casefold() == "cancelled":
+            continue
+        doors = re.search(r"\d{1,2}:\d{2} [AP]M", field(r'<span class="time">.*?</span>(.*?)</span>'))
+        start = datetime.strptime(doors.group(), "%I:%M %p").time() if doors else None
+        support = field(r'class="supporting[^"]*">(.*?)</h4>')
+        facts = [field(r'<h5 class="tour">(.*?)</h5>'), f"Doors {clock(start)}" if start else "", field(r'<span class="age">(.*?)</span>')]
+        events.append(event(
+            source,
+            text(name.group(2)),
+            datetime.strptime(day.group(), "%b %d, %Y").date(),
+            start,
+            link=html.unescape(name.group(1)),
+            detail=f"with {support}" if support else "",
+            about=[" · ".join(fact for fact in facts if fact)],
+        ))
     return events
 
 
@@ -894,7 +909,7 @@ def read_harvard_art(source):
 
 READERS = {
     "aeg": read_aeg,
-    "rss": read_rss,
+    "axs": read_axs,
     "ticketweb": read_ticketweb,
     "jsonld": read_jsonld,
     "coolidge": read_coolidge,
