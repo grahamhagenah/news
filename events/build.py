@@ -1429,9 +1429,9 @@ PUBLIC_CSS = """
   .contact .honey { display: none; }
   /* The footer, set off from the page by a faint line. */
   footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
-  /* The footer's lists of the site's pages: three short columns (two on a phone), headed like the days. */
+  /* The footer's lists of the site's pages: three short columns (two on a phone), under small, faint headings. */
   .site-links { display: grid; grid-template-columns: repeat(3, minmax(0, 11rem)); gap: 1.75rem 2.5rem; margin: .5rem 0 2rem; }
-  .site-links h2 { margin: 0 0 .7rem; }
+  .site-links h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; }
   .site-links ul { display: grid; gap: .45rem; }
   footer .site-links a, footer .site-links a:visited { color: #999; font-size: .95rem; text-decoration: none; }
   footer .site-links a:hover { color: #fff; }
