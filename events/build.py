@@ -932,7 +932,9 @@ def render_index(events, sources, failed, stale, built_at):
         for name, fetched in stale
     )
     body = (
-        f'<nav class="filter" aria-label="Show">{buttons}</nav>\n'
+        f'<nav class="filter" aria-label="Show">{buttons}'
+        '<input class="search" type="search" placeholder="Search" aria-label="Search events" autocomplete="off" spellcheck="false">'
+        '</nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n'
         f"<footer>\n{failed_note}<p>From {names}.</p>\n"
@@ -983,16 +985,31 @@ INDEX_JS = """
     if (!todays.querySelector("li")) todays.remove();
   }
 
-  // The filter shows every category or just one, and is remembered in this browser. Fifty of what it shows
-  // are on a page, however many days that takes; ?page=2 shows the next fifty. A day split between two pages
-  // has its heading on both.
+  // The filter shows every category or just one, and is remembered in this browser. The search keeps the events
+  // with every word typed somewhere in their name, place or description (accents aside), and is kept in the
+  // address (?q=). Fifty of what's shown are on a page, however many days that takes; ?page=2 shows the next
+  // fifty. A day split between two pages has its heading on both.
   const EVENTS_PER_PAGE = 50;
   const filter = document.querySelector(".filter");
+  const search = document.querySelector(".search");
   const pager = document.querySelector(".pager");
+  const empty = document.querySelector(".empty");
+  const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const allRows = [...document.querySelectorAll(".day > ul > li")];
+  const searchable = new Map(allRows.map(li => [li, plain(li.textContent)]));
   let show = "all";
   try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
+  search.value = new URLSearchParams(location.search).get("q") || "";
+  const address = page => {
+    const params = new URLSearchParams();
+    if (search.value.trim()) params.set("q", search.value.trim());
+    if (page > 1) params.set("page", page);
+    return params.toString() ? "?" + params : location.pathname;
+  };
   function showEvents() {
-    const rows = [...document.querySelectorAll(".day > ul > li")].filter(li => show === "all" || li.dataset.category === show);
+    const words = plain(search.value).split(/\s+/).filter(Boolean);
+    const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
+      && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     const onPage = new Set(rows.slice((page - 1) * EVENTS_PER_PAGE, page * EVENTS_PER_PAGE));
@@ -1001,13 +1018,14 @@ INDEX_JS = """
       for (const li of lis) li.hidden = !onPage.has(li);
       day.hidden = ![...lis].some(li => !li.hidden);
     }
-    const link = (n, text) => `<a href="${n === 1 ? location.pathname : "?page=" + n}">${text}</a>`;
+    const link = (n, text) => `<a href="${address(n)}">${text}</a>`;
     pager.innerHTML = pages < 2 ? "" :
       (page > 1 ? link(page - 1, "← Earlier") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Later →") : "<span></span>");
-    document.querySelector(".empty").hidden = rows.length > 0;
-    for (const b of filter.children) b.setAttribute("aria-pressed", b.dataset.show === show);
+    empty.textContent = words.length ? `Nothing coming up matches “${search.value.trim()}”.` : "Nothing coming up.";
+    empty.hidden = rows.length > 0;
+    for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
     document.querySelector("main").classList.add("paged");
   }
   showEvents();
@@ -1016,8 +1034,22 @@ INDEX_JS = """
     if (!b) return;
     show = b.dataset.show;
     try { localStorage.setItem("events-show", show); } catch (error) {}
-    history.replaceState(null, "", location.pathname); // Back to page one.
+    history.replaceState(null, "", address(1)); // Back to page one.
     showEvents();
+  });
+  search.addEventListener("input", () => {
+    history.replaceState(null, "", address(1));
+    showEvents();
+  });
+  // "/" goes to the search, as on many sites; Esc empties it.
+  document.addEventListener("keydown", event => {
+    if (event.key === "/" && document.activeElement !== search && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      search.focus();
+    } else if (event.key === "Escape" && document.activeElement === search && search.value) {
+      search.value = "";
+      search.dispatchEvent(new Event("input"));
+    }
   });
 """
 
@@ -1034,6 +1066,14 @@ CSS = """
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
+  /* The search, at the end of the filter's row (below it on a phone), as quiet as the filter. */
+  .search { margin-left: auto; width: 10rem; padding: 0 0 .15rem; border: 0; border-bottom: 1px solid #333;
+            border-radius: 0; background: none; color: #fff; font: inherit; font-size: .8rem; outline: none;
+            -webkit-appearance: none; appearance: none; }
+  .search::placeholder { color: #555; }
+  .search:focus { border-bottom-color: #777; }
+  .search::-webkit-search-cancel-button { display: none; }
+  @media (max-width: 34rem) { .search { flex-basis: 100%; margin: .4rem 0 0; } }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
   .times time + time::before { content: ", "; }
