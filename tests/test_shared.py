@@ -3,6 +3,9 @@ python3 -m unittest"""
 
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -86,3 +89,26 @@ class Alerts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Scripts(unittest.TestCase):
+    """The pages' scripts are written inside Python strings, where an escape like \\n turns into a real line
+    break; one that no longer parses breaks the whole page (its filter, search and paging) without any other
+    test noticing. Node, where it's installed (as on GitHub's runners), checks each one parses."""
+
+    def test_page_scripts_parse(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node isn't installed")
+        from events import build as events_build
+        from news import build as news_build
+        scripts = {"events": events_build.INDEX_JS, "news": news_build.INDEX_JS}
+        for name in ("AGES", "PREVIEWS", "SEARCH_KEYS"):
+            scripts[name] = re.sub(r"</?script>", "", getattr(site, name))
+        for name, script in scripts.items():
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as file:
+                file.write(script)
+            result = subprocess.run([node, "--check", file.name], capture_output=True, text=True)
+            os.unlink(file.name)
+            self.assertEqual(result.returncode, 0, f"{name}: {result.stderr}")
+

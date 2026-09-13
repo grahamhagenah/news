@@ -1009,13 +1009,25 @@ def render_times(moments):
     return f'<span class="times">{times}</span>' if times else ""
 
 
+def written(address):
+    """(street, town, ZIP) as one line, for a calendar event's location."""
+    street, town, zip_code = address
+    return f"{street}, {town}, MA {zip_code}".strip()
+
+
+def address_attribute(item):
+    """An event's own address, when the source gives one, for adding it to a calendar; otherwise the page's
+    table of venues' addresses serves."""
+    return f' data-address="{html.escape(written(item["address"]))}"' if item.get("address") else ""
+
+
 def render_row(item):
     """Laid out like the newsfeed: the venue on the left, then the name with that day's times after it."""
     if "showings" in item:
         return render_combined(item)
     detail = f'<span class="detail">{html.escape(item["detail"])}</span>' if item["detail"] else ""
     return (
-        f'<li class="row" data-category="{item["category"]}"><span class="source">{icon(item["category"])}'
+        f'<li class="row" data-category="{item["category"]}"{address_attribute(item)}><span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
         f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div></li>'
@@ -1028,7 +1040,8 @@ def render_combined(item):
     first = item["times"][0] if item["times"] else None
     start = f'<span class="times">from <time class="from" data-time="{first:%H:%M}">{clock(first)}</time></span>' if first else ""
     showings = "".join(
-        f'<li><a href="{html.escape(showing["link"])}">{html.escape(showing["venue"])}</a>{render_times(showing["times"])}</li>'
+        f'<li{address_attribute(showing)}><a href="{html.escape(showing["link"])}">{html.escape(showing["venue"])}</a>'
+        f'{render_times(showing["times"])}</li>'
         for showing in item["showings"]
     )
     return (
@@ -1103,6 +1116,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<time class="ago" datetime="{fetched.isoformat()}"></time>.</span></p>\n'
         for name, fetched in stale
     )
+    places = {item["venue"]: written(VENUE_ADDRESSES[item["venue"]]) for item in events if item["venue"] in VENUE_ADDRESSES}
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
     path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else PUBLIC_TONIGHT[0] if tonight else
             f"{PUBLIC_PAGES[category][0]}/" if category else "")
@@ -1121,6 +1135,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
+        # The address of each venue with events on this page, for adding one to a calendar.
+        + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)};</script>\n"
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
@@ -1417,6 +1433,67 @@ INDEX_JS = """
     history.replaceState(null, "", address(1));
     showEvents();
   });
+
+  // A showtime adds that showing to a calendar: on an iPhone or iPad, Calendar's own sheet for adding it; on
+  // Android, Google Calendar's page with it filled in; elsewhere a file any calendar app opens. It runs two
+  // hours, since most listings give only when things start. The time looks just as before, until it's hovered.
+  const pad = n => String(n).padStart(2, "0");
+  const stamp = (day, time, hours = 0) => {
+    const [h, m] = time.split(":").map(Number);
+    const d = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10), h + hours, m));
+    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00`;
+  };
+  const calendarText = text => text.replace(/[\\\\;,]/g, "\\\\$&").replace(/\\n/g, "\\\\n");
+  function showing(t) {
+    const row = t.closest(".row");
+    const place = t.closest(".showings li"); // One theater's times, in a film at several.
+    const venue = place ? place.querySelector("a").textContent : row.querySelector(".source > span").textContent;
+    const address = (place && place.dataset.address) || row.dataset.address || PLACES[venue] || "";
+    const day = t.closest(".day").dataset.date;
+    return {
+      title: row.querySelector(".title").textContent.trim(),
+      where: [venue, address].filter(Boolean).join(", "),
+      link: (place ? place.querySelector("a") : row.querySelector("a.title")).href,
+      start: stamp(day, t.dataset.time),
+      end: stamp(day, t.dataset.time, 2),
+    };
+  }
+  function addToCalendar(t) {
+    const { title, where, link, start, end } = showing(t);
+    if (/Android/i.test(navigator.userAgent)) {
+      const details = { action: "TEMPLATE", text: title, dates: `${start}/${end}`, ctz: "America/New_York", location: where, details: link };
+      open("https://calendar.google.com/calendar/render?" + new URLSearchParams(details), "_blank", "noopener");
+      return;
+    }
+    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//" + location.hostname + "//EN", "BEGIN:VEVENT",
+      `UID:${start}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@${location.hostname}`,
+      "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z",
+      `DTSTART;TZID=America/New_York:${start}`, `DTEND;TZID=America/New_York:${end}`,
+      "SUMMARY:" + calendarText(title), "LOCATION:" + calendarText(where), "URL:" + link,
+      "DESCRIPTION:" + calendarText(link), "END:VEVENT", "END:VCALENDAR"].join("\\r\\n");
+    const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (apple) { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics); return; }
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(new Blob([ics], { type: "text/calendar" })),
+      download: (title.replace(/[^\\w\\s-]+/g, "").trim().slice(0, 60) || "event") + ".ics",
+    });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+  const addable = "time[data-time]:not(.from)";
+  for (const t of document.querySelectorAll(addable)) {
+    t.tabIndex = 0;
+    t.setAttribute("role", "button");
+    t.title = "Add to calendar";
+  }
+  document.addEventListener("click", event => {
+    const t = event.target.closest(addable);
+    if (t) addToCalendar(t);
+  });
+  document.addEventListener("keydown", event => {
+    const t = event.target.closest && event.target.closest(addable);
+    if (t && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); addToCalendar(t); }
+  });
 """
 
 
@@ -1474,6 +1551,9 @@ CSS = """
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
   .times time + time::before { content: ", "; }
+  /* A showtime adds that showing to a calendar: a pointer and a lighter shade on hover say so, nothing else. */
+  .times time[data-time]:not(.from) { cursor: pointer; }
+  .times time[data-time]:not(.from):hover, .times time[data-time]:not(.from):focus-visible { color: #ddd; outline: none; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A film at several places: the row opens to each place's times, with a › that turns when it's open. */
   .row.combined { display: block; }
