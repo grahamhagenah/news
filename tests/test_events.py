@@ -528,6 +528,23 @@ class Page(unittest.TestCase):
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', following)
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/next/</loc>", build.render_sitemap(built))
 
+    def test_tonight_page(self):
+        venue = dict(source("tribe", "x", name="Somewhere"), public=True)
+        events = [build.event(venue, f"On the {day.day}th", day, time(21, 0)) for day in
+                  (date(2026, 9, 14), date(2026, 9, 15), date(2026, 9, 16))]
+        built = datetime(2026, 9, 14, 20, tzinfo=timezone.utc)  # 4pm on Monday, Sep 14, in Boston.
+        page = build.render_index(events, [venue], [], [], built, public=True, tonight=True)
+        # Today's, and tomorrow's for after midnight (the script shows only the day it is), not later.
+        self.assertIn("On the 14th", page)
+        self.assertIn("On the 15th", page)
+        self.assertNotIn("On the 16th", page)
+        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page data-today><button', page)
+        self.assertIn(f"<title>{build.PUBLIC_TONIGHT[1]}</title>", page)
+        self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}tonight/">', page)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/tonight.png">', page)
+        self.assertIn('<a href="/tonight/" aria-current="page">Tonight</a>', page)
+        self.assertIn(f"<loc>{build.PUBLIC_URL}tonight/</loc>", build.render_sitemap(built))
+
     def test_event_data_uses_an_events_own_address(self):
         item = build.event(source("bibliocommons", "x", "art", "Boston Public Library"), "A Talk", date(2026, 9, 20),
                            time(18, 0), venue="Faneuil Library", address=("419 Faneuil Street", "Brighton", "02135"))

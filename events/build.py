@@ -42,6 +42,14 @@ PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, 
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
 PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."
+# The public site's tonight page: what's still to come today. It holds tomorrow's too, and shows only the day it
+# is where it's read, so it rolls over at midnight, before the next build.
+PUBLIC_TONIGHT = ("tonight/", f"Things to do in Boston tonight · {PUBLIC_NAME}",
+                  "Concerts, films and talks still to come today around Boston, Cambridge and Somerville, aggregated "
+                  "from each venue’s calendar.",
+                  "Tonight around Boston, Cambridge, and Somerville: everything still to come today, aggregated from "
+                  "each venue’s calendar.")
+
 # The public site's weekend pages, Friday to Sunday: this weekend's (the one it is, or from Monday to Thursday the
 # one coming) and next weekend's. Each: its address, what it's called, its title and description.
 PUBLIC_WEEKENDS = [
@@ -1032,10 +1040,10 @@ def render_combined(item):
     )
 
 
-def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None):
+def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
     page (music/, film/, talks/), holding only that kind's events, or with weekend (0 for this one, 1 for the
-    next), only Friday to Sunday's."""
+    next), only Friday to Sunday's, or tonight, only today's (and tomorrow's, for after midnight)."""
     root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
@@ -1046,6 +1054,10 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         if weekend is not None:
             friday, sunday = weekend_days(built_at.astimezone(BOSTON).date(), weekend)
             events = [item for item in events if friday <= item["date"] <= sunday]
+            shown = {item["source"] for item in events}
+        if tonight:
+            day = built_at.astimezone(BOSTON).date()
+            events = [item for item in events if day <= item["date"] <= day + timedelta(days=1)]
             shown = {item["source"] for item in events}
         sources = [source for source in sources if source["name"] in shown]
         failed = [name for name in failed if name in shown]
@@ -1069,10 +1081,10 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>' for key, label in CATEGORIES.items()
     )
     filter_attributes = ""
-    if public and weekend is not None:
-        # Its buttons show a kind of the weekend's events in place, not remembered; and the whole weekend is on one
-        # page, its pager going between the weekends instead.
-        filter_attributes = " data-here data-one-page"
+    if public and (weekend is not None or tonight):
+        # Its buttons show a kind of the weekend's (or tonight's) events in place, not remembered; and the whole
+        # weekend is on one page, its pager going between the weekends instead. Tonight's shows only today.
+        filter_attributes = " data-here data-one-page" + " data-today" * tonight
     elif public:
         # Links to each kind's page, the current one marked; on the home page the script shows a kind in place.
         current = category or "all"
@@ -1092,7 +1104,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         for name, fetched in stale
     )
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
-    path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else f"{PUBLIC_PAGES[category][0]}/" if category else "")
+    path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else PUBLIC_TONIGHT[0] if tonight else
+            f"{PUBLIC_PAGES[category][0]}/" if category else "")
     footer = (public_footer(path, failed_note, names) if public else
               f"<footer>\n<p>From {names}.</p>\n{failed_note}"
               f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n')
@@ -1116,6 +1129,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             _, name, title, description = PUBLIC_WEEKENDS[weekend]
             tagline = (f"{name} around Boston, Cambridge, and Somerville: {friday:%A, %B} {friday.day} to "
                        f"{sunday:%A, %B} {sunday.day}.")
+        if tonight:
+            _, title, description, tagline = PUBLIC_TONIGHT
         return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
@@ -1172,7 +1187,7 @@ def public_footer(path, notes="", names=""):
     root = PUBLIC_ROOT
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]),
-        ("Weekends", [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
+        ("When", [("Tonight", PUBLIC_TONIGHT[0])] + [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
         (PUBLIC_NAME, [("About", "about.html"), ("Contact", "contact.html")]),
     ]
     marked = ' aria-current="page"'
@@ -1242,7 +1257,7 @@ words, in short.</p>
 
 def render_sitemap(built_at):
     """The public site's pages for search engines: the listings, changing every few hours, and the others."""
-    pages = ([("", "hourly", "1.0")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
+    pages = ([("", "hourly", "1.0"), (PUBLIC_TONIGHT[0], "hourly", "0.9")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
              + [("about.html", "monthly", "0.5"), ("contact.html", "yearly", "0.3")])
     urls = "".join(
         f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
@@ -1286,8 +1301,9 @@ INDEX_JS = """
   const today = key(new Date());
   const tomorrow = key(new Date(Date.now() + 86400000));
   const days = [...document.querySelectorAll(".day")];
+  const todayOnly = document.querySelector(".filter").hasAttribute("data-today"); // The tonight page.
   for (const day of days) {
-    if (day.dataset.date < today) day.remove();
+    if (day.dataset.date < today || (todayOnly && day.dataset.date !== today)) day.remove();
     else day.querySelector(".relative").textContent =
       day.dataset.date === today ? "Today" : day.dataset.date === tomorrow ? "Tomorrow" : "";
   }
@@ -1603,12 +1619,14 @@ def main():
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (PUBLIC_DIR / slug).mkdir(exist_ok=True)
         (PUBLIC_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
+    (PUBLIC_DIR / PUBLIC_TONIGHT[0]).mkdir(parents=True, exist_ok=True)
+    (PUBLIC_DIR / PUBLIC_TONIGHT[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, tonight=True))
     for ahead, (path, *_) in enumerate(PUBLIC_WEEKENDS):
         (PUBLIC_DIR / path).mkdir(parents=True, exist_ok=True)
         (PUBLIC_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
     (PUBLIC_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
     (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, weekend/, weekend/next/, "
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, weekend/, weekend/next/, "
           "about.html, contact.html, sitemap.xml and robots.txt")
 
 
