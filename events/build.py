@@ -978,6 +978,8 @@ def clock(moment):
 # film with sprocket holes down both sides for film, a framed picture of hills and a sun for art & talks. Drawn
 # once in the page; rows point to the drawing.
 ICON_DRAWINGS = {
+    # A notice's mark: a circle with an exclamation point.
+    "notice": '<circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v3.5"/><circle cx="8" cy="11" r=".5" fill="currentColor"/>',
     "art": '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M4.5 11l2.75-3 2 2 1.25-1.25 1.5 2.25"/>'
            '<circle cx="10.5" cy="5.75" r="1" fill="currentColor"/>',
     "music": '<path d="M5.5 12.5V4l8-2v8.5"/><circle cx="3.75" cy="12.5" r="1.75" fill="currentColor"/>'
@@ -1081,15 +1083,18 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
                           for key, href, label in links)
         filter_attributes = f' data-pages data-current="{current}"'
     names = ", ".join(html.escape(source["name"]) for source in sources)
-    failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
+    # Notices of sources that didn't load, marked as such, last in the footer.
+    mark = shared.icon("notice")
+    failed_note = f'<p class="notice">{mark}<span>Couldn’t load {html.escape(", ".join(failed))}.</span></p>\n' if failed else ""
     failed_note += "".join(
-        f'<p>Couldn’t reach {html.escape(name)}; its listings are from <time class="ago" datetime="{fetched.isoformat()}"></time>.</p>\n'
+        f'<p class="notice">{mark}<span>Couldn’t reach {html.escape(name)}; its listings are from '
+        f'<time class="ago" datetime="{fetched.isoformat()}"></time>.</span></p>\n'
         for name, fetched in stale
     )
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
     path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else f"{PUBLIC_PAGES[category][0]}/" if category else "")
     footer = (public_footer(path, failed_note, names) if public else
-              f"<footer>\n{failed_note}<p>From {names}.</p>\n"
+              f"<footer>\n<p>From {names}.</p>\n{failed_note}"
               f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n')
     others = ""
     if public and weekend is not None:
@@ -1162,8 +1167,8 @@ def shorter(paragraphs):
 
 
 def public_footer(path, notes="", names=""):
-    """The foot of each of the public site's pages: any source it couldn't reach, the site's pages in three
-    short lists (this one marked), and, under a list of events, where they come from."""
+    """The foot of each of the public site's pages: the site's pages in three short lists (this one marked),
+    and, under a list of events, where they come from, then any source it couldn't reach."""
     root = PUBLIC_ROOT
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]),
@@ -1178,7 +1183,7 @@ def public_footer(path, notes="", names=""):
         for heading, links in groups
     )
     where = f"<p>Listings from {names}, aggregated from each venue’s calendar every few hours.</p>\n" if names else ""
-    return f'<footer>\n{notes}<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n{where}</footer>\n'
+    return f'<footer>\n<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n{where}{notes}</footer>\n'
 
 
 def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
@@ -1445,6 +1450,9 @@ CSS = """
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
+  /* A source that didn't load, at the foot of the page, marked by a small circled exclamation point. */
+  .notice { display: flex; align-items: baseline; gap: .45em; }
+  .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
   .times time + time::before { content: ", "; }

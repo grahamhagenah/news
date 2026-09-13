@@ -546,6 +546,17 @@ class Page(unittest.TestCase):
         for path in ("", "about.html", "contact.html"):
             self.assertIn(f"<loc>{build.PUBLIC_URL}{path}</loc>", sitemap)
 
+    def test_notices_come_last_with_their_mark(self):
+        venue = dict(source("tribe", "x", name="Lizard Lounge"), public=True)
+        items = [build.event(venue, "A Show", date(2026, 9, 20), time(20, 0))]
+        stale = [("Lizard Lounge", datetime(2026, 9, 13, 12, tzinfo=timezone.utc))]
+        built = datetime(2026, 9, 13, 13, tzinfo=timezone.utc)
+        for page in (build.render_index(items, [venue], [], stale, built, public=True),
+                     build.render_index(items, [venue], [], stale, built)):
+            footer = page.split("<footer>")[1]
+            self.assertIn('<p class="notice"><svg class="icon" aria-hidden="true"><use href="#icon-notice"/></svg><span>Couldn’t reach Lizard Lounge', footer)
+            self.assertLess(footer.index("rom Lizard Lounge"), footer.index('class="notice"'), "under the list of venues")
+
     def test_public_previews_are_shorter(self):
         long = ["A" * 150 + " " + "b" * 150, "Doors 7 · 21+"]
         self.assertLessEqual(len(" ".join(build.shorter(long))), build.PUBLIC_ABOUT_CHARS + 1)
