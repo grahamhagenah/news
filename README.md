@@ -30,9 +30,9 @@ Run everything from this top folder, with only the Python standard library:
 - Hovering an event's name shows what its source says about it: a film's blurb or credits, a band's bio, the door time and cover, as the newsfeed shows a post's first lines. Sources that say nothing (the MFA, the Middle East, Kendall Square) have no preview, except a cut-off name in full.
 - Ticketmaster venues need a free [Ticketmaster Discovery API](https://developer.ticketmaster.com/) key, kept as this repo's `TICKETMASTER_KEY` secret. To add one, find its venue id with Actions → "Find a Ticketmaster venue".
 
-## Boston, Weekly, the public version
+## Boston, Daily, the public version
 
-The events build also writes the same listings for anyone, as **Boston, Weekly** (`dist/public`), published from the [grahamhagenah/boston-weekly](https://github.com/grahamhagenah/boston-weekly) repo's `gh-pages` branch at https://boston.grahamhagenah.com/ (a CNAME record for `boston` points at `grahamhagenah.github.io`). It has its own name in place of the Newsfeed/Events switcher, and an About page (what it is, and every venue) and a Contact page, linked in each page's footer, shorter previews of the venues' own descriptions, no "Add a source" link, and lets search engines list it.
+The events build also writes the same listings for anyone, as **Boston, Daily** (`dist/public`), published from the [grahamhagenah/boston-daily](https://github.com/grahamhagenah/boston-daily) repo's `gh-pages` branch at https://boston.grahamhagenah.com/ (a CNAME record for `boston` points at `grahamhagenah.github.io`). It has its own name in place of the Newsfeed/Events switcher, and an About page (what it is, and every venue) and a Contact page, linked in each page's footer, shorter previews of the venues' own descriptions, no "Add a source" link, and lets search engines list it.
 
 - For search engines: a descriptive title and description, a one-line tagline, a canonical address, sharing tags, every listing as schema.org event data (with each venue's street address, from `VENUE_ADDRESSES` in `events/build.py` unless the source gives the event's own, so add a new venue's there), a `sitemap.xml` and a `robots.txt` pointing to it.
 - A source ending in `public=no` in `events/sources.txt` stays off it (the Boston Film Hub theaters, for now).

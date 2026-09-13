@@ -32,7 +32,7 @@ CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
 # The same listings, for anyone: its own name, About and Contact pages, shorter previews, and only the
 # sources fine to republish (a line in sources.txt ending in public=no stays on this page only).
-PUBLIC_NAME = "Boston, Weekly"
+PUBLIC_NAME = "Boston, Daily"
 PUBLIC_DIR = ROOT.parent / "dist" / "public"
 PUBLIC_URL = "https://boston.grahamhagenah.com/"
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
