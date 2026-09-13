@@ -430,7 +430,8 @@ class Page(unittest.TestCase):
         public = build.render_index(found + kept, sources, [], [], built, public=True)
         mine = build.render_index(found + kept, sources, [], [], built)
         self.assertNotIn("Newsfeed", public)
-        self.assertIn('<a href="about.html">About</a>', public)
+        self.assertIn('<a href="about.html">About</a> · <a href="contact.html">Contact</a>', public.split("<footer>")[1])
+        self.assertNotIn('href="about.html"', public.split("<footer>")[0], "not in the header")
         self.assertNotIn("Add a source", public)
         self.assertIn('content="index, follow"', public)
         self.assertIn('content="noindex, nofollow"', mine)
@@ -441,6 +442,7 @@ class Page(unittest.TestCase):
         self.assertIn("Roadrunner", about)
         self.assertNotIn("Theatre via Hub", about)
         self.assertIn("https://formsubmit.co/", build.render_contact())
+        self.assertIn('<a href="contact.html">Contact</a>', about.split("<footer>")[1])
 
     def test_public_previews_are_shorter(self):
         long = ["A" * 150 + " " + "b" * 150, "Doors 7 · 21+"]

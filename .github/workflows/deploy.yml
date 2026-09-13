@@ -72,12 +72,12 @@ jobs:
           GIT_SSH_COMMAND="ssh -i ~/.ssh/events -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
             git push -qf git@github.com:grahamhagenah/events.git gh-pages
 
-      # The same listings for anyone, as Around Boston, pushed to the grahamhagenah/around-boston repo's
-      # gh-pages branch, which publishes it (for now at grahamhagenah.github.io/around-boston).
+      # The same listings for anyone, as Boston, Weekly, pushed to the grahamhagenah/boston-weekly repo's
+      # gh-pages branch, which publishes it (for now at grahamhagenah.github.io/boston-weekly).
       - name: Publish the public events page
         if: hashFiles('dist/public/index.html') != ''
         env:
-          # A deploy key that can write to the around-boston repo, and nothing else.
+          # A deploy key that can write to the boston-weekly repo, and nothing else.
           DEPLOY_KEY: ${{ secrets.PUBLIC_DEPLOY_KEY }}
         run: |
           touch dist/public/.nojekyll
@@ -86,9 +86,9 @@ jobs:
           git init -q -b gh-pages
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -qm "Around Boston, built from grahamhagenah/news@${GITHUB_SHA::7}"
+            commit -qm "Boston, Weekly, built from grahamhagenah/news@${GITHUB_SHA::7}"
           GIT_SSH_COMMAND="ssh -i ~/.ssh/public -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-            git push -qf git@github.com:grahamhagenah/around-boston.git gh-pages
+            git push -qf git@github.com:grahamhagenah/boston-weekly.git gh-pages
 
       # An issue for any source failing for hours (GitHub emails about it); never holds up either page. A page
       # not built this run is left out, so its issues stay as they are.

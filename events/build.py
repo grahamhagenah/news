@@ -30,11 +30,11 @@ BOSTON = ZoneInfo("America/New_York")
 USER_AGENT = "Mozilla/5.0 (compatible; events-feed/1.0)"
 CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
-# The same listings, for anyone: its own name, an About and a Contact page, shorter previews, and only the
+# The same listings, for anyone: its own name, About and Contact pages, shorter previews, and only the
 # sources fine to republish (a line in sources.txt ending in public=no stays on this page only).
-PUBLIC_NAME = "Around Boston"
+PUBLIC_NAME = "Boston, Weekly"
 PUBLIC_DIR = ROOT.parent / "dist" / "public"
-PUBLIC_URL = "https://grahamhagenah.github.io/around-boston/"
+PUBLIC_URL = "https://grahamhagenah.github.io/boston-weekly/"
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 
@@ -968,7 +968,7 @@ def render_index(events, sources, failed, stale, built_at, public=False):
         f'<p>Couldn’t reach {html.escape(name)}; its listings are from <time class="ago" datetime="{fetched.isoformat()}"></time>.</p>\n'
         for name, fetched in stale
     )
-    more = ('<p>Listings come from each venue’s own calendar, every few hours. <a href="about.html">About</a></p>\n'
+    more = ("<p>Listings come from each venue’s own calendar, every few hours.</p>\n" + PUBLIC_LINKS
             if public else f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n')
     body = (
         f'<nav class="filter" aria-label="Show">{buttons}{shared.SEARCH}</nav>\n'
@@ -996,10 +996,16 @@ def shorter(paragraphs):
     return kept
 
 
+# About and Contact, at the foot of each of the public site's pages.
+PUBLIC_LINKS = '<p><a href="about.html">About</a> · <a href="contact.html">Contact</a></p>\n'
+
+
 def public_page(current, title, body, built_at=None):
-    """A page of the public site: its name, About and Contact in the header; search engines welcome."""
-    links = [(PUBLIC_NAME, "./", current == ""), ("About", "about.html", current == "about"),
-             ("Contact", "contact.html", current == "contact")]
+    """A page of the public site: its name, the way home, in the header, About and Contact in the footer;
+    search engines welcome."""
+    links = [(PUBLIC_NAME, "./", current == "")]
+    if "<footer>" not in body:
+        body += f"\n<footer>\n{PUBLIC_LINKS}</footer>"
     head = ('<link rel="icon" href="favicon.svg" type="image/svg+xml">\n'
             '<meta name="description" content="Concerts, films, and art and talks in Boston, Cambridge and '
             'Somerville over the next month, from each venue’s own calendar.">')
