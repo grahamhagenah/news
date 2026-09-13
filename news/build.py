@@ -468,7 +468,7 @@ def render_index(feeds, posts, failed, stale, built_at):
 
 # Where a video plays: over the list, with a way to close it, and nothing else. (The player shows its name.)
 PLAYER = """<dialog class="player" aria-label="Video">
-<div class="player-bar"><button class="player-close" aria-label="Close">×</button></div>
+<button class="player-close" aria-label="Close"><span class="on-keyboard">esc</span><span class="on-touch">close</span></button>
 <div class="player-frame"></div>
 <p class="player-note" hidden>This video can’t be played here. <a href="">Watch it on YouTube</a></p>
 </dialog>
@@ -754,15 +754,20 @@ CSS = """
   .player { width: min(64rem, 100vw - 2.5rem); max-width: none; max-height: none; padding: 0; border: 0;
             background: none; color: #fff; overflow: visible; }
   .player::backdrop { background: #000; }
-  .player-bar { display: flex; justify-content: flex-end; padding: 0 0 .5rem; }
-  .player-close { flex: none; padding: 0 .25rem; border: 0; background: none; color: #888; font: inherit;
-                  font-size: 1.6rem; line-height: 1; cursor: pointer; }
-  .player-close:hover { color: #fff; }
+  /* Closing it: a small key in the window's corner reading esc, or close where there's no keyboard. */
+  .player-close { position: fixed; top: 1.25rem; right: 1.25rem; padding: .2rem .45rem; border: 1px solid #333;
+                  border-radius: 4px; background: none; color: #666; font: inherit; font-size: .7rem; line-height: 1.3;
+                  letter-spacing: .06em; cursor: pointer; }
+  .player-close:hover { border-color: #555; color: #bbb; }
+  .player-close:focus { outline: none; }
+  .player-close:focus-visible { border-color: #777; color: #bbb; }
+  .player-close .on-touch { display: none; }
+  @media (hover: none) { .player-close .on-keyboard { display: none; } .player-close .on-touch { display: inline; } }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
   .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
   .player-note { margin: .75rem 0 0; color: #999; font-size: .85rem; }
   .player-note a { color: #fff; text-decoration: underline; text-underline-offset: .2em; }
-  @media (max-width: 34rem) { .player { width: 100vw; } .player-bar { padding: 0 1rem .75rem; } }
+  @media (max-width: 34rem) { .player { width: 100vw; } }
   .new-posts { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
                transform: translateX(-50%); padding: .45rem 1.1rem; border: 0; border-radius: 999px;
                background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
