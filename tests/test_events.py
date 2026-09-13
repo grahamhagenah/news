@@ -491,6 +491,27 @@ class Page(unittest.TestCase):
         self.assertIn('<nav class="filter" aria-label="Show"><button', mine)
         self.assertIn(f"<loc>{build.PUBLIC_URL}talks/</loc>", build.render_sitemap(built))
 
+    def test_weekend_days(self):
+        # Monday to Thursday, the weekend coming; Friday to Sunday, the one it's in.
+        for day, friday in [(date(2026, 9, 14), date(2026, 9, 18)), (date(2026, 9, 17), date(2026, 9, 18)),
+                            (date(2026, 9, 18), date(2026, 9, 18)), (date(2026, 9, 20), date(2026, 9, 18))]:
+            self.assertEqual(build.weekend_days(day), (friday, friday + timedelta(days=2)), day)
+
+    def test_weekend_page(self):
+        venue = dict(source("tribe", "x", name="Somewhere"), public=True)
+        events = [build.event(venue, f"On the {day.day}th", day, time(20, 0)) for day in
+                  (date(2026, 9, 17), date(2026, 9, 18), date(2026, 9, 20), date(2026, 9, 21))]
+        built = datetime(2026, 9, 14, 12, tzinfo=timezone.utc)  # A Monday.
+        page = build.render_index(events, [venue], [], [], built, public=True, weekend=True)
+        self.assertEqual([title for title in ("On the 17th", "On the 18th", "On the 20th", "On the 21th") if title in page],
+                         ["On the 18th", "On the 20th"])
+        self.assertIn("Friday, September 18 to Sunday, September 20", page)
+        self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
+        self.assertIn('<nav class="filter" aria-label="Show" data-here><button', page)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', page)
+        self.assertIn('<a href="/weekend/">This weekend</a>', build.render_about([venue], built))
+        self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/</loc>", build.render_sitemap(built))
+
     def test_event_data_uses_an_events_own_address(self):
         item = build.event(source("bibliocommons", "x", "art", "Boston Public Library"), "A Talk", date(2026, 9, 20),
                            time(18, 0), venue="Faneuil Library", address=("419 Faneuil Street", "Brighton", "02135"))

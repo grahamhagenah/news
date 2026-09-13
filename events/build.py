@@ -42,6 +42,18 @@ PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, 
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
 PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."
+# The public site's weekend page: Friday to Sunday, this weekend's or the next's.
+PUBLIC_WEEKEND = ("weekend/", f"Things to do in Boston this weekend · {PUBLIC_NAME}",
+                  "Concerts, films and talks around Boston, Cambridge and Somerville this weekend, Friday to Sunday, "
+                  "aggregated from each venue’s calendar.")
+
+
+def weekend_days(day):
+    """The Friday and Sunday of the weekend day is in, or, Monday to Thursday, of the one coming."""
+    friday = day - timedelta(days=day.weekday() - 4) if day.weekday() >= 4 else day + timedelta(days=4 - day.weekday())
+    return friday, friday + timedelta(days=2)
+
+
 # Each kind's own page on the public site, which its filter link goes to: its address, and what it tells
 # search engines and readers it is.
 PUBLIC_PAGES = {
@@ -1005,15 +1017,19 @@ def render_combined(item):
     )
 
 
-def render_index(events, sources, failed, stale, built_at, public=False, category=None):
+def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=False):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
-    page (music/, film/, talks/), holding only that kind's events."""
+    page (music/, film/, talks/), holding only that kind's events, or for the weekend, only Friday to Sunday's."""
     root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
         events = [dict(item, about=shorter(item.get("about", []))) for item in events if item["source"] in shown]
         if category:
             events = [item for item in events if item["category"] == category]
+            shown = {item["source"] for item in events}
+        if weekend:
+            friday, sunday = weekend_days(built_at.astimezone(BOSTON).date())
+            events = [item for item in events if friday <= item["date"] <= sunday]
             shown = {item["source"] for item in events}
         sources = [source for source in sources if source["name"] in shown]
         failed = [name for name in failed if name in shown]
@@ -1037,7 +1053,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>' for key, label in CATEGORIES.items()
     )
     filter_attributes = ""
-    if public:
+    if public and weekend:
+        filter_attributes = " data-here"  # Its buttons show a kind of the weekend's events in place, not remembered.
+    elif public:
         # Links to each kind's page, the current one marked; on the home page the script shows a kind in place.
         current = category or "all"
         links = [("all", root, "All")] + [(key, f"{root}{PUBLIC_PAGES[key][0]}/", f"{icon(key, decorative=True)}{label}")
@@ -1064,6 +1082,10 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     if public:
         path, title, description, tagline = (PUBLIC_PAGES[category][0] + "/", *PUBLIC_PAGES[category][1:]) if category else (
             "", PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
+        if weekend:
+            path, title, description = PUBLIC_WEEKEND
+            tagline = (f"This weekend around Boston, Cambridge, and Somerville: {friday:%A, %B} {friday.day} to "
+                       f"{sunday:%A, %B} {sunday.day}.")
         return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
@@ -1115,8 +1137,9 @@ def shorter(paragraphs):
 
 
 def public_links(root=PUBLIC_ROOT):
-    """About and Contact, at the foot of each of the public site's pages."""
-    return f'<p><a href="{root}about.html">About</a> · <a href="{root}contact.html">Contact</a></p>\n'
+    """This weekend's page, About and Contact, at the foot of each of the public site's pages."""
+    return (f'<p><a href="{root}weekend/">This weekend</a> · <a href="{root}about.html">About</a> · '
+            f'<a href="{root}contact.html">Contact</a></p>\n')
 
 
 def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
@@ -1175,7 +1198,7 @@ words, in short.</p>
 
 def render_sitemap(built_at):
     """The public site's pages for search engines: the listings, changing every few hours, and the others."""
-    pages = ([("", "hourly", "1.0")] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
+    pages = ([("", "hourly", "1.0"), ("weekend/", "hourly", "0.9")] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
              + [("about.html", "monthly", "0.5"), ("contact.html", "yearly", "0.3")])
     urls = "".join(
         f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
@@ -1269,8 +1292,9 @@ INDEX_JS = """
   const searchable = new Map(allRows.map(li => [li, plain(li.textContent)]));
   const kindPages = filter.hasAttribute("data-pages");
   const everything = !kindPages || filter.dataset.current === "all";
+  const remember = !kindPages && !filter.hasAttribute("data-here"); // The weekend page's choice isn't kept.
   let show = kindPages ? filter.dataset.current : "all";
-  if (!kindPages) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
+  if (remember) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
   search.value = new URLSearchParams(location.search).get("q") || "";
   const query = () => (search.offsetParent && search.value.trim() ? "?" + new URLSearchParams({ q: search.value.trim() }) : "");
   for (const a of filter.querySelectorAll("a")) a.dataset.href = a.getAttribute("href");
@@ -1317,7 +1341,7 @@ INDEX_JS = """
     show = b.dataset.show;
     if (kindPages) history.pushState(null, "", new URL(b.dataset.href, location.href).pathname + query());
     else {
-      try { localStorage.setItem("events-show", show); } catch (error) {}
+      if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
       history.replaceState(null, "", address(1)); // Back to page one.
     }
     showEvents();
@@ -1519,9 +1543,11 @@ def main():
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (PUBLIC_DIR / slug).mkdir(exist_ok=True)
         (PUBLIC_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
+    (PUBLIC_DIR / "weekend").mkdir(exist_ok=True)
+    (PUBLIC_DIR / "weekend" / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=True))
     (PUBLIC_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
     (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, "
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, weekend/, "
           "about.html, contact.html, sitemap.xml and robots.txt")
 
 

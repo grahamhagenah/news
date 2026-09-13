@@ -21,6 +21,7 @@ CARDS = [
     ("music", "Concerts around Boston", "Clubs, bars and halls across Boston, Cambridge, and Somerville.", ["music"], "music/"),
     ("film", "Films around Boston", "Repertory screenings to new releases, at theaters across Boston, Cambridge, and Somerville.", ["film"], "film/"),
     ("talks", "Art & talks around Boston", "Artist talks, lectures and exhibitions around Boston, Cambridge, and Somerville.", ["art"], "talks/"),
+    ("weekend", "This weekend in Boston", "Concerts, films, and talks, Friday to Sunday, across Boston, Cambridge, and Somerville.", list(COLORS), "weekend/"),
 ]
 
 
