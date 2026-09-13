@@ -67,6 +67,9 @@ https://audioboom.com/channels/5174627.rss   Still Counting   days=30
 # Video (YouTube channels, which play here; a channel's page works too, like https://www.youtube.com/@nprmusic).
 # Shorts are left out. NPR Music's channel is its Tiny Desk concerts, besides those.
 https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A   Tiny Desk   days=30
+https://www.youtube.com/feeds/videos.xml?channel_id=UCfgtNfWCtsLKutY-BHzIb9Q   City Nerd   days=30
+https://www.youtube.com/feeds/videos.xml?channel_id=UCGBpxWJr9FNOcFYA5GkKrMg   Boiler Room   days=7   limit=6
+https://www.youtube.com/feeds/videos.xml?channel_id=UCPKT_csvP72boVX0XrMtagQ   Cercle   days=30
 
 # Added from the sources page
 https://www.theverge.com/ The Verge
