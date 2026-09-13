@@ -3,7 +3,8 @@
 # sort a source's listings into other categories themselves, like the MFA's films.
 # How to read it:
 #   aeg        an AEG Presents venue's events.json (Roadrunner)
-#   axs        an AXS venue site's full listing page, /events/all, with door times (The Sinclair)
+#   axs        an AXS venue site's full listing page, /events/all, and each show's page for its start time
+#              (The Sinclair)
 #   ticketweb  a venue page with TicketWeb's event listing (The Middle East)
 #   jsonld     a page with schema.org Event data in it (the Brattle's Coming Soon page, House of Blues, a
 #              venue's page on DICE)

@@ -259,8 +259,9 @@ def read_aeg(source):
 
 def read_axs(source):
     """AXS venue sites' full listing, /events/all (The Sinclair): every show, with its supporting acts and door
-    time. (Their RSS feed has only the next ten, with no times.) The show itself starts on each show's own page,
-    usually an hour later; the time here is the doors', and its preview says so."""
+    time. (Their RSS feed has only the next ten, with no times.) When the show itself starts is only on its own
+    page, so those are read for the shows soon enough to be listed; a show whose page doesn't load keeps its
+    door time, which its preview gives either way."""
     events = []
     for entry in fetch(source["url"]).split('<div class="entry')[1:]:
         def field(pattern):  # The date and time each come after an icon of their own.
@@ -283,7 +284,23 @@ def read_axs(source):
             detail=f"with {support}" if support else "",
             about=[" · ".join(fact for fact in facts if fact)],
         ))
+    soon = [listing for listing in events if listing["date"] <= window_end()]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for listing, start in zip(soon, pool.map(lambda listing: axs_show_time(listing["link"]), soon)):
+            if start:
+                listing["times"] = [start]
     return events
+
+
+def axs_show_time(link):
+    """When a show starts, from its own page on an AXS venue site, or None if the page doesn't say or load. A
+    second try, since one page in thirty now and then doesn't come the first time."""
+    try:
+        page = fetch(link, attempts=2, timeout=10)
+    except Exception:
+        return None
+    found = re.search(r'<label class="event_time">\s*Time\s*</label>\s*<span>\s*(\d{1,2}:\d{2} [AP]M)', page)
+    return datetime.strptime(found.group(1), "%I:%M %p").time() if found else None
 
 
 def read_ticketweb(source):

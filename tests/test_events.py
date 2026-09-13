@@ -20,7 +20,8 @@ FIXTURES = Path(__file__).parent / "fixtures" / "events"
 # Which sample stands in for which address.
 ROUTES = [
     ("aegwebprod", "roadrunner.json"),
-    ("sinclaircambridge.com", "sinclair.html"),
+    ("sinclaircambridge.com/events/detail/1460677", "sinclair_show.html"),
+    ("sinclaircambridge.com", "sinclair.html"),  # Its other shows' pages: no show time on them, so door times.
     ("mideastclub.com", "mideast.html"),
     ("brattlefilm.org", "brattle.html"),
     ("houseofblues.com", "houseofblues.html"),
@@ -84,16 +85,26 @@ class Readers(unittest.TestCase):
         self.assertTrue(all(item["times"] for item in found))
         self.assertTrue(any(item["detail"].startswith("with ") for item in found))
 
-    def test_axs_door_times_without_cancelled_shows(self):
-        found = self.read("axs", "https://www.sinclaircambridge.com/events/all")
+    def test_axs_show_times_without_cancelled_shows(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 1)):
+            found = self.read("axs", "https://www.sinclaircambridge.com/events/all")
         self.assertEqual([item["title"] for item in found], ["Chanel Beads", "DON WEST", "John Craigie", "The Glitter Boys"])
         first = found[0]
-        self.assertEqual((first["date"], first["times"]), (date(2026, 9, 13), [time(19, 0)]))
+        # Its own page's show time, not the listing's door time, which its preview gives.
+        self.assertEqual((first["date"], first["times"]), (date(2026, 9, 13), [time(20, 0)]))
+        self.assertEqual(first["about"], ["Doors 7pm · All Ages"])
         self.assertEqual(first["detail"], "with Horse Vision, Ivy Knight")
         self.assertEqual(first["link"], "https://www.sinclaircambridge.com/events/detail/1460677")
-        self.assertEqual(first["about"], ["Doors 7pm · All Ages"])
+        self.assertEqual(found[1]["times"], [time(19, 30)], "a page without a show time leaves the door time")
         self.assertEqual(found[2]["about"][0].split(" · ")[0], "Fall 2026", "the tour, first")
         self.assertEqual(found[3]["detail"], "", "no supporting acts")
+
+    def test_axs_reads_show_pages_only_for_shows_in_the_window(self):
+        asked = []
+        with mock.patch.object(build, "fetch", lambda url, **options: asked.append(url) or sample(url)), \
+                mock.patch.object(build, "today", lambda: date(2026, 8, 1)):  # Its sample's shows are all past the window then.
+            build.read_axs(source("axs", "https://www.sinclaircambridge.com/events/all", "music", "The Sinclair"))
+        self.assertEqual(asked, ["https://www.sinclaircambridge.com/events/all"])
 
     def test_ticketweb_venue_without_room(self):
         found = self.read("ticketweb", "https://mideastclub.com/")
