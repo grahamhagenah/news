@@ -1025,8 +1025,8 @@ def render_index(events, sources, failed, stale, built_at, public=False):
         f"<script>{INDEX_JS}</script>"
     )
     if public:
-        tagline = ('<h1 class="tagline">Concerts, films, and art and talks around Boston, Cambridge and Somerville, '
-                   'from each venue’s own calendar.</h1>\n')
+        tagline = ('<h1 class="tagline">Concerts, films, and talks around Boston, Cambridge, and Somerville, '
+                   'aggregated from each venue’s calendar.</h1>\n')
         return public_page("", PUBLIC_TITLE, tagline + body, built_at, description=PUBLIC_DESCRIPTION,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
