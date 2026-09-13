@@ -39,6 +39,7 @@ ROUTES = [
     ("mfa.org/programs", "mfa.html"),
     ("harvardfilmarchive.org/calendar", "hfa.html"),
     ("bostonfilmhub.com", "bostonfilmhub.html"),
+    ("frenchlibrary.org", "frenchlibrary.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
 ]
@@ -144,6 +145,18 @@ class Readers(unittest.TestCase):
         self.assertEqual([(item["title"], item["venue"]) for item in found], [("Harold and Maude", "Somerville Theatre")])
         self.assertTrue(found[0]["link"].startswith("https://www.somervilletheatre.com/"))
         self.assertTrue(found[0]["about"])
+
+    def test_french_library_screenings_and_talks(self):
+        found = build.read_french_library(source("frenchlibrary", "https://frenchlibrary.org/upcoming-events/", "art", "French Library"))
+        kinds = {item["title"]: item["category"] for item in found}
+        self.assertEqual(kinds["Ciné Club Series: Hugo by Pascal Bonitzer"], "film")
+        self.assertEqual(kinds["Leïla Slimani: I’ll Take the Fire"], "art")
+        # A screening known only by its description: "silent cinema as it was meant to be seen".
+        self.assertEqual([kind for title, kind in kinds.items() if "House of Usher" in title], ["film"])
+        # Not the children's story time, the cooking class, or the online conversation club.
+        self.assertEqual(len(found), 3)
+        hugo = next(item for item in found if item["title"].startswith("Ciné Club"))
+        self.assertEqual((hugo["date"], hugo["times"]), (date(2026, 9, 15), [time(18, 0)]))
 
     def test_hfa_screenings_with_credits(self):
         found = self.read("hfa", "https://harvardfilmarchive.org/calendar", "film")

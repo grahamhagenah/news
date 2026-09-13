@@ -317,6 +317,40 @@ def read_hfa(source):
     return events
 
 
+# The French Library's event types, from the label on each, and where each goes: its screenings are Film,
+# the rest of its programs Art & talks. Its classes, clubs and children's events are left out.
+FRENCH_LIBRARY_KINDS = {"Talks & Discussions": "art", "Arts & Exhibitions": "art", "Performing Arts & Screenings": "art"}
+
+
+def read_french_library(source):
+    """The French Library's upcoming events page, all of them on one page."""
+    events = []
+    for card in fetch(source["url"]).split('class="new_event_card')[1:]:
+        kind = re.search(r'class="event-type-pill">(.*?)<', card, re.S)
+        category = FRENCH_LIBRARY_KINDS.get(text(kind.group(1)) if kind else "")
+        title = re.search(r'<h3 class="subsection_title">\s*<a href="([^"]+)">(.*?)</a>', card, re.S)
+        day = re.search(r'class="event_date">\w+, (\w+ \d{1,2}, \d{4})<', card)
+        clock_text = re.search(r'class="event_time">(\d{1,2}):(\d{2}) ([AP])M', card)
+        online = re.search(r'class="event_format">\s*Online', card)
+        if not (category and title and day) or online:
+            continue
+        name = re.sub(r"\s+", " ", text(title.group(2)))
+        excerpt = re.search(r'class="event_excerpt">(.*?)</p>', card, re.S)
+        # A screening says so in its name ("Ciné-Club: …") or its description ("silent cinema, with live music").
+        if text(kind.group(1)) == "Performing Arts & Screenings" and re.search(
+                r"\bcin[ée]|screening|\bfilms?\b", f"{name} {text(excerpt.group(1)) if excerpt else ''}", re.I):
+            category = "film"
+        start = None
+        if clock_text:
+            hour = int(clock_text.group(1)) % 12 + (12 if clock_text.group(3) == "P" else 0)
+            start = datetime.min.time().replace(hour=hour, minute=int(clock_text.group(2)))
+        listing = event(source, name, datetime.strptime(day.group(1), "%B %d, %Y").date(), start,
+                        link=html.unescape(title.group(1)), about=about(excerpt.group(1) if excerpt else ""))
+        listing["category"] = category
+        events.append(listing)
+    return events
+
+
 def read_veezi_site(source):
     """Theaters whose sites are Veezi's hosted ones (West Newton Cinema), from the data the site loads: each
     film playing now or coming soon, with its showtimes and synopsis."""
@@ -666,6 +700,7 @@ READERS = {
     "ics": read_ics,
     "tribe": read_tribe,
     "hfa": read_hfa,
+    "frenchlibrary": read_french_library,
     "veezi": read_veezi_site,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,

@@ -12,6 +12,7 @@
 #   alamo      an Alamo Drafthouse market's schedule JSON (Boston, which is the Seaport)
 #   landmark   a Landmark Theatres theater id in place of the URL (Kendall Square)
 #   hfa        the Harvard Film Archive's calendar page
+#   frenchlibrary  the French Library's upcoming events page: its screenings, talks and exhibitions
 #   veezi      a theater site hosted by Veezi, from the showtimes its pages load (West Newton Cinema)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   tribe      a WordPress site's The Events Calendar API, /wp-json/tribe/events/v1/events, optionally with
@@ -42,6 +43,8 @@ bibliocommons  https://gateway.bibliocommons.com/v2/libraries/bpl/rss/events?typ
 mfa        https://www.mfa.org/programs   art   MFA
 harvardart https://harvardartmuseums.org/calendar   art   Harvard Art Museums
 tribe      https://www.sowaboston.com/wp-json/tribe/events/v1/events   art   SoWa
+frenchlibrary  https://frenchlibrary.org/upcoming-events/   art   French Library
+tribe      https://artsemerson.org/wp-json/tribe/events/v1/events   art   ArtsEmerson
 
 # Film
 jsonld     https://brattlefilm.org/coming-soon/   film   Brattle
