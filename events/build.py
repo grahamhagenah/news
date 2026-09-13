@@ -1171,8 +1171,11 @@ PUBLIC_CSS = """
   .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
                                       color: #fff; font: inherit; font-size: .95rem; }
   .contact input:focus, .contact textarea:focus { border-color: #777; outline: none; }
-  .contact button { justify-self: start; padding: .45rem 1.1rem; border: 0; border-radius: 999px; background: #fff;
-                    color: #000; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
+  .contact button { justify-self: start; padding: .45rem 1.2rem; border: 1px solid #555; border-radius: 999px;
+                    background: none; color: #ddd; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
+                    transition: border-color .15s, color .15s, background-color .15s; }
+  .contact button:hover, .contact button:focus-visible { border-color: #ccc; background: #151515; color: #fff; outline: none; }
+  .contact button:active { background: #222; }
   .contact .honey { display: none; }
 """
 

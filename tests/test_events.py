@@ -437,7 +437,8 @@ class Page(unittest.TestCase):
         self.assertIn('content="noindex, nofollow"', mine)
         self.assertNotIn("Theatre via Hub", public, "a source marked public=no stays off it")
         self.assertIn("Theatre via Hub", mine)
-        self.assertLess(len(public), len(mine), "shorter previews, and no Hub listings")
+        listings = lambda page: page.split("</style>")[1].split("<footer>")[0]  # Not the styles, which differ.
+        self.assertLess(len(listings(public)), len(listings(mine)), "shorter previews, and no Hub listings")
         about = build.render_about(sources, built)
         self.assertIn("Roadrunner", about)
         self.assertNotIn("Theatre via Hub", about)
