@@ -42,7 +42,6 @@ ROUTES = [
     ("mfa.org/programs/film", "mfa_film.html"),
     ("mfa.org/programs/music", "mfa_music.html"),
     ("harvardfilmarchive.org/calendar", "hfa.html"),
-    ("bostonfilmhub.com", "bostonfilmhub.html"),
     ("frenchlibrary.org", "frenchlibrary.html"),
     ("icaboston.org/calendar", "ica.html"),
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
@@ -163,12 +162,6 @@ class Readers(unittest.TestCase):
         self.assertEqual((found[0]["date"], found[0]["times"]), (date(2026, 9, 11), [time(21, 30)]))
         self.assertEqual(found[0]["title"], "CAVA (Germany) w/ Lupo Citta")
 
-    def test_jsonld_kept_to_one_venue(self):
-        found = self.read("jsonld", "https://bostonfilmhub.com/#venue=Somerville+Theatre", "film", "Somerville Theatre via Boston Film Hub")
-        self.assertEqual([(item["title"], item["venue"]) for item in found], [("Harold and Maude", "Somerville Theatre")])
-        self.assertTrue(found[0]["link"].startswith("https://www.somervilletheatre.com/"))
-        self.assertTrue(found[0]["about"])
-
     def test_french_library_screenings_and_talks(self):
         found = build.read_french_library(source("frenchlibrary", "https://frenchlibrary.org/upcoming-events/", "art", "French Library"))
         kinds = {item["title"]: item["category"] for item in found}
@@ -207,7 +200,7 @@ class Readers(unittest.TestCase):
 
 
 class Fetching(unittest.TestCase):
-    def test_a_page_two_sources_read_is_downloaded_once(self):
+    def test_a_page_read_twice_is_downloaded_once(self):
         calls = []
         def download(url, *args):
             calls.append(url)
@@ -215,9 +208,9 @@ class Fetching(unittest.TestCase):
         build._fetched.clear()
         self.addCleanup(build._fetched.clear)
         with mock.patch.object(build.shared, "fetch", download):
-            build.fetch("https://bostonfilmhub.com/#venue=Somerville+Theatre")
-            build.fetch("https://bostonfilmhub.com/#venue=Capitol+Theatre")
-        self.assertEqual(calls, ["https://bostonfilmhub.com/"])
+            build.fetch("https://www.icaboston.org/events/colin-stetson")
+            build.fetch("https://www.icaboston.org/events/colin-stetson")
+        self.assertEqual(calls, ["https://www.icaboston.org/events/colin-stetson"])
 
     def test_mit_asks_for_exhibits_and_lectures_only(self):
         asked = []
@@ -441,9 +434,9 @@ class Page(unittest.TestCase):
     def test_public_page(self):
         with mock.patch.object(build, "fetch", sample):
             found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json", name="Roadrunner"))
-            kept = build.read_jsonld(source("jsonld", "https://bostonfilmhub.com/#venue=Somerville+Theatre", "film", "Theatre via Hub"))
+            kept = build.read_jsonld(source("jsonld", "https://brattlefilm.org/coming-soon/", "film", "Private Theater"))
         sources = [dict(source("aeg", "x", name="Roadrunner"), public=True),
-                   dict(source("jsonld", "y", "film", "Theatre via Hub"), public=False)]
+                   dict(source("jsonld", "y", "film", "Private Theater"), public=False)]
         built = datetime.now(timezone.utc)
         public = build.render_index(found + kept, sources, [], [], built, public=True)
         mine = build.render_index(found + kept, sources, [], [], built)
@@ -458,13 +451,13 @@ class Page(unittest.TestCase):
         self.assertNotIn("Add a source", public)
         self.assertIn('content="index, follow"', public)
         self.assertIn('content="noindex, nofollow"', mine)
-        self.assertNotIn("Theatre via Hub", public, "a source marked public=no stays off it")
-        self.assertIn("Theatre via Hub", mine)
+        self.assertNotIn("Private Theater", public, "a source marked public=no stays off it")
+        self.assertIn("Private Theater", mine)
         listings = lambda page: page.split("</style>")[1].split("<footer>")[0]  # Not the styles, which differ.
-        self.assertLess(len(listings(public)), len(listings(mine)), "shorter previews, and no Hub listings")
+        self.assertLess(len(listings(public)), len(listings(mine)), "shorter previews, and not the private listings")
         about = build.render_about(sources, built)
         self.assertIn("Roadrunner", about)
-        self.assertNotIn("Theatre via Hub", about)
+        self.assertNotIn("Private Theater", about)
         self.assertIn("https://formsubmit.co/", build.render_contact())
         self.assertIn('<a href="/contact.html">Contact</a>', about.split("<footer>")[1])
 

@@ -12,7 +12,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
+from urllib.parse import urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 from shared import site as shared
@@ -153,9 +153,9 @@ _fetched, _fetching = {}, threading.Lock()
 
 
 def fetch(url, attempts=3, timeout=20):
-    """The page or data at url, as text. Each address is downloaded once a build, however many sources read
-    it (Boston Film Hub's page, for two theaters); a #fragment, which isn't sent, doesn't make it another."""
-    address = urlsplit(url)._replace(fragment="").geturl()
+    """The page or data at url, as text. Each address is downloaded once a build, however many times it's
+    read (an ICA event's page, for each of its dates)."""
+    address = url
     with _fetching:
         pending, first = _fetched.get(address), address not in _fetched
         if first:
@@ -329,10 +329,7 @@ def read_ticketweb(source):
 
 
 def read_jsonld(source):
-    """Pages that describe their screenings or shows as schema.org Events (the Brattle's Coming Soon page).
-    A page listing several places' events (Boston Film Hub's) can be kept to one of them with #venue=<its name>
-    at the end of the URL, which isn't sent to the site; the listings then show that place's name."""
-    place = parse_qs(urlsplit(source["url"]).fragment).get("venue", [""])[0]
+    """Pages that describe their screenings or shows as schema.org Events (the Brattle's Coming Soon page)."""
     found, works = [], {}
 
     def collect(data):
@@ -359,16 +356,13 @@ def read_jsonld(source):
     for item in found:
         if str(item.get("eventStatus", "")).endswith("EventCancelled"):
             continue
-        location = item.get("location") if isinstance(item.get("location"), dict) else {}
-        if place and location.get("name") != place:
-            continue
         day, start = at_boston(datetime.fromisoformat(item["startDate"]))
         # The Brattle adds the showtime to each name: "Filipiñana - 9/12/26 @ 12:00 pm".
         title = re.sub(r"\s+-\s+\d{1,2}/\d{1,2}/\d{2,4}\s+@.*$", "", html.unescape(item.get("name", "")))
         work = item.get("workPresented") or {}
         work = works.get(work.get("@id"), work) if isinstance(work, dict) else {}
         events.append(event(source, title, day, start if "T" in item["startDate"] else None, link=item.get("url", ""),
-                            about=jsonld_about(item, work), venue=place))
+                            about=jsonld_about(item, work)))
     return events
 
 
