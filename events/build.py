@@ -726,34 +726,30 @@ INDEX_JS = """
     if (!todays.querySelector("li")) todays.remove();
   }
 
-  // The filter shows every category or just one, and is remembered in this browser. Three days show at a
-  // time, counting only days with something the filter shows; ?page=2 shows the next three.
-  const DAYS_PER_PAGE = 3;
+  // The filter shows every category or just one, and is remembered in this browser. Fifty of what it shows
+  // are on a page, however many days that takes; ?page=2 shows the next fifty. A day split between two pages
+  // has its heading on both.
+  const EVENTS_PER_PAGE = 50;
   const filter = document.querySelector(".filter");
   const pager = document.querySelector(".pager");
   let show = "all";
   try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
   function showEvents() {
-    const shownDays = [];
-    for (const day of document.querySelectorAll(".day")) {
-      let shown = 0;
-      for (const li of day.querySelectorAll(":scope > ul > li")) {
-        li.hidden = show !== "all" && li.dataset.category !== show;
-        shown += !li.hidden;
-      }
-      day.hidden = true;
-      if (shown) shownDays.push(day);
-    }
-    const pages = Math.max(1, Math.ceil(shownDays.length / DAYS_PER_PAGE));
+    const rows = [...document.querySelectorAll(".day > ul > li")].filter(li => show === "all" || li.dataset.category === show);
+    const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
-    const onPage = shownDays.slice((page - 1) * DAYS_PER_PAGE, page * DAYS_PER_PAGE);
-    for (const day of onPage) day.hidden = false;
+    const onPage = new Set(rows.slice((page - 1) * EVENTS_PER_PAGE, page * EVENTS_PER_PAGE));
+    for (const day of document.querySelectorAll(".day")) {
+      const lis = day.querySelectorAll(":scope > ul > li");
+      for (const li of lis) li.hidden = !onPage.has(li);
+      day.hidden = ![...lis].some(li => !li.hidden);
+    }
     const link = (n, text) => `<a href="${n === 1 ? location.pathname : "?page=" + n}">${text}</a>`;
     pager.innerHTML = pages < 2 ? "" :
       (page > 1 ? link(page - 1, "← Earlier") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Later →") : "<span></span>");
-    document.querySelector(".empty").hidden = shownDays.length > 0;
+    document.querySelector(".empty").hidden = rows.length > 0;
     for (const b of filter.children) b.setAttribute("aria-pressed", b.dataset.show === show);
     document.querySelector("main").classList.add("paged");
   }
@@ -778,8 +774,8 @@ CSS = """
   [data-show="film"], [data-category="film"] { --dot: var(--film); }
   [data-show="art"], [data-category="art"] { --dot: var(--art); }
   h2 { margin: 2.25rem 0 .5rem; color: #777; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-  /* Until the script picks the page, show the first three days, so the whole month never flashes up. */
-  main:not(.paged) .day:nth-of-type(n+4) { display: none; }
+  /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
+  main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
