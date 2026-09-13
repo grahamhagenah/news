@@ -754,10 +754,12 @@ CSS = """
   .player { width: min(64rem, 100vw - 2.5rem); max-width: none; max-height: none; padding: 0; border: 0;
             background: none; color: #fff; overflow: visible; }
   .player::backdrop { background: #000; }
-  /* Closing it: a small key in the window's corner reading esc, or close where there's no keyboard. */
-  .player-close { position: fixed; top: 1.25rem; right: 1.25rem; padding: .2rem .45rem; border: 1px solid #333;
-                  border-radius: 4px; background: none; color: #666; font: inherit; font-size: .7rem; line-height: 1.3;
-                  letter-spacing: .06em; cursor: pointer; }
+  /* Closing it: a small key in the window's corner, shaped like a Mac's esc key (wider than tall, its label
+     low on the left), reading esc, or close where there's no keyboard. */
+  .player-close { position: fixed; top: 1.25rem; right: 1.25rem; display: flex; align-items: flex-end;
+                  box-sizing: border-box; width: 3.4rem; height: 1.75rem; padding: 0 0 .25rem .4rem;
+                  border: 1px solid #333; border-radius: 5px; background: #0a0a0a; box-shadow: inset 0 -1px 0 #1c1c1c;
+                  color: #666; font: inherit; font-size: .62rem; line-height: 1; letter-spacing: .04em; cursor: pointer; }
   .player-close:hover { border-color: #555; color: #bbb; }
   .player-close:focus { outline: none; }
   .player-close:focus-visible { border-color: #777; color: #bbb; }
