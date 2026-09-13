@@ -445,6 +445,41 @@ class Page(unittest.TestCase):
         self.assertIn("https://formsubmit.co/", build.render_contact())
         self.assertIn('<a href="contact.html">Contact</a>', about.split("<footer>")[1])
 
+    def test_public_page_tells_search_engines_what_it_is(self):
+        with mock.patch.object(build, "fetch", sample):
+            found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json", name="Roadrunner"))
+        page = build.render_index(found, [dict(source("aeg", "x", name="Roadrunner"), public=True)], [], [],
+                                  datetime.now(timezone.utc), public=True)
+        self.assertIn(f"<title>{build.PUBLIC_TITLE}</title>", page)
+        self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}">', page)
+        self.assertIn('<meta property="og:title"', page)
+        self.assertIn('<h1 class="tagline">', page)
+        data = __import__("json").loads(page.split('<script type="application/ld+json">')[1].split("</script>")[0])["@graph"]
+        self.assertEqual(data[0]["@type"], "WebSite")
+        show = data[1]
+        self.assertEqual(show["@type"], "MusicEvent")
+        self.assertEqual(show["location"]["address"]["streetAddress"], "89 Guest St")  # Roadrunner's.
+        self.assertRegex(show["startDate"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00-0[45]:00$")
+        self.assertEqual(len(data), len(found) + 1)
+
+    def test_event_data_uses_an_events_own_address(self):
+        item = build.event(source("bibliocommons", "x", "art", "Boston Public Library"), "A Talk", date(2026, 9, 20),
+                           time(18, 0), venue="Faneuil Library", address=("419 Faneuil Street", "Brighton", "02135"))
+        address = build.event_data(item)["location"]["address"]
+        self.assertEqual((address["streetAddress"], address["addressLocality"], address["postalCode"]),
+                         ("419 Faneuil Street", "Brighton", "02135"))
+
+    def test_postal(self):
+        self.assertEqual(build.postal("134 MEMORIAL DR, Cambridge, MA 02139"), ("134 MEMORIAL DR", "Cambridge", "02139"))
+        self.assertEqual(build.postal(" 3496 Washington St, Boston, MA 02130, USA"), ("3496 Washington St", "Boston", "02130"))
+        self.assertIsNone(build.postal("355 W 16th St, Manhattan, New York, New York, 10011"))
+        self.assertIsNone(build.postal(""))
+
+    def test_sitemap(self):
+        sitemap = build.render_sitemap(datetime(2026, 9, 13, tzinfo=timezone.utc))
+        for path in ("", "about.html", "contact.html"):
+            self.assertIn(f"<loc>{build.PUBLIC_URL}{path}</loc>", sitemap)
+
     def test_public_previews_are_shorter(self):
         long = ["A" * 150 + " " + "b" * 150, "Doors 7 · 21+"]
         self.assertLessEqual(len(" ".join(build.shorter(long))), build.PUBLIC_ABOUT_CHARS + 1)

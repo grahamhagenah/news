@@ -37,6 +37,49 @@ PUBLIC_DIR = ROOT.parent / "dist" / "public"
 PUBLIC_URL = "https://boston.grahamhagenah.com/"
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
+PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
+PUBLIC_DESCRIPTION = ("Concerts, film screenings and art talks at venues across Boston, Cambridge and Somerville for "
+                      "the next month, on one page, from each venue’s own calendar.")
+
+# Each venue's street address, town and ZIP, for the event listings search engines read; an event whose source
+# gives its own (a library branch, an MIT building) uses that instead. Check a new venue's address when adding it.
+VENUE_ADDRESSES = {
+    "Roadrunner": ("89 Guest St", "Boston", "02135"),
+    "The Sinclair": ("52 Church St", "Cambridge", "02138"),
+    "The Middle East": ("472 Massachusetts Ave", "Cambridge", "02139"),
+    "Middle East": ("472 Massachusetts Ave", "Cambridge", "02139"),  # As its own listings name it.
+    "Sonia": ("10 Brookline St", "Cambridge", "02139"),
+    "House of Blues": ("15 Lansdowne St", "Boston", "02215"),
+    "Paradise": ("967 Commonwealth Ave", "Boston", "02215"),
+    "Brighton Music Hall": ("158 Brighton Ave", "Boston", "02134"),
+    "Crystal Ballroom": ("55 Davis Square", "Somerville", "02144"),
+    "Somerville Theatre": ("55 Davis Square", "Somerville", "02144"),
+    "Deep Cuts": ("21 Main St", "Medford", "02155"),
+    "Midway Cafe": ("3496 Washington St", "Boston", "02130"),
+    "Lizard Lounge": ("1667 Massachusetts Ave", "Cambridge", "02138"),
+    "The Rockwell": ("255 Elm St", "Somerville", "02144"),
+    "MIT": ("77 Massachusetts Ave", "Cambridge", "02139"),
+    "Boston Public Library": ("700 Boylston St", "Boston", "02116"),
+    "MFA": ("465 Huntington Ave", "Boston", "02115"),
+    "Harvard Art Museums": ("32 Quincy St", "Cambridge", "02138"),
+    "ICA": ("25 Harbor Shore Dr", "Boston", "02210"),
+    "SoWa": ("450 Harrison Ave", "Boston", "02118"),
+    "French Library": ("53 Marlborough St", "Boston", "02116"),
+    "ArtsEmerson": ("559 Washington St", "Boston", "02111"),
+    "Brattle": ("40 Brattle St", "Cambridge", "02138"),
+    "Coolidge Corner": ("290 Harvard St", "Brookline", "02446"),
+    "Harvard Film Archive": ("24 Quincy St", "Cambridge", "02138"),
+    "West Newton Cinema": ("1296 Washington St", "Newton", "02465"),
+    "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
+    "Alamo Drafthouse": ("60 Seaport Blvd", "Boston", "02210"),
+    "Capitol Theatre": ("204 Massachusetts Ave", "Arlington", "02474"),
+}
+
+
+def postal(line):
+    """An address written out, "134 Memorial Dr, Cambridge, MA 02139", as (street, town, ZIP); None otherwise."""
+    found = re.match(r"\s*(\d[^,]*?),\s*([A-Za-z .]+?),?\s+(?:MA|Massachusetts)\b\.?\s*(\d{5})?", line or "")
+    return (found.group(1).strip(), found.group(2).strip().title(), found.group(3) or "") if found else None
 
 
 def read_sources():
@@ -75,7 +118,7 @@ def text(markup):
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", markup or ""))).strip()
 
 
-def event(source, title, day, start=None, link="", detail="", venue="", about=()):
+def event(source, title, day, start=None, link="", detail="", venue="", about=(), address=None):
     """One listing. start is a time of day in Boston, or None when the source gives only the date; about is
     what the source says about it, a few short paragraphs for its preview."""
     return {
@@ -89,6 +132,8 @@ def event(source, title, day, start=None, link="", detail="", venue="", about=()
         "source": source["name"],
         # Not a line that only repeats the name.
         "about": [paragraph for paragraph in about if paragraph.casefold() != title.casefold()],
+        # Where it is, (street, town, ZIP), when the source says and it isn't the venue's usual address.
+        "address": list(address) if address else None,
     }
 
 
@@ -572,11 +617,11 @@ def read_ics(source):
                 elif zone:
                     moment = moment.replace(tzinfo=ZoneInfo(zone.group(1)))
                 day, start = at_boston(moment)
-            venue = unescape(fields.get("LOCATION", ("", ""))[1]).split(",")[0]
+            venue, _, place = unescape(fields.get("LOCATION", ("", ""))[1]).partition(",")
             summary = unescape(fields.get("SUMMARY", ("", ""))[1])
             description = re.sub(r"\\([,;\\])", r"\1", fields.get("DESCRIPTION", ("", ""))[1]).replace("\\n", "\n\n")
             events.append(event(source, summary, day, start, link=fields.get("URL", ("", ""))[1], venue=venue,
-                                about=about(html.escape(description))))
+                                about=about(html.escape(description)), address=postal(place)))
             fields = None
         elif fields is not None and ":" in line:
             name, value = line.split(":", 1)
@@ -666,7 +711,7 @@ def read_mit(source):
                     seen.add(item["id"])
                     events += opening(source, item["title"], first, last, link, about=described)
                 continue
-            events.append(event(source, item["title"], day, start, link=link, about=described))
+            events.append(event(source, item["title"], day, start, link=link, about=described, address=postal(item.get("address"))))
         page = data.get("page", {}).get("next_page") if page < 20 else None
     return events
 
@@ -705,11 +750,13 @@ def read_bibliocommons(source):
             venue = source["name"] if branch.startswith("Central") or not branch else f"{branch} Library"
             title, link = text(field("title")), field("link")
             described = about(field("description"))
+            street = " ".join(part for part in (field("bc:number"), field("bc:street")) if part)
+            place = (street, field("bc:city") or "Boston", field("bc:zip")) if street else None
             last = date.fromisoformat((field("bc:end_date_local") or day.isoformat())[:10])
             if "Exhibitions" in tags and last > day:
                 events += [dict(listing, venue=venue) for listing in opening(source, title, day, last, link, about=described)]
             else:
-                events.append(event(source, title, day, start, link=link, venue=venue, about=described))
+                events.append(event(source, title, day, start, link=link, venue=venue, about=described, address=place))
         if not items or day > end:
             break
     return events
@@ -978,8 +1025,42 @@ def render_index(events, sources, failed, stale, built_at, public=False):
         f"<script>{INDEX_JS}</script>"
     )
     if public:
-        return public_page("", PUBLIC_NAME, body, built_at)
+        tagline = ('<h1 class="tagline">Concerts, films, and art and talks around Boston, Cambridge and Somerville, '
+                   'from each venue’s own calendar.</h1>\n')
+        return public_page("", PUBLIC_TITLE, tagline + body, built_at, description=PUBLIC_DESCRIPTION,
+                           data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
+
+
+def website_data():
+    return {"@type": "WebSite", "name": PUBLIC_NAME, "url": PUBLIC_URL, "description": PUBLIC_DESCRIPTION,
+            "inLanguage": "en-US"}
+
+
+SCHEMA_TYPES = {"music": "MusicEvent", "film": "ScreeningEvent", "art": "Event"}
+
+
+def event_data(item):
+    """A listing as schema.org Event data, which search engines read for their event listings: what, when,
+    where (the venue's address, or the event's own), and the venue's page for it."""
+    start = item["date"].isoformat()
+    if item["times"]:
+        start = datetime.combine(item["date"], item["times"][0], tzinfo=BOSTON).isoformat()
+    street, town, zip_code = item.get("address") or VENUE_ADDRESSES.get(item["venue"]) or ("", "Boston", "")
+    address = {"@type": "PostalAddress", "streetAddress": street, "addressLocality": town, "addressRegion": "MA",
+               "postalCode": zip_code, "addressCountry": "US"}
+    data = {
+        "@type": SCHEMA_TYPES.get(item["category"], "Event"),
+        "name": item["title"],
+        "startDate": start,
+        "url": item["link"],
+        "eventStatus": "https://schema.org/EventScheduled",
+        "location": {"@type": "Place", "name": item["venue"], "address": {k: v for k, v in address.items() if v}},
+    }
+    if item.get("about"):
+        first = item["about"][0]
+        data["description"] = first if len(first) <= 160 else first[:160].rsplit(" ", 1)[0] + "…"
+    return data
 
 
 def shorter(paragraphs):
@@ -1000,15 +1081,25 @@ def shorter(paragraphs):
 PUBLIC_LINKS = '<p><a href="about.html">About</a> · <a href="contact.html">Contact</a></p>\n'
 
 
-def public_page(current, title, body, built_at=None):
+def public_page(current, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
     """A page of the public site: its name, the way home, in the header, About and Contact in the footer;
-    search engines welcome."""
+    search engines welcome, told what the page is, where it lives, and (the listings) its events."""
     links = [(PUBLIC_NAME, "./", current == "")]
     if "<footer>" not in body:
         body += f"\n<footer>\n{PUBLIC_LINKS}</footer>"
-    head = ('<link rel="icon" href="favicon.svg" type="image/svg+xml">\n'
-            '<meta name="description" content="Concerts, films, and art and talks in Boston, Cambridge and '
-            'Somerville over the next month, from each venue’s own calendar.">')
+    address = PUBLIC_URL + (f"{current}.html" if current else "")
+    head = "\n".join([
+        '<link rel="icon" href="favicon.svg" type="image/svg+xml">',
+        f'<link rel="canonical" href="{address}">',
+        f'<meta name="description" content="{html.escape(description)}">',
+        # What a link to it shows when shared.
+        '<meta property="og:type" content="website">',
+        f'<meta property="og:site_name" content="{html.escape(PUBLIC_NAME)}">',
+        f'<meta property="og:title" content="{html.escape(title)}">',
+        f'<meta property="og:description" content="{html.escape(description)}">',
+        f'<meta property="og:url" content="{address}">',
+        '<meta name="twitter:card" content="summary">',
+    ] + [f'<script type="application/ld+json">{json.dumps(data, ensure_ascii=False, separators=(",", ":"))}</script>'] * bool(data))
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
                        updated=built_at, links=links, indexable=True)
 
@@ -1033,7 +1124,19 @@ words, in short.</p>
 {groups}
 <p>Know a venue that should be here, or spotted a mistake? <a href="contact.html">Get in touch</a>.</p>
 </div>"""
-    return public_page("about", f"About · {PUBLIC_NAME}", body)
+    return public_page("about", f"About · {PUBLIC_NAME}", body,
+                       description=f"What {PUBLIC_NAME} is, and the Boston, Cambridge and Somerville venues it lists.")
+
+
+def render_sitemap(built_at):
+    """The public site's pages for search engines: the listings, changing every few hours, and the others."""
+    pages = [("", "hourly", "1.0"), ("about.html", "monthly", "0.5"), ("contact.html", "yearly", "0.3")]
+    urls = "".join(
+        f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
+        f"<changefreq>{often}</changefreq><priority>{priority}</priority></url>\n"
+        for path, often, priority in pages
+    )
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}</urlset>\n'
 
 
 def render_contact():
@@ -1059,7 +1162,8 @@ def render_contact():
     document.querySelector(".sent").hidden = false;
   }}
 </script>"""
-    return public_page("contact", f"Contact · {PUBLIC_NAME}", body)
+    return public_page("contact", f"Contact · {PUBLIC_NAME}", body,
+                       description=f"Suggest a venue for {PUBLIC_NAME}, or tell us about a listing that’s wrong.")
 
 
 INDEX_JS = """
@@ -1164,6 +1268,9 @@ INDEX_JS = """
 
 # The public site's About and Contact pages: plain text, and a form as quiet as the search.
 PUBLIC_CSS = """
+  /* What the site is, in a line under its name, as quiet as the rest. */
+  .tagline { margin: -1rem 0 2.25rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+  .tagline + .filter { margin-top: 0; }
   .prose { max-width: 34rem; color: #ccc; }
   .prose p { margin: 0 0 1em; }
   .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
@@ -1242,6 +1349,7 @@ def saved(item):
         "venue": item["venue"],
         "category": item["category"],
         "about": item.get("about", []),
+        "address": item.get("address"),
     }
 
 
@@ -1337,7 +1445,9 @@ def main():
     (PUBLIC_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
     (PUBLIC_DIR / "about.html").write_text(render_about(sources, built_at))
     (PUBLIC_DIR / "contact.html").write_text(render_contact())
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, about.html and contact.html")
+    (PUBLIC_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
+    (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, about.html, contact.html, sitemap.xml and robots.txt")
 
 
 if __name__ == "__main__":

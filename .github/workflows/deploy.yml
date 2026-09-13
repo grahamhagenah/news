@@ -23,9 +23,11 @@ permissions:
   id-token: write
   issues: write  # shared/alerts.py opens and closes "Source failing" issues.
 
+# One run at a time. A push cancels a run in progress, since it brings newer code; a scheduled or cron-job.org
+# run waits its turn instead, so it never cancels a push's run before the events pages are rebuilt.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   deploy:
