@@ -30,6 +30,14 @@ Run everything from this top folder, with only the Python standard library:
 - Hovering an event's name shows what its source says about it: a film's blurb or credits, a band's bio, the door time and cover, as the newsfeed shows a post's first lines. Sources that say nothing (the MFA, the Middle East, Kendall Square) have no preview, except a cut-off name in full.
 - Ticketmaster venues need a free [Ticketmaster Discovery API](https://developer.ticketmaster.com/) key, kept as this repo's `TICKETMASTER_KEY` secret. To add one, find its venue id with Actions → "Find a Ticketmaster venue".
 
+## Around Boston, the public version
+
+The events build also writes the same listings for anyone, as **Around Boston** (`dist/public`), published from the [grahamhagenah/around-boston](https://github.com/grahamhagenah/around-boston) repo's `gh-pages` branch at https://grahamhagenah.github.io/around-boston/ for now. It has its own name in place of the Newsfeed/Events switcher, an About page (what it is, and every venue) and a Contact page, shorter previews of the venues' own descriptions, no "Add a source" link, and lets search engines list it.
+
+- A source ending in `public=no` in `events/sources.txt` stays off it (the Boston Film Hub theaters, for now).
+- The Contact page's form sends through [FormSubmit](https://formsubmit.co) to the address in `PUBLIC_CONTACT`; its first message asks that address to confirm, and FormSubmit then offers a random alias to use there instead of the address.
+- The deploy pushes it with a deploy key that can write to that repo only, kept as the `PUBLIC_DEPLOY_KEY` secret. For a domain of its own: point the domain at GitHub Pages, set it in that repo's Pages settings, have the deploy write it to a `CNAME` file, and change `PUBLIC_URL`.
+
 ## When a source fails
 
 - Each build publishes what its page was built from, `feeds.json` and `listings.json`. When a source fails, or suddenly returns nothing while it had items coming up, the next build uses its items from there instead, if they're under two days old, and says so at the bottom of the page. A feed that's just quiet isn't a failure.

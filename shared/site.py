@@ -232,12 +232,17 @@ SEARCH_KEYS = """
 </script>"""
 
 
-def page(site, title, body, css="", head="", symbols="", updated=None):
-    """A whole page: the shared head, header and styles, then this site's styles, icons and body."""
-    name = SITES[site][0]
+def page(site, title, body, css="", head="", symbols="", updated=None, links=None, indexable=False):
+    """A whole page: the shared head, header and styles, then this site's styles, icons and body. Its header
+    links are the two sites, unless it gives its own as (label, address, whether it's this page); only a page
+    meant for anyone (the public events page) lets search engines list it."""
+    name = SITES[site][0] if links is None else links[0][0]
+    if links is None:
+        links = [(label, "./" if key == site else url, key == site) for key, (label, url) in SITES.items()]
+    current_page = ' aria-current="page"'
     links = "".join(
-        f'<a href="./" aria-current="page">{label}</a>' if key == site else f'<a href="{url}">{label}</a>'
-        for key, (label, url) in SITES.items()
+        f'<a href="{html.escape(url)}"{current_page if current else ""}>{html.escape(label)}</a>'
+        for label, url, current in links
     )
     note = (
         f'<span class="header-note">Updated <time class="updated" datetime="{updated.isoformat()}">'
@@ -249,7 +254,7 @@ def page(site, title, body, css="", head="", symbols="", updated=None):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="{"index, follow" if indexable else "noindex, nofollow"}">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-title" content="{name}">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">

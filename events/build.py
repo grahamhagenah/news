@@ -30,14 +30,25 @@ BOSTON = ZoneInfo("America/New_York")
 USER_AGENT = "Mozilla/5.0 (compatible; events-feed/1.0)"
 CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
+# The same listings, for anyone: its own name, an About and a Contact page, shorter previews, and only the
+# sources fine to republish (a line in sources.txt ending in public=no stays on this page only).
+PUBLIC_NAME = "Around Boston"
+PUBLIC_DIR = ROOT.parent / "dist" / "public"
+PUBLIC_URL = "https://grahamhagenah.github.io/around-boston/"
+PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
+PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
+
 
 def read_sources():
-    """sources.txt lines: how to read the source, its URL, a category, and a name."""
+    """sources.txt lines: how to read the source, its URL, a category, a name, and public=no for a source kept
+    off the public page."""
     sources = []
     for line in SOURCES_FILE.read_text().splitlines():
         if line.strip() and not line.lstrip().startswith("#"):
-            kind, url, category, *name = line.split()
-            sources.append({"kind": kind, "url": url, "category": category, "name": " ".join(name)})
+            kind, url, category, *words = line.split()
+            name = [word for word in words if word != "public=no"]
+            sources.append({"kind": kind, "url": url, "category": category, "name": " ".join(name),
+                            "public": len(name) == len(words)})
     return sources
 
 
@@ -926,7 +937,13 @@ def render_combined(item):
     )
 
 
-def render_index(events, sources, failed, stale, built_at):
+def render_index(events, sources, failed, stale, built_at, public=False):
+    if public:
+        shown = {source["name"] for source in sources if source.get("public", True)}
+        sources = [source for source in sources if source["name"] in shown]
+        events = [dict(item, about=shorter(item.get("about", []))) for item in events if item["source"] in shown]
+        failed = [name for name in failed if name in shown]
+        stale = [(name, fetched) for name, fetched in stale if name in shown]
     days = {}
     for item in events:
         days.setdefault(item["date"], []).append(item)
@@ -951,15 +968,90 @@ def render_index(events, sources, failed, stale, built_at):
         f'<p>Couldn’t reach {html.escape(name)}; its listings are from <time class="ago" datetime="{fetched.isoformat()}"></time>.</p>\n'
         for name, fetched in stale
     )
+    more = ('<p>Listings come from each venue’s own calendar, every few hours. <a href="about.html">About</a></p>\n'
+            if public else f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n')
     body = (
         f'<nav class="filter" aria-label="Show">{buttons}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n'
-        f"<footer>\n{failed_note}<p>From {names}.</p>\n"
-        f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n'
+        f"<footer>\n{failed_note}<p>From {names}.</p>\n{more}</footer>\n"
         f"<script>{INDEX_JS}</script>"
     )
+    if public:
+        return public_page("", PUBLIC_NAME, body, built_at)
     return page("Events", body, built_at)
+
+
+def shorter(paragraphs):
+    """A public preview: less of the venue's own words than this page shows, as an excerpt that sends
+    readers to the venue for the rest."""
+    kept, budget = [], PUBLIC_ABOUT_CHARS
+    for paragraph in paragraphs[:2]:
+        if len(paragraph) > budget:
+            if budget > 60:
+                kept.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
+            break
+        kept.append(paragraph)
+        budget -= len(paragraph)
+    return kept
+
+
+def public_page(current, title, body, built_at=None):
+    """A page of the public site: its name, About and Contact in the header; search engines welcome."""
+    links = [(PUBLIC_NAME, "./", current == ""), ("About", "about.html", current == "about"),
+             ("Contact", "contact.html", current == "contact")]
+    head = ('<link rel="icon" href="favicon.svg" type="image/svg+xml">\n'
+            '<meta name="description" content="Concerts, films, and art and talks in Boston, Cambridge and '
+            'Somerville over the next month, from each venue’s own calendar.">')
+    return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
+                       updated=built_at, links=links, indexable=True)
+
+
+def render_about(sources, built_at):
+    """What the public page is, where its listings come from, and each venue by kind."""
+    venues = {}
+    for source in sources:
+        if source.get("public", True):
+            venues.setdefault(source["category"], []).append(source["name"])
+    groups = "".join(
+        f'<h2>{CATEGORIES[key]}</h2>\n<p>{html.escape(", ".join(sorted(set(venues[key]))))}</p>\n'
+        for key in CATEGORIES if venues.get(key)
+    )
+    body = f"""<div class="prose">
+<p>{PUBLIC_NAME} lists concerts, films, and art and talks in Boston, Cambridge and Somerville for the next
+month, on one page, grouped by day.</p>
+<p>It’s gathered from each venue’s own calendar every few hours. Times and details can change, so check
+with the venue before you go: every listing links to its page there. The descriptions are the venues’ own
+words, in short.</p>
+<p>No ads, no accounts, nothing to sign up for.</p>
+{groups}
+<p>Know a venue that should be here, or spotted a mistake? <a href="contact.html">Get in touch</a>.</p>
+</div>"""
+    return public_page("about", f"About · {PUBLIC_NAME}", body)
+
+
+def render_contact():
+    """A form whose messages FormSubmit emails on; its first one asks the address's owner to confirm it."""
+    body = f"""<div class="prose">
+<p>A venue to add, a listing that’s wrong, or anything else: send a note.</p>
+<form class="contact" action="https://formsubmit.co/{PUBLIC_CONTACT}" method="POST">
+<input type="hidden" name="_subject" value="{PUBLIC_NAME}: a message">
+<input type="hidden" name="_next" value="{PUBLIC_URL}contact.html?sent">
+<input type="hidden" name="_template" value="box">
+<input type="text" name="_honey" class="honey" tabindex="-1" autocomplete="off" aria-hidden="true">
+<label>Your email, for a reply <input type="email" name="email" required></label>
+<label>Message <textarea name="message" rows="6" required></textarea></label>
+<button>Send</button>
+</form>
+<p class="sent" hidden>Thanks, your message is on its way.</p>
+</div>
+<script>
+  if (new URLSearchParams(location.search).has("sent")) {{
+    document.querySelector(".contact").hidden = true;
+    document.querySelector(".sent").hidden = false;
+  }}
+</script>"""
+    return public_page("contact", f"Contact · {PUBLIC_NAME}", body)
 
 
 INDEX_JS = """
@@ -1059,6 +1151,23 @@ INDEX_JS = """
     history.replaceState(null, "", address(1));
     showEvents();
   });
+"""
+
+
+# The public site's About and Contact pages: plain text, and a form as quiet as the search.
+PUBLIC_CSS = """
+  .prose { max-width: 34rem; color: #ccc; }
+  .prose p { margin: 0 0 1em; }
+  .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
+  .prose h2 { margin-top: 2rem; }
+  .contact { display: grid; gap: 1.1rem; margin-top: 1.5rem; }
+  .contact label { display: grid; gap: .35rem; color: #888; font-size: .8rem; }
+  .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
+                                      color: #fff; font: inherit; font-size: .95rem; }
+  .contact input:focus, .contact textarea:focus { border-color: #777; outline: none; }
+  .contact button { justify-self: start; padding: .45rem 1.1rem; border: 0; border-radius: 999px; background: #fff;
+                    color: #000; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
+  .contact .honey { display: none; }
 """
 
 
@@ -1210,6 +1319,14 @@ def main():
     record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at)}
     (OUT_DIR / "listings.json").write_text(json.dumps(record, ensure_ascii=False))
     print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html with {len(events)} listings, and listings.json")
+
+    # The public site, from the same listings.
+    PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ROOT / "static", PUBLIC_DIR, dirs_exist_ok=True)
+    (PUBLIC_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
+    (PUBLIC_DIR / "about.html").write_text(render_about(sources, built_at))
+    (PUBLIC_DIR / "contact.html").write_text(render_contact())
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, about.html and contact.html")
 
 
 if __name__ == "__main__":

@@ -420,6 +420,39 @@ class Page(unittest.TestCase):
             self.assertIn(f'data-show="{key}"', page)
         self.assertIn("[hidden] {{ display: none !important; }}".replace("{{", "{").replace("}}", "}"), page)
 
+    def test_public_page(self):
+        with mock.patch.object(build, "fetch", sample):
+            found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json", name="Roadrunner"))
+            kept = build.read_jsonld(source("jsonld", "https://bostonfilmhub.com/#venue=Somerville+Theatre", "film", "Theatre via Hub"))
+        sources = [dict(source("aeg", "x", name="Roadrunner"), public=True),
+                   dict(source("jsonld", "y", "film", "Theatre via Hub"), public=False)]
+        built = datetime.now(timezone.utc)
+        public = build.render_index(found + kept, sources, [], [], built, public=True)
+        mine = build.render_index(found + kept, sources, [], [], built)
+        self.assertNotIn("Newsfeed", public)
+        self.assertIn('<a href="about.html">About</a>', public)
+        self.assertNotIn("Add a source", public)
+        self.assertIn('content="index, follow"', public)
+        self.assertIn('content="noindex, nofollow"', mine)
+        self.assertNotIn("Theatre via Hub", public, "a source marked public=no stays off it")
+        self.assertIn("Theatre via Hub", mine)
+        self.assertLess(len(public), len(mine), "shorter previews, and no Hub listings")
+        about = build.render_about(sources, built)
+        self.assertIn("Roadrunner", about)
+        self.assertNotIn("Theatre via Hub", about)
+        self.assertIn("https://formsubmit.co/", build.render_contact())
+
+    def test_public_previews_are_shorter(self):
+        long = ["A" * 150 + " " + "b" * 150, "Doors 7 · 21+"]
+        self.assertLessEqual(len(" ".join(build.shorter(long))), build.PUBLIC_ABOUT_CHARS + 1)
+        self.assertEqual(build.shorter(["Short.", "Doors 7"]), ["Short.", "Doors 7"])
+
+    def test_public_no_in_sources(self):
+        with mock.patch.object(build, "SOURCES_FILE", mock.Mock(read_text=lambda: "tribe  https://a  art  Somewhere Nice  public=no\n"
+                                                                                  "tribe  https://b  art  Elsewhere\n")):
+            sources = build.read_sources()
+        self.assertEqual([(s["name"], s["public"]) for s in sources], [("Somewhere Nice", False), ("Elsewhere", True)])
+
 
 
 
