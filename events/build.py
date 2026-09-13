@@ -1004,8 +1004,9 @@ def icon(category, decorative=False):
 
 
 def render_times(moments):
-    # data-time lets the page drop today's showings once they've started.
-    times = "".join(f'<time data-time="{moment:%H:%M}">{clock(moment)}</time>' for moment in moments)
+    # data-time lets the page drop today's showings once they've started. The commas between are their own,
+    # so a time, which adds its showing to a calendar, lights up alone on hover.
+    times = '<span class="sep">, </span>'.join(f'<time data-time="{moment:%H:%M}">{clock(moment)}</time>' for moment in moments)
     return f'<span class="times">{times}</span>' if times else ""
 
 
@@ -1332,6 +1333,10 @@ INDEX_JS = """
     for (const li of todays.querySelectorAll(":scope > ul > li")) {
       const times = li.querySelectorAll("time:not(.from)");
       for (const t of times) if (t.dataset.time < now) t.remove();
+      // A comma no longer between two times goes too.
+      for (const sep of li.querySelectorAll(".sep")) {
+        if (sep.previousElementSibling?.tagName !== "TIME" || sep.nextElementSibling?.tagName !== "TIME") sep.remove();
+      }
       // In a film at several places, a place with nothing left today goes too.
       for (const place of li.querySelectorAll(".showings li")) if (!place.querySelector("time")) place.remove();
       if (times.length && !li.querySelector("time:not(.from)")) { li.remove(); continue; }
@@ -1550,7 +1555,6 @@ CSS = """
   .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
-  .times time + time::before { content: ", "; }
   /* A showtime adds that showing to a calendar: a pointer and a lighter shade on hover say so, nothing else. */
   .times time[data-time]:not(.from) { cursor: pointer; }
   .times time[data-time]:not(.from):hover, .times time[data-time]:not(.from):focus-visible { color: #ddd; outline: none; }
