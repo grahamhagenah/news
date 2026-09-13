@@ -73,13 +73,14 @@ jobs:
             git push -qf git@github.com:grahamhagenah/events.git gh-pages
 
       # The same listings for anyone, as Boston, Weekly, pushed to the grahamhagenah/boston-weekly repo's
-      # gh-pages branch, which publishes it (for now at grahamhagenah.github.io/boston-weekly).
+      # gh-pages branch, which publishes it to boston.grahamhagenah.com.
       - name: Publish the public events page
         if: hashFiles('dist/public/index.html') != ''
         env:
           # A deploy key that can write to the boston-weekly repo, and nothing else.
           DEPLOY_KEY: ${{ secrets.PUBLIC_DEPLOY_KEY }}
         run: |
+          echo boston.grahamhagenah.com > dist/public/CNAME
           touch dist/public/.nojekyll
           mkdir -p ~/.ssh && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/public && chmod 600 ~/.ssh/public
           cd dist/public

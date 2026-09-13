@@ -34,7 +34,7 @@ CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 # sources fine to republish (a line in sources.txt ending in public=no stays on this page only).
 PUBLIC_NAME = "Boston, Weekly"
 PUBLIC_DIR = ROOT.parent / "dist" / "public"
-PUBLIC_URL = "https://grahamhagenah.github.io/boston-weekly/"
+PUBLIC_URL = "https://boston.grahamhagenah.com/"
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 
