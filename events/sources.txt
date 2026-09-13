@@ -55,10 +55,8 @@ jsonld     https://brattlefilm.org/coming-soon/   film   Brattle
 coolidge   https://coolidge.org/showtimes   film   Coolidge Corner
 hfa        https://harvardfilmarchive.org/calendar   film   Harvard Film Archive
 veezi      https://www.westnewtoncinema.com/   film   West Newton Cinema
-# The Somerville and Capitol theaters turn away anything that says it's a bot, so their repertory
-# screenings come from Boston Film Hub, which lists them, as schema.org data in its page. Only on this page
-# until Boston Film Hub says it's fine to show them publicly.
-jsonld     https://bostonfilmhub.com/#venue=Somerville+Theatre   film   Somerville Theatre via Boston Film Hub   public=no
-jsonld     https://bostonfilmhub.com/#venue=Capitol+Theatre   film   Capitol Theatre via Boston Film Hub   public=no
+# Not the Somerville and Capitol theaters' screenings: their sites turn away anything that says it's a bot,
+# and they've been asked (September 2026) for a feed or permission. Only from them, not from a site that
+# gathers them, which could stop or change without either theater knowing.
 landmark   X019B   film   Kendall Square
 alamo      https://drafthouse.com/s/mother/v2/schedule/market/boston   film   Alamo Drafthouse
