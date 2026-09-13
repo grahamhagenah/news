@@ -875,6 +875,14 @@ CSS = """
                       list-style: none; cursor: pointer; }
   .combined summary::-webkit-details-marker { display: none; }
   .combined summary:hover .title { text-decoration: underline; }
+  /* A faint dotted underline on a name with a description to preview, turning solid on hover; not on phones,
+     which have no previews. */
+  @media (hover: hover) and (min-width: 34.01rem) {
+    .headline:has(> .preview:not(.title-only)) > .title {
+      text-decoration: underline dotted #4d4d4d; text-decoration-thickness: 1px; text-underline-offset: .22em; }
+    .headline:has(> .preview:not(.title-only)) > .title:hover,
+    .combined summary:hover .headline:has(> .preview:not(.title-only)) > .title { text-decoration: underline; }
+  }
   .more { flex: none; display: inline-block; margin-left: .5em; color: #666; font-size: .8em; transition: transform .15s; }
   .combined details[open] .more { transform: rotate(90deg); }
   .showings { margin: .35rem 0 .2rem calc(10rem + 1.25rem); }
