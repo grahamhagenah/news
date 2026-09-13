@@ -879,7 +879,7 @@ CSS = """
      which have no previews. */
   @media (hover: hover) and (min-width: 34.01rem) {
     .headline:has(> .preview:not(.title-only)) > .title {
-      text-decoration: underline dotted #4d4d4d; text-decoration-thickness: 1px; text-underline-offset: .22em; }
+      text-decoration: underline dotted #3a3a3a; text-decoration-thickness: 1px; text-underline-offset: .32em; }
     .headline:has(> .preview:not(.title-only)) > .title:hover,
     .combined summary:hover .headline:has(> .preview:not(.title-only)) > .title { text-decoration: underline; }
   }
