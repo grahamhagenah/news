@@ -49,8 +49,9 @@ def text(markup):
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", markup or ""))).strip()
 
 
-def event(source, title, day, start=None, link="", detail="", venue=""):
-    """One listing. start is a time of day in Boston, or None when the source gives only the date."""
+def event(source, title, day, start=None, link="", detail="", venue="", about=()):
+    """One listing. start is a time of day in Boston, or None when the source gives only the date; about is
+    what the source says about it, a few short paragraphs for its preview."""
     return {
         "title": title,
         "date": day,
@@ -60,7 +61,45 @@ def event(source, title, day, start=None, link="", detail="", venue=""):
         "venue": venue or source["name"],
         "category": source["category"],
         "source": source["name"],
+        # Not a line that only repeats the name.
+        "about": [paragraph for paragraph in about if paragraph.casefold() != title.casefold()],
     }
+
+
+ABOUT_CHARS = 400  # Roughly how much of what a source says about an event its preview shows.
+# Short lines worth keeping, like "Doors 7pm", "21+" and "$10 cover": the rest are headings, names and labels.
+FACT = re.compile(r"\d|\$|\b(free|ages?|doors?|cover|cash|sold out|cancel\w*|postponed|tickets?)\b", re.I)
+NOT_ABOUT = re.compile(r"(buy|get)? ?tickets?( here| now)?|more info(rmation)?|learn more|rsvp( here)?|register( here)?", re.I)
+LINKS = re.compile(r"https?://\S+|\b[\w-]+(\.[\w-]+)*\.(com|net|org|io|co|fm|me|us|bandcamp\.com)\b\S*", re.I)
+
+
+def about(markup):
+    """What a source says about an event, as its preview's paragraphs: its sentences, with short lines of facts
+    ("Doors 7pm", "21+", "$10 cover") run together into one, and a sentence split by a line break made whole.
+    Links, headings and "Buy tickets" are left out."""
+    kept = []
+    for paragraph in shared.excerpt(markup, ABOUT_CHARS * 2, min_words=1, max_paragraphs=12):
+        paragraph = re.sub(r"\s+", " ", LINKS.sub("", paragraph.replace("**", ""))).strip(" ·|-")
+        words = len(paragraph.split())
+        if not paragraph or paragraph.endswith(":") or NOT_ABOUT.fullmatch(paragraph.strip(" .!")):
+            continue
+        if kept and not kept[-1][1] and not re.search(r"[.!?…:\"”)]$", kept[-1][0]) and words >= 3:
+            kept[-1] = (f"{kept[-1][0]} {paragraph}", False)  # A sentence a line break cut in two.
+        elif words >= 6:
+            kept.append((paragraph, False))
+        elif FACT.search(paragraph):
+            if kept and kept[-1][1]:
+                kept[-1] = (f"{kept[-1][0]} · {paragraph}", True)
+            else:
+                kept.append((paragraph, True))
+    paragraphs, budget = [], ABOUT_CHARS
+    for paragraph, _ in kept[:3]:
+        if len(paragraph) > budget:
+            paragraphs.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
+            break
+        paragraphs.append(paragraph)
+        budget -= len(paragraph)
+    return paragraphs
 
 
 def at_boston(moment):
@@ -88,6 +127,7 @@ def read_aeg(source):
             start,
             link=(item.get("ticketing") or {}).get("url", ""),
             detail=f"with {support}" if support else "",
+            about=about(item.get("bio") or item.get("description")),  # Its description is mostly a ticket charity note.
         ))
     return events
 
@@ -99,8 +139,10 @@ def read_rss(source):
         title = text(re.search(r"<title>(.*?)</title>", item, re.S).group(1))
         link = text((re.search(r"<link>(.*?)</link>", item, re.S) or re.search(r"()", "")).group(1))
         match = re.fullmatch(r"(.*) on ([A-Z][a-z]{2} \d{1,2}, \d{4})", title)
+        description = re.search(r"<description>(.*?)</description>", item, re.S)
         if match:
-            events.append(event(source, match.group(1), datetime.strptime(match.group(2), "%b %d, %Y").date(), link=link))
+            events.append(event(source, match.group(1), datetime.strptime(match.group(2), "%b %d, %Y").date(), link=link,
+                                about=about(html.unescape(re.sub(r"<!\[CDATA\[|\]\]>", "", description.group(1))) if description else "")))
     return events
 
 
@@ -131,7 +173,7 @@ def read_ticketweb(source):
 
 def read_jsonld(source):
     """Pages that describe their screenings or shows as schema.org Events (the Brattle's Coming Soon page)."""
-    found = []
+    found, works = [], {}
 
     def collect(data):
         if isinstance(data, list):
@@ -141,6 +183,8 @@ def read_jsonld(source):
             kinds = data.get("@type") if isinstance(data.get("@type"), list) else [data.get("@type")]
             if any(isinstance(kind, str) and kind.endswith("Event") for kind in kinds) and data.get("startDate"):
                 found.append(data)
+            if data.get("@id") and len(data) > 1:
+                works[data["@id"]] = data
             for value in data.values():
                 if isinstance(value, (dict, list)):
                     collect(value)
@@ -158,8 +202,37 @@ def read_jsonld(source):
         day, start = at_boston(datetime.fromisoformat(item["startDate"]))
         # The Brattle adds the showtime to each name: "Filipiñana - 9/12/26 @ 12:00 pm".
         title = re.sub(r"\s+-\s+\d{1,2}/\d{1,2}/\d{2,4}\s+@.*$", "", html.unescape(item.get("name", "")))
-        events.append(event(source, title, day, start if "T" in item["startDate"] else None, link=item.get("url", "")))
+        work = item.get("workPresented") or {}
+        work = works.get(work.get("@id"), work) if isinstance(work, dict) else {}
+        events.append(event(source, title, day, start if "T" in item["startDate"] else None, link=item.get("url", ""),
+                            about=jsonld_about(item, work)))
     return events
+
+
+def jsonld_about(item, work):
+    """An event's description, or its film's: who made it and who's in it, its genre, length and language. A
+    description that's only its dates or showtime ("Filipiñana | Saturday, Sep 12, 4:30 PM | The Brattle") isn't
+    one."""
+    for description in (item.get("description"), work.get("description")):
+        if isinstance(description, str) and not (len(description) < 90 and re.search(r"\d", description)):
+            return about(description)
+
+    def names(people):
+        people = people if isinstance(people, list) else [people] if people else []
+        return ", ".join(person.get("name", "") if isinstance(person, dict) else str(person) for person in people[:3])
+
+    credits = []
+    if names(work.get("director")):
+        credits.append(f"Directed by {names(work['director'])}.")
+    if names(work.get("actor")):
+        credits.append(f"With {names(work['actor'])}.")
+    facts = [", ".join(work["genre"]) if isinstance(work.get("genre"), list) else work.get("genre") or ""]
+    length = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?", work.get("duration") or "")
+    if length and any(length.groups()):
+        facts.append(" ".join(f"{n}{unit}" for n, unit in zip(length.groups(), ("h", "m")) if n))
+    facts.append(work.get("inLanguage") if isinstance(work.get("inLanguage"), str) else "")
+    facts = " · ".join(fact for fact in facts if fact)
+    return [" ".join(credits)] * bool(credits) + [facts] * bool(facts)
 
 
 def read_coolidge(source):
@@ -179,7 +252,11 @@ def read_coolidge(source):
             film = re.search(r'class="film-card__link" title="([^"]+)" href="([^"]+)"', card)
             if not film:
                 continue
-            listing = event(source, html.unescape(film.group(1)), day, link=f"https://coolidge.org{film.group(2)}")
+            blurb = re.search(r'class="film-card__excerpt">(.*?)</div>', card, re.S)
+            runtime = re.search(r'class="film-card__runtime">(.*?)</div>', card, re.S)
+            facts = [text(runtime.group(1))] if runtime else []
+            listing = event(source, html.unescape(film.group(1)), day, link=f"https://coolidge.org{film.group(2)}",
+                            about=about(blurb.group(1) if blurb else "") + facts)
             listing["times"] = [
                 datetime.strptime(clock.strip().upper(), "%I:%M%p").time()
                 for clock in re.findall(r'class="showtime-ticket__time">([^<]+)<', card)
@@ -192,6 +269,7 @@ def read_alamo(source):
     """Alamo Drafthouse loads a market's whole schedule (Boston: the Seaport) from one JSON file."""
     data = json.loads(fetch(source["url"]))["data"]
     titles = {item["slug"]: (item.get("show") or {}).get("title") for item in data["presentations"]}
+    headlines = {item["slug"]: (item.get("show") or {}).get("headline") or "" for item in data["presentations"]}
     market = urlsplit(source["url"]).path.rstrip("/").rsplit("/", 1)[-1]
     events = []
     for session in data["sessions"]:
@@ -201,7 +279,8 @@ def read_alamo(source):
         # The theater's local time; a midnight show is dated the night it starts, not the business day.
         start = datetime.fromisoformat(session["showTimeClt"])
         link = f"https://drafthouse.com/{market}/show/{session['presentationSlug']}"
-        events.append(event(source, title, start.date(), start.time(), link=link))
+        events.append(event(source, title, start.date(), start.time(), link=link,
+                            about=about(headlines.get(session["presentationSlug"]))))
     return events
 
 
@@ -269,7 +348,9 @@ def read_ticketmaster(source):
         segment = (primary.get("segment") or {}).get("name")
         if segment and segment not in TICKETMASTER_SEGMENTS:
             continue
-        listing = event(source, item["name"], date.fromisoformat(start["localDate"]), clock, link=item.get("url", ""))
+        notes = item.get("description") or item.get("info") or item.get("pleaseNote") or ""
+        listing = event(source, item["name"], date.fromisoformat(start["localDate"]), clock, link=item.get("url", ""),
+                        about=about(notes))
         listing["category"] = TICKETMASTER_SEGMENTS.get(segment, source["category"])
         events.append(listing)
     return events
@@ -300,7 +381,9 @@ def read_ics(source):
                 day, start = at_boston(moment)
             venue = unescape(fields.get("LOCATION", ("", ""))[1]).split(",")[0]
             summary = unescape(fields.get("SUMMARY", ("", ""))[1])
-            events.append(event(source, summary, day, start, link=fields.get("URL", ("", ""))[1], venue=venue))
+            description = re.sub(r"\\([,;\\])", r"\1", fields.get("DESCRIPTION", ("", ""))[1]).replace("\\n", "\n\n")
+            events.append(event(source, summary, day, start, link=fields.get("URL", ("", ""))[1], venue=venue,
+                                about=about(html.escape(description))))
             fields = None
         elif fields is not None and ":" in line:
             name, value = line.split(":", 1)
@@ -329,7 +412,7 @@ def read_tribe(source):
             # The venue's own local time, which for these is Boston's.
             moment = datetime.strptime(item["start_date"], "%Y-%m-%d %H:%M:%S")
             events.append(event(source, title, moment.date(), None if item.get("all_day") else moment.time(),
-                                link=item.get("url", "")))
+                                link=item.get("url", ""), about=about(item.get("description") or item.get("excerpt"))))
         url = data.get("next_rest_url")  # 50 to a page.
     return events
 
@@ -342,12 +425,12 @@ def window_end():
     return today() + timedelta(days=DAYS_AHEAD)
 
 
-def opening(source, title, first, last, link, start=None):
+def opening(source, title, first, last, link, start=None, about=()):
     """An exhibition, listed once, on the day it opens, with when it closes; one already open is left out, so it
     isn't at the top of every day for months."""
     if first < today():
         return []
-    return [event(source, title, first, start, link=link, detail=f"through {last:%b} {last.day}")]
+    return [event(source, title, first, start, link=link, detail=f"through {last:%b} {last.day}", about=about)]
 
 
 def read_mit(source):
@@ -377,13 +460,14 @@ def read_mit(source):
             # Midnight is how an event with its time left off comes through.
             start = None if instance.get("all_day") or (start.hour, start.minute) == (0, 0) else start
             link = item.get("localist_url") or source["url"]
+            described = about(item.get("description") or "")
             first, last = date.fromisoformat(item["first_date"]), date.fromisoformat(item["last_date"])
             if "Exhibits" in types and last > first:
                 if item["id"] not in seen:
                     seen.add(item["id"])
-                    events += opening(source, item["title"], first, last, link)
+                    events += opening(source, item["title"], first, last, link, about=described)
                 continue
-            events.append(event(source, item["title"], day, start, link=link))
+            events.append(event(source, item["title"], day, start, link=link, about=described))
         page = data.get("page", {}).get("next_page") if page < 20 else None
     return events
 
@@ -421,11 +505,12 @@ def read_bibliocommons(source):
             branch = re.sub(r"\s+in\s+.*$", "", text(field("bc:name")))  # "Central Library in Copley Square"
             venue = source["name"] if branch.startswith("Central") or not branch else f"{branch} Library"
             title, link = text(field("title")), field("link")
+            described = about(field("description"))
             last = date.fromisoformat((field("bc:end_date_local") or day.isoformat())[:10])
             if "Exhibitions" in tags and last > day:
-                events += [dict(listing, venue=venue) for listing in opening(source, title, day, last, link)]
+                events += [dict(listing, venue=venue) for listing in opening(source, title, day, last, link, about=described)]
             else:
-                events.append(event(source, title, day, start, link=link, venue=venue))
+                events.append(event(source, title, day, start, link=link, venue=venue, about=described))
         if not items or day > end:
             break
     return events
@@ -503,7 +588,8 @@ def read_harvard_art(source):
             continue
         moment = datetime.fromisoformat(item["date"].replace("Z", "+00:00")).replace(second=0, microsecond=0)
         day, start = at_boston(moment)
-        listing = event(source, title, day, start, link=item.get("event_link") or source["url"])
+        listing = event(source, title, day, start, link=item.get("event_link") or source["url"],
+                        about=about(item.get("summary") or ""))
         listing["category"] = category
         events.append(listing)
     return events
@@ -580,6 +666,8 @@ def combine_films(items):
             "title": min((item["title"] for item in showings), key=lambda title: (len(title), sum(map(str.isupper, title)))),
             "times": sorted(moment for item in showings for moment in item["times"])[:1],
             "category": "film",
+            # The first theater's description that has one: most describe the film the same way.
+            "about": next((item["about"] for item in showings if item.get("about")), []),
         })
     return rows
 
@@ -627,7 +715,7 @@ def render_row(item):
         f'<li class="row" data-category="{item["category"]}"><span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{render_times(item["times"])}{detail}</div></li>'
+        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div></li>'
     )
 
 
@@ -644,7 +732,7 @@ def render_combined(item):
         f'<li class="row combined" data-category="{item["category"]}"><details><summary>'
         f'<span class="source">{icon(item["category"])}<span>{places} theaters</span></span>'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>{start}'
-        f'<span class="more" aria-hidden="true">›</span></div></summary>'
+        f'<span class="more" aria-hidden="true">›</span>{shared.preview(item["title"], item["about"])}</div></summary>'
         f'<ul class="showings">{showings}</ul></details></li>'
     )
 
@@ -816,6 +904,7 @@ def saved(item):
         "detail": item["detail"],
         "venue": item["venue"],
         "category": item["category"],
+        "about": item.get("about", []),
     }
 
 

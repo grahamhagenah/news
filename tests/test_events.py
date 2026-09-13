@@ -144,6 +144,37 @@ class Readers(unittest.TestCase):
         self.assertTrue(all(item["times"] for item in found))
 
 
+class About(unittest.TestCase):
+    """What a source says about an event, for its preview."""
+
+    def test_short_facts_run_together_and_links_go(self):
+        self.assertEqual(
+            build.about("<p>Doors 7pm</p><p>21+</p><p>$10 cover</p><p>Event page:</p><p>Buy tickets</p>"
+                        "<p>Some Band</p><p>someband.bandcamp.com</p><p>https://example.com/show</p>"),
+            ["Doors 7pm · 21+ · $10 cover"])
+
+    def test_a_sentence_cut_by_a_line_break_is_whole(self):
+        self.assertEqual(build.about("A folk singer redefining the genre through a<br>powerful blend of soul.<br>Doors 7"),
+                         ["A folk singer redefining the genre through a powerful blend of soul.", "Doors 7"])
+
+    def test_a_line_repeating_the_name_is_left_out(self):
+        item = build.event(source("tribe", "x"), "The 4411", date(2026, 9, 13), about=["The 4411", "Ages: All Ages"])
+        self.assertEqual(item["about"], ["Ages: All Ages"])
+
+    def test_from_the_samples(self):
+        with mock.patch.object(build, "fetch", sample):
+            midway = build.read_ics(source("ics", "https://tockify.com/api/feeds/ics/midwaycafejp"))[0]
+            brattle = build.read_jsonld(source("jsonld", "https://brattlefilm.org/coming-soon/", "film"))[0]
+            coolidge = build.read_coolidge(source("coolidge", "https://coolidge.org/showtimes", "film"))[0]
+            roadrunner = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json"))[0]
+        self.assertEqual(midway["about"], ["Doors at 9:30pm · Show at 10:15 pm · 21+ · $10 cover · cash only venue"])
+        # The Brattle's own description is just the dates, so its film's credits stand in.
+        self.assertEqual(brattle["about"], ["Directed by Rafael Manuel. With Carlos Siguion-Reyna, Jorrybell Agoto, Nour Hooshmand.",
+                                            "Drama, Mystery · 1h 40m · Tagalog with English subtitles"])
+        self.assertEqual(coolidge["about"][-1], "1hr 38mins")
+        self.assertTrue(roadrunner["about"][0].startswith("For a while there, Charles Wesley Godwin"), "the bio, not the ticket note")
+
+
 class ArtAndTalks(unittest.TestCase):
     """The art & talks readers, on a fixed day, since their samples' exhibitions open and close on real dates."""
 
@@ -288,6 +319,7 @@ class Page(unittest.TestCase):
             found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json"))
         page = build.render_index(found, [source("aeg", "x", name="Roadrunner")], [], [], datetime.now(timezone.utc))
         self.assertEqual(page.count('<li class="row" data-category="music">'), len(found))
+        self.assertEqual(page.count('<div class="preview">'), sum(bool(item["about"]) for item in found))
         for key in build.CATEGORIES:
             self.assertIn(f'data-show="{key}"', page)
         self.assertIn("[hidden] {{ display: none !important; }}".replace("{{", "{").replace("}}", "}"), page)

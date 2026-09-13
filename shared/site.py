@@ -1,9 +1,11 @@
 """What the newsfeed and the events page share: fetching, the fallback and alert bookkeeping, the icon system,
-and the page itself around each one's list (head, header, base styles, and the script that ages timestamps).
+the hover previews, and the page itself around each one's list (head, header, base styles, and the scripts
+that age timestamps and place previews).
 Each site's build.py adds its own readers, rows and styles on top."""
 
 import html
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -68,6 +70,46 @@ def icon(name, label=None):
     return f'<svg class="icon" {described}><use href="#icon-{name}"/></svg>'
 
 
+def clean(text):
+    """HTML or text as one line of plain text."""
+    text = re.sub(r"<[^>]+>", "", html.unescape(text))
+    text = re.sub(r"\s+", " ", text).strip()
+    # Some feeds leave gaps where links were stripped: "“ Gimme", "essay , posted".
+    return re.sub(r"([“(\[]) | ([,.;:!?)\]”])", r"\1\2", text)
+
+
+BLOCK_TAG = re.compile(r"</?(p|div|blockquote|li|ul|ol|h[1-6]|br|pre|table|tr)\b[^>]*>", re.I)
+BARE_LINKS = re.compile(r"[\s,]*(https?://\S+[\s,]*)+")
+
+
+def excerpt(markup, max_chars=600, skip=None, min_words=4, max_paragraphs=3):
+    """The first few paragraphs of an HTML snippet, as plain text, cut to about max_chars. Paragraphs of fewer
+    than min_words (lone links, handles, "Thanks!") and any matching skip are left out."""
+    markup = re.sub(r"(?is)<(script|style|figure)\b.*?</\1>", " ", markup or "")
+    paragraphs = [clean(part) for part in re.split(r"\n\s*\n", BLOCK_TAG.sub("\n\n", markup))]
+    kept = []
+    budget = max_chars
+    for paragraph in paragraphs:
+        if len(paragraph.split()) < min_words or (skip and skip.match(paragraph)) or BARE_LINKS.fullmatch(paragraph):
+            continue
+        if len(paragraph) > budget:
+            kept.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
+            break
+        kept.append(paragraph)
+        budget -= len(paragraph)
+        if len(kept) == max_paragraphs:
+            break
+    return kept
+
+
+def preview(title, paragraphs):
+    """The box that opens under a headline on hover: the full headline, shown only when the one-line one is cut
+    off, then the item's first paragraphs. It goes right after the headline's title, which the hover is on."""
+    body = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in paragraphs)
+    return (f'<div class="preview{"" if body else " title-only"}">'
+            f'<p class="full-title">{html.escape(title)}</p>{body}</div>')
+
+
 BASE_CSS = """
   html { background: #000; }
   body { margin: 0; padding: 3rem 1.25rem 4rem; color: #fff; background: #000;
@@ -95,8 +137,21 @@ BASE_CSS = """
   .icon { flex: none; width: 12px; height: 12px; }
   .source { display: flex; align-items: center; gap: .5em; min-width: 0; color: #666; font-size: .8em; }
   .source > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .headline { display: flex; align-items: baseline; min-width: 0; }
+  .headline { display: flex; align-items: baseline; min-width: 0; position: relative; }
   .headline .title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  /* A headline's preview, opening under it (or over it, near the bottom of the window) after a short hover. */
+  .preview { position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
+             box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
+             color: #bbb; font-size: .85em; font-weight: normal; line-height: 1.5; white-space: normal; pointer-events: none;
+             visibility: hidden; opacity: 0; transition: opacity .1s, visibility 0s .1s; }
+  .preview.above { top: auto; bottom: calc(100% + .5rem); }
+  .preview p { margin: 0 0 .7em; }
+  .preview p:last-child { margin-bottom: 0; }
+  .preview .full-title { display: none; color: #fff; }
+  .truncated .preview .full-title { display: block; }
+  .headline:not(.truncated) .preview.title-only { display: none; }
+  .headline .title:hover ~ .preview { visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }
+  @media (hover: none), (max-width: 34rem) { .preview { display: none; } }
   .pager { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
   .pager a, .pager a:visited { color: #999; }
   .empty { color: #666; font-size: .9rem; }
@@ -125,6 +180,20 @@ AGES = """
     const s = Math.max(60, (Date.now() - new Date(t.dateTime)) / 1000);
     const age = s < 3600 ? Math.round(s / 60) + "m" : s < 86400 ? Math.round(s / 3600) + "h" : Math.round(s / 86400) + "d";
     t.textContent = t.matches(".updated, .ago") ? age + " ago" : age;
+  }
+</script>"""
+
+# Previews open below their headline, or above it when they'd run off the bottom of the window, and lead with
+# the full headline when the one-line one is cut off.
+PREVIEWS = """
+<script>
+  for (const title of document.querySelectorAll(".headline .title")) {
+    title.addEventListener("mouseenter", () => {
+      const headline = title.closest(".headline");
+      headline.classList.toggle("truncated", title.scrollWidth > title.clientWidth);
+      const preview = headline.querySelector(".preview");
+      if (preview) preview.classList.toggle("above", title.getBoundingClientRect().bottom + preview.offsetHeight + 24 > innerHeight);
+    });
   }
 </script>"""
 
@@ -161,7 +230,7 @@ def page(site, title, body, css="", head="", symbols="", updated=None):
 <main>
 <header><nav class="sites" aria-label="Sites">{links}</nav>{note}</header>
 {body}
-</main>{AGES}
+</main>{AGES}{PREVIEWS}
 </body>
 </html>
 """

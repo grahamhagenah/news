@@ -135,11 +135,7 @@ def child_text(element, *names):
     return ""
 
 
-def clean(text):
-    text = re.sub(r"<[^>]+>", "", html.unescape(text))
-    text = re.sub(r"\s+", " ", text).strip()
-    # Some feeds leave gaps where links were stripped: "“ Gimme", "essay , posted".
-    return re.sub(r"([“(\[]) | ([,.;:!?)\]”])", r"\1\2", text)
+clean = shared.clean
 
 
 def parse_date(text):
@@ -209,30 +205,13 @@ def entry_audio(entry):
     return None
 
 
-BLOCK_TAG = re.compile(r"</?(p|div|blockquote|li|ul|ol|h[1-6]|br|pre|table|tr)\b[^>]*>", re.I)
 # hnrss describes link posts with these lines instead of any article text.
 BOILERPLATE = re.compile(r"^(Article URL|Comments URL|Points|# Comments):")
-BARE_LINKS = re.compile(r"[\s,]*(https?://\S+[\s,]*)+")
 
 
 def excerpt(markup, max_chars=PREVIEW_CHARS):
     """The first few paragraphs of an HTML snippet, as plain text, cut to about max_chars."""
-    markup = re.sub(r"(?is)<(script|style|figure)\b.*?</\1>", " ", markup)
-    paragraphs = [clean(part) for part in re.split(r"\n\s*\n", BLOCK_TAG.sub("\n\n", markup))]
-    kept = []
-    budget = max_chars
-    for paragraph in paragraphs:
-        # Skip fragments like lone links, handles and "Thanks!" — they don't say what the post is about.
-        if len(paragraph.split()) < 4 or BOILERPLATE.match(paragraph) or BARE_LINKS.fullmatch(paragraph):
-            continue
-        if len(paragraph) > budget:
-            kept.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
-            break
-        kept.append(paragraph)
-        budget -= len(paragraph)
-        if len(kept) == 3:
-            break
-    return kept
+    return shared.excerpt(markup, max_chars, skip=BOILERPLATE)
 
 
 class MetaDescriptionFinder(HTMLParser):
@@ -418,12 +397,7 @@ def render_index(feeds, posts, failed, stale, built_at):
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
         mark = icon("podcast" if post["podcast"] else "article")
-        # The full headline leads the preview, shown only when the one-line headline is cut off.
-        paragraphs = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in post["summary"])
-        preview = (
-            f'<div class="preview{"" if paragraphs else " title-only"}">'
-            f'<p class="full-title">{html.escape(post["title"])}</p>{paragraphs}</div>'
-        )
+        preview = shared.preview(post["title"], post["summary"])
         comments = ""
         if post["comments"]:
             count = post["comment_count"]
@@ -489,15 +463,6 @@ INDEX_JS = """
     a.addEventListener("auxclick", markRead);
   }
   saveClicked();
-
-  // Show a preview above its headline instead of below when it would run off the bottom of the window.
-  for (const a of links) {
-    a.addEventListener("mouseenter", () => {
-      a.parentElement.classList.toggle("truncated", a.scrollWidth > a.clientWidth);
-      const preview = a.parentElement.querySelector(".preview");
-      if (preview) preview.classList.toggle("above", a.getBoundingClientRect().bottom + preview.offsetHeight + 24 > innerHeight);
-    });
-  }
 
   // Opened from the home screen there's no pull-to-refresh, so reload on return after five minutes away.
   let hiddenAt = 0;
@@ -679,24 +644,11 @@ CSS = """
   /* Until the script picks the page, show the first one, so the whole list never flashes up. */
   .posts:not(.paged) li:nth-child(n+PAGE_START) { display: none; }
   .note, time { color: #666; font-size: .8em; }
-  .headline { position: relative; }
   .headline time, .headline .comments { flex: none; }
   /* Each post's icon: in its kind's color while the post is unread, gray once it's read. */
   .source .icon { color: #555; }
   .unread .source .icon { color: var(--article); }
   .row[data-podcast].unread .source .icon { color: var(--podcast); }
-  .preview { position: absolute; z-index: 1; top: calc(100% + .5rem); left: -1rem; width: min(34rem, calc(100% + 1rem));
-             box-sizing: border-box; padding: .9rem 1rem; background: #000; border: 1px solid #333; border-radius: 6px;
-             color: #bbb; font-size: .85em; line-height: 1.5; pointer-events: none;
-             visibility: hidden; opacity: 0; transition: opacity .1s, visibility 0s .1s; }
-  .preview.above { top: auto; bottom: calc(100% + .5rem); }
-  .preview p { margin: 0 0 .7em; }
-  .preview p:last-child { margin-bottom: 0; }
-  .preview .full-title { display: none; color: #fff; }
-  .truncated .preview .full-title { display: block; }
-  .headline:not(.truncated) .preview.title-only { display: none; }
-  .headline a.title:hover ~ .preview { visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }
-  @media (hover: none), (max-width: 34rem) { .preview { display: none; } }
   .new-posts { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
                transform: translateX(-50%); padding: .45rem 1.1rem; border: 0; border-radius: 999px;
                background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
