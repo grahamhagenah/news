@@ -36,7 +36,10 @@ ROUTES = [
     ("calendar.mit.edu", "mit.json"),
     ("rss/events?types=test&page=1", "bpl.xml"),
     ("gateway.bibliocommons.com", "bpl_end.xml"),  # Every later page: the feed with nothing left in it.
-    ("mfa.org/programs", "mfa.html"),
+    ("mfa.org/programs/lectures", "mfa_lectures.html"),
+    ("mfa.org/programs/special-event", "mfa_special-event.html"),
+    ("mfa.org/programs/film", "mfa_film.html"),
+    ("mfa.org/programs/music", "mfa_music.html"),
     ("harvardfilmarchive.org/calendar", "hfa.html"),
     ("bostonfilmhub.com", "bostonfilmhub.html"),
     ("frenchlibrary.org", "frenchlibrary.html"),
@@ -185,6 +188,33 @@ class Readers(unittest.TestCase):
         self.assertTrue(all(item["times"] for item in found))
 
 
+class Fetching(unittest.TestCase):
+    def test_a_page_two_sources_read_is_downloaded_once(self):
+        calls = []
+        def download(url, *args):
+            calls.append(url)
+            return url, b"<html></html>"
+        build._fetched.clear()
+        self.addCleanup(build._fetched.clear)
+        with mock.patch.object(build.shared, "fetch", download):
+            build.fetch("https://bostonfilmhub.com/#venue=Somerville+Theatre")
+            build.fetch("https://bostonfilmhub.com/#venue=Capitol+Theatre")
+        self.assertEqual(calls, ["https://bostonfilmhub.com/"])
+
+    def test_mit_asks_for_exhibits_and_lectures_only(self):
+        asked = []
+        with mock.patch.object(build, "fetch", lambda url: asked.append(url) or sample(url)):
+            build.read_mit(source("mit", "https://calendar.mit.edu/api/2/events", "art", "MIT"))
+        self.assertIn("type%5B%5D=102763&type%5B%5D=102764", asked[0])
+
+    def test_ica_reads_event_pages_only_for_events_in_the_window(self):
+        asked = []
+        with mock.patch.object(build, "fetch", lambda url, **options: asked.append(url) or sample(url)), \
+                mock.patch.object(build, "today", lambda: date(2026, 8, 1)):  # Its sample's events are all past the window then.
+            build.read_ica(source("ica", "https://www.icaboston.org/calendar", "art", "ICA"))
+        self.assertEqual(asked, ["https://www.icaboston.org/calendar"])
+
+
 class About(unittest.TestCase):
     """What a source says about an event, for its preview."""
 
@@ -258,14 +288,19 @@ class ArtAndTalks(unittest.TestCase):
         self.assertFalse([title for title in venues if "Tech Talk" in title or "Adulting" in title or "Becoming Boston" in title])
 
     def test_mfa_programs_by_kind(self):
+        # Each kind from its own page, which says what it is: no guided tours or studio classes to skip.
         found = build.read_mfa(source("mfa", "https://www.mfa.org/programs", "art", "MFA"))
         self.assertEqual({item["title"]: item["category"] for item in found}, {
-            "UNIQLO Free Admission Day": "art",
             "The Road to Livres d’Artiste": "art",
+            "Dalí and the Book": "art",
+            "$5 Third Thursday": "art",
+            "First Fridays": "art",
             "Deep Quiet Room (深度安靜)": "film",
+            "Dust in the Wind (戀戀風塵)": "film",
+            "Lucky Lu (幸福之路)": "film",
             "Camelia Latin-Jazz Trio": "music",
-        })  # Not the guided tour, member hours, studio class, or the film festival spanning three days.
-        self.assertEqual(found[1]["times"], [time(13, 0)])
+        })
+        self.assertEqual(found[0]["times"], [time(13, 0)])
 
     def test_ica_by_kind(self):
         found = build.read_ica(source("ica", "https://www.icaboston.org/calendar", "art", "ICA"))

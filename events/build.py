@@ -8,7 +8,8 @@ import os
 import re
 import shutil
 import sys
-from concurrent.futures import ThreadPoolExecutor
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
@@ -40,9 +41,23 @@ def read_sources():
     return sources
 
 
+_fetched, _fetching = {}, threading.Lock()
+
+
 def fetch(url, attempts=3, timeout=20):
-    """The page or data at url, as text."""
-    return shared.fetch(url, USER_AGENT, attempts, timeout)[1].decode("utf-8", "replace")
+    """The page or data at url, as text. Each address is downloaded once a build, however many sources read
+    it (Boston Film Hub's page, for two theaters); a #fragment, which isn't sent, doesn't make it another."""
+    address = urlsplit(url)._replace(fragment="").geturl()
+    with _fetching:
+        pending, first = _fetched.get(address), address not in _fetched
+        if first:
+            pending = _fetched[address] = Future()
+    if first:
+        try:
+            pending.set_result(shared.fetch(address, USER_AGENT, attempts, timeout)[1].decode("utf-8", "replace"))
+        except Exception as error:
+            pending.set_exception(error)
+    return pending.result()
 
 
 def text(markup):
@@ -362,7 +377,9 @@ def read_ica(source):
             day = day.replace(year=today_.year + 1)
         name = text(re.sub(r"<[^>]+>", "", title.group(2)))  # Italics for a work's name, without a gap after.
         link = html.unescape(title.group(1))
-        listing = event(source, name, day, clock_range_start(clock_text), link=link, about=ica_about(link))
+        # Its own page for what it's about, only when it's soon enough to be listed.
+        listing = event(source, name, day, clock_range_start(clock_text), link=link,
+                        about=ica_about(link) if day <= window_end() else [])
         listing["category"] = category
         events.append(listing)
     return events
@@ -598,6 +615,9 @@ def opening(source, title, first, last, link, start=None, about=()):
     return [event(source, title, first, start, link=link, detail=f"through {last:%b} {last.day}", about=about)]
 
 
+MIT_EXHIBITS, MIT_LECTURES = 102763, 102764  # Its event_types filter's ids for Exhibits, Conferences/Seminars/Lectures.
+
+
 def read_mit(source):
     """MIT's events calendar (Localist), kept to what's open to the public and about art: exhibitions, and talks
     from its architecture and humanities schools or listed under the arts. MIT tags many public events for no
@@ -605,7 +625,10 @@ def read_mit(source):
     arts = {"School of Architecture and Planning (SA+P)", "School of Humanities, Arts, and Social Sciences (SHASS)"}
     events, seen, page = [], set(), 1
     while page:
-        data = json.loads(fetch(f"{source['url']}?{urlencode({'days': DAYS_AHEAD + 1, 'pp': 100, 'page': page})}"))
+        # Only its exhibits and its conferences, seminars and lectures (type[] ids, either of them), about
+        # 180 events a month, not all 400-odd.
+        query = urlencode([("days", DAYS_AHEAD + 1), ("pp", 100), ("page", page), ("type[]", MIT_EXHIBITS), ("type[]", MIT_LECTURES)])
+        data = json.loads(fetch(f"{source['url']}?{query}"))
         for entry in data.get("events", []):
             item = entry["event"]
             tags = {key: {tag["name"] for tag in value} for key, value in (item.get("filters") or {}).items()}
@@ -681,41 +704,38 @@ def read_bibliocommons(source):
     return events
 
 
-# The MFA's program types, as the first line of each program's label, and where each goes; the rest (guided
-# tours, studio classes, courses, member hours) are left out.
-MFA_KINDS = [("Lecture", "art"), ("Special Event", "art"), ("Open House", "art"), ("Film", "film"), ("Concert", "music")]
+# The MFA's programs, from the list of upcoming ones on each kind's own page, and where each kind goes; the
+# rest (guided tours, studio classes, courses, member hours) aren't read at all.
+MFA_SECTIONS = [("lectures", "art"), ("special-event", "art"), ("film", "film"), ("music", "music")]
 
 
 def read_mfa(source):
-    """The MFA's program calendar, 25 programs to a page, soonest first. A program spanning several days (a
-    course, a festival) is a heading over its own dated programs, so only single days are kept."""
+    """The MFA's lectures, special events, films and concerts, 25 to a page, soonest first. A program spanning
+    several days (a course, a festival) is a heading over its own dated programs, so only single days are kept."""
     end = window_end()
     events = []
-    for page in range(30):
-        markup = fetch(f"{source['url']}?page={page}")
-        programs = re.findall(
-            r'<div\s+class="col-lg-8">\s*(.*?)<h2 class="field-content"><a href="([^"]+)">(.*?)</a></h2>'
-            r'\s*<p class="field-content info"><span class="date-display-range">(.*?)</span>', markup, re.S)
-        day = None
-        for label, link, title, when in programs:
-            # "Saturday, September 12, 2026<br>10:00 am–11:15 am"; a span reads "Friday, October 2–Friday, …".
-            single = re.fullmatch(r"\w+, (\w+ \d{1,2}, \d{4})(?:<br>\s*(\d{1,2})(?::(\d{2}))?\s*([ap])m.*)?", when.strip(), re.S)
-            if not single:
-                continue
-            day = datetime.strptime(single.group(1), "%B %d, %Y").date()
-            kind = text(label.split("<br>")[0])
-            category = next((category for name, category in MFA_KINDS if name in kind), None)
-            if not category:
-                continue
-            start = None
-            if single.group(2):
-                hour = int(single.group(2)) % 12 + (12 if single.group(4) == "p" else 0)
-                start = datetime.min.time().replace(hour=hour, minute=int(single.group(3) or 0))
-            listing = event(source, text(title), day, start, link=f"https://www.mfa.org{html.unescape(link)}")
-            listing["category"] = category
-            events.append(listing)
-        if 'rel="next"' not in markup or (day and day > end):
-            break
+    for section, category in MFA_SECTIONS:
+        for page in range(10):
+            markup = fetch(f"{source['url']}/{section}" + (f"?page={page}" if page else ""))
+            programs = re.findall(
+                r'<div\s+class="col-lg-8">.*?<h[23] class="field-content"><a href="([^"]+)">(.*?)</a></h[23]>'
+                r'.*?<span class="date-display-range">(.*?)</span>', markup, re.S)
+            day = None
+            for link, title, when in programs:
+                # "Saturday, September 12, 2026<br>10:00 am–11:15 am"; a span reads "Friday, October 2–Friday, …".
+                single = re.fullmatch(r"\w+, (\w+ \d{1,2}, \d{4})(?:<br>\s*(\d{1,2})(?::(\d{2}))?\s*([ap])m.*)?", when.strip(), re.S)
+                if not single:
+                    continue
+                day = datetime.strptime(single.group(1), "%B %d, %Y").date()
+                start = None
+                if single.group(2):
+                    hour = int(single.group(2)) % 12 + (12 if single.group(4) == "p" else 0)
+                    start = datetime.min.time().replace(hour=hour, minute=int(single.group(3) or 0))
+                listing = event(source, text(title), day, start, link=f"https://www.mfa.org{html.unescape(link)}")
+                listing["category"] = category
+                events.append(listing)
+            if 'rel="next"' not in markup or (day and day > end):
+                break
     return events
 
 
