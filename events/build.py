@@ -112,6 +112,9 @@ VENUE_ADDRESSES = {
     "Midway Cafe": ("3496 Washington St", "Boston", "02130"),
     "Lizard Lounge": ("1667 Massachusetts Ave", "Cambridge", "02138"),
     "The Rockwell": ("255 Elm St", "Somerville", "02144"),
+    "The Lilypad": ("1353 Cambridge St", "Cambridge", "02139"),
+    "Club Passim": ("47 Palmer St", "Cambridge", "02138"),
+    "Arts at the Armory": ("191 Highland Ave", "Somerville", "02143"),
     "MIT": ("77 Massachusetts Ave", "Cambridge", "02139"),
     "Boston Public Library": ("700 Boylston St", "Boston", "02116"),
     "MFA": ("465 Huntington Ave", "Boston", "02115"),
@@ -193,7 +196,7 @@ def event(source, title, day, start=None, link="", detail="", venue="", about=()
 ABOUT_CHARS = 400  # Roughly how much of what a source says about an event its preview shows.
 # Short lines worth keeping, like "Doors 7pm", "21+" and "$10 cover": the rest are headings, names and labels.
 FACT = re.compile(r"\d|\$|\b(free|ages?|doors?|cover|cash|sold out|cancel\w*|postponed|tickets?)\b", re.I)
-NOT_ABOUT = re.compile(r"(buy|get)? ?tickets?( here| now)?|more info(rmation)?|learn more|rsvp( here)?|register( here)?", re.I)
+NOT_ABOUT = re.compile(r"(buy|get)? ?(your )?tickets?( here| now)?|more info(rmation)?|learn more|rsvp( here)?|register( here)?", re.I)
 LINKS = re.compile(r"https?://\S+|\b[\w-]+(\.[\w-]+)*\.(com|net|org|io|co|fm|me|us|bandcamp\.com)\b\S*", re.I)
 
 
@@ -673,8 +676,14 @@ def read_ticketmaster(source):
     return events
 
 
-def read_ics(source):
-    """iCalendar feeds. Only each event's first date; repeating events aren't expanded."""
+# A line of a web page's script left in an event's description (a ticket button's tracking): not about it.
+CODE = re.compile(r"\$\(|\bfunction\s*\(|\bfbq\(|^\s*[})\]]+\)?;?\s*$")
+
+
+def read_ics(source, kinds=None):
+    """iCalendar feeds. Only each event's first date; repeating events aren't expanded. With kinds, a map from
+    the feed's categories to ours, each event goes in the first of its categories there, and one in none of
+    them is left out."""
     def unescape(value):
         return re.sub(r"\\([,;\\])", r"\1", value).replace("\\n", " ").strip()
 
@@ -685,6 +694,11 @@ def read_ics(source):
             fields = {}
         elif line == "END:VEVENT" and fields is not None:
             # Each field is (parameters, value), as in DTSTART;TZID=America/New_York:20260919T120000.
+            tags = [unescape(tag) for tag in re.split(r"(?<!\\),", fields.get("CATEGORIES", ("", ""))[1])]
+            category = next((kinds[tag] for tag in tags if tag in kinds), None) if kinds else source["category"]
+            if not category or fields.get("STATUS", ("", ""))[1] == "CANCELLED":
+                fields = None
+                continue
             params, value = fields.get("DTSTART", ("", ""))
             if re.fullmatch(r"\d{8}", value):
                 day, start = datetime.strptime(value, "%Y%m%d").date(), None
@@ -698,14 +712,68 @@ def read_ics(source):
                 day, start = at_boston(moment)
             venue, _, place = unescape(fields.get("LOCATION", ("", ""))[1]).partition(",")
             summary = unescape(fields.get("SUMMARY", ("", ""))[1])
-            description = re.sub(r"\\([,;\\])", r"\1", fields.get("DESCRIPTION", ("", ""))[1]).replace("\\n", "\n\n")
-            events.append(event(source, summary, day, start, link=fields.get("URL", ("", ""))[1], venue=venue,
-                                about=about(html.escape(description)), address=postal(place)))
+            description = re.sub(r"\\([,;\\])", r"\1", fields.get("DESCRIPTION", ("", ""))[1]).split("\\n")
+            description = "\n\n".join(part for part in description if not CODE.search(part))
+            listing = event(source, summary, day, start, link=fields.get("URL", ("", ""))[1], venue=venue,
+                            about=about(html.escape(html.unescape(description))), address=postal(place))
+            listing["category"] = category
+            events.append(listing)
             fields = None
         elif fields is not None and ":" in line:
             name, value = line.split(":", 1)
             key, _, params = name.partition(";")
             fields.setdefault(key, (params, value))
+    return events
+
+
+# Arts at the Armory's kinds of event, from its calendar's categories, and where each goes; not its comedy,
+# dance nights and classes, markets or community meetings.
+ARMORY_KINDS = {"Music": "music", "Literary Art": "art", "Film": "film"}
+
+
+def read_armory(source):
+    """Arts at the Armory's calendar feed, kept to its concerts, readings and talks, and screenings; not a
+    show it still lists after moving it to another venue, "[Moved to the Royale]"."""
+    return [listing for listing in read_ics(source, ARMORY_KINDS) if not re.search(r"\[moved to", listing["title"], re.I)]
+
+
+# What a Squarespace venue lists that isn't a show: its yoga classes and comedy nights.
+SQUARESPACE_SKIP = {"Yoga", "Comedy"}
+
+
+def read_squarespace(source):
+    """A Squarespace site's events page (The Lilypad's), from the data it gives with ?format=json: every
+    upcoming event, with when it starts and a few lines on it, admission first. Not a private event."""
+    events = []
+    for item in json.loads(fetch(source["url"] + "?format=json")).get("upcoming", []):
+        title = re.sub(r"\s+", " ", html.unescape(item["title"])).strip()
+        if SQUARESPACE_SKIP & set(item.get("categories") or []) or re.search(r"private event", title, re.I):
+            continue
+        day, start = at_boston(datetime.fromtimestamp(item["startDate"] // 1000, timezone.utc))
+        described = re.sub(r"<(style|script)\b.*?</\1>", "", item.get("body") or item.get("excerpt") or "", flags=re.S)
+        events.append(event(source, title, day, start, link=urljoin(source["url"], item["fullUrl"]), about=about(described)))
+    return events
+
+
+def read_passim(source):
+    """Club Passim's calendar, which is in its page's script: for each show a title, a date, a showtime, a line
+    on it ("album release with special guest …") and its ticket link. Only shows sold by Passim's own box
+    office, which are in the club; not the ones it presents elsewhere (at the Crane Estate, on a hike) or
+    cancelled. The page repeats a show for each month it draws, so each is kept once."""
+    events, seen = [], set()
+    for show in fetch(source["url"]).split("{title: ")[1:]:
+        def field(key):
+            found = re.search(rf'\b{key}: "(.*?)",', show)
+            return html.unescape(found.group(1)) if found else ""
+        title, day = html.unescape(show.split('",', 1)[0].lstrip('"')), field("date")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) or (field("postID"), day) in seen:
+            continue
+        seen.add((field("postID"), day))
+        if "passim.my.salesforce-sites.com" not in show or re.match(r"cancel", title, re.I) or re.search(r" at (the )?[A-Z]", title):
+            continue
+        when = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?\s*([AP]M)", field("showtime").strip(), re.I)
+        start = datetime.strptime(f"{when.group(1)}:{when.group(2) or '00'} {when.group(3).upper()}", "%I:%M %p").time() if when else None
+        events.append(event(source, title, date.fromisoformat(day), start, link=field("link"), detail=field("detail")))
     return events
 
 
@@ -927,6 +995,9 @@ READERS = {
     "alamo": read_alamo,
     "landmark": read_landmark,
     "ics": read_ics,
+    "armory": read_armory,
+    "squarespace": read_squarespace,
+    "passim": read_passim,
     "tribe": read_tribe,
     "hfa": read_hfa,
     "frenchlibrary": read_french_library,
@@ -1411,7 +1482,7 @@ INDEX_JS = """
     return params.toString() ? "?" + params : location.pathname;
   };
   function showEvents() {
-    const words = plain(search.offsetParent ? search.value : "").split(/\s+/).filter(Boolean); // Hidden on phones.
+    const words = plain(search.offsetParent ? search.value : "").split(/\\s+/).filter(Boolean); // Hidden on phones.
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
       && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));

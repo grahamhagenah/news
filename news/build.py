@@ -620,7 +620,7 @@ INDEX_JS = """
   const kind = li => li.hasAttribute("data-podcast") ? "podcasts" : li.dataset.video ? "videos" : "articles";
 
   function showPosts() {
-    const words = plain(query()).split(/\s+/).filter(Boolean);
+    const words = plain(query()).split(/\\s+/).filter(Boolean);
     const shown = items.filter(li => (show === "all" || kind(li) === show) && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(shown.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));

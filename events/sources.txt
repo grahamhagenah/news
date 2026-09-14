@@ -18,6 +18,9 @@
 #   ica        the ICA's calendar page: its concerts, screenings, talks, dance and First Fridays
 #   veezi      a theater site hosted by Veezi, from the showtimes its pages load (West Newton Cinema)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
+#   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings
+#   squarespace  a Squarespace site's events page, from the data it gives with ?format=json (The Lilypad)
+#   passim     Club Passim's live music page, whose calendar is in its script
 #   tribe      a WordPress site's The Events Calendar API, /wp-json/tribe/events/v1/events, optionally with
 #              ?categories=<slug> to keep one kind of event (Lizard Lounge, The Rockwell, SoWa)
 #   mit        MIT's events calendar API, kept to public exhibitions and arts and humanities talks
@@ -39,6 +42,9 @@ jsonld     https://dice.fm/venue/deep-cuts-nd6q   music   Deep Cuts
 ics        https://tockify.com/api/feeds/ics/midwaycafejp   music   Midway Cafe
 tribe      https://lizardloungeclub.com/wp-json/tribe/events/v1/events   music   Lizard Lounge
 tribe      https://therockwell.org/wp-json/tribe/events/v1/events?categories=music   music   The Rockwell
+squarespace  https://www.lilypadinman.com/home   music   The Lilypad
+passim     https://www.passim.org/live-music/   music   Club Passim
+armory     https://artsatthearmory.org/events.ics   music   Arts at the Armory
 
 # Art & talks
 mit        https://calendar.mit.edu/api/2/events   art   MIT

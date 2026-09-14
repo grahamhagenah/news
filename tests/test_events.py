@@ -21,7 +21,10 @@ FIXTURES = Path(__file__).parent / "fixtures" / "events"
 ROUTES = [
     ("aegwebprod", "roadrunner.json"),
     ("sinclaircambridge.com/events/detail/1460677", "sinclair_show.html"),
-    ("sinclaircambridge.com", "sinclair.html"),  # Its other shows' pages: no show time on them, so door times.
+    ("sinclaircambridge.com", "sinclair.html"),
+    ("artsatthearmory.org/events.ics", "armory.ics"),
+    ("lilypadinman.com/home?format=json", "lilypad.json"),
+    ("passim.org/live-music", "passim.html"),  # Its other shows' pages: no show time on them, so door times.
     ("mideastclub.com", "mideast.html"),
     ("brattlefilm.org", "brattle.html"),
     ("houseofblues.com", "houseofblues.html"),
@@ -104,6 +107,39 @@ class Readers(unittest.TestCase):
                 mock.patch.object(build, "today", lambda: date(2026, 8, 1)):  # Its sample's shows are all past the window then.
             build.read_axs(source("axs", "https://www.sinclaircambridge.com/events/all", "music", "The Sinclair"))
         self.assertEqual(asked, ["https://www.sinclaircambridge.com/events/all"])
+
+    def test_armory_by_kind(self):
+        found = build.read_armory(source("armory", "https://artsatthearmory.org/events.ics", "music", "Arts at the Armory"))
+        self.assertEqual({item["title"]: item["category"] for item in found}, {
+            "SOLD OUT: The Bowery Presents ear with Oral": "music",
+            "Lovestruck Books Presents: Grim Tidings Release-Day Bash with B.K. Borison": "art",
+            '"A Cell Phone Movie" Screening': "film",
+            "Get to the Gig Presents Armand Hammer with Curly Castro": "music",
+        })  # Not its comedy, or the show it moved to the Royale.
+        reading = next(item for item in found if item["category"] == "art")
+        self.assertEqual((reading["date"], reading["times"]), (date(2026, 9, 15), [time(18, 30)]))
+        self.assertFalse(any("$(" in line or "fbq(" in line for item in found for line in item["about"]), "not its ticket button's script")
+        self.assertTrue(any("&" in line for item in found for line in item["about"]))
+        self.assertFalse(any("&amp;" in line for item in found for line in item["about"]))
+
+    def test_squarespace_shows_not_yoga_or_private_events(self):
+        found = self.read("squarespace", "https://www.lilypadinman.com/home")
+        self.assertEqual([item["title"] for item in found], ["2nd Annual Bach & Beer with Aaron Larget-Caplan", "Elan Mehler Trio"])
+        first = found[0]
+        self.assertEqual((first["date"], first["times"]), (date(2026, 9, 13), [time(13, 30)]))
+        self.assertEqual(first["link"], "https://www.lilypadinman.com/home/2026/bach-and-beer-with-aaron-larget-caplan")
+        self.assertTrue(first["about"][0].startswith("$25 admission"))
+        self.assertFalse(any("--sqs" in line or "{" in line for item in found for line in item["about"]), "not its styles")
+
+    def test_passim_club_shows_once_each(self):
+        found = self.read("passim", "https://www.passim.org/live-music/")
+        # Not the shows it presents elsewhere, or the cancelled one; The Clements Brothers only once.
+        self.assertEqual([(item["date"], item["title"], item["times"]) for item in found], [
+            (date(2026, 9, 16), "Ágora Cultural Architects present: Richard Peña Trío", [time(20, 0)]),
+            (date(2026, 9, 27), "The Clements Brothers", [time(19, 0)]),
+            (date(2026, 11, 22), "Bruce Molsky", [time(14, 0)]),
+        ])
+        self.assertTrue(found[0]["link"].startswith("https://www.passim.org/live-music/events/"))
 
     def test_ticketweb_venue_without_room(self):
         found = self.read("ticketweb", "https://mideastclub.com/")
