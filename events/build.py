@@ -1254,7 +1254,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         others = (f'<nav class="weekends"><span></span><a href="{href}">{name}, {days} →</a></nav>\n' if other else
                   f'<nav class="weekends"><a href="{href}">← {name}, {days}</a><span></span></nav>\n')
     body = (
-        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{venue_menu(venues)}{shared.SEARCH}</nav>\n'
+        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}<span class="finders">{venue_menu(venues)}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
@@ -1534,7 +1534,7 @@ INDEX_JS = """
     }
   }
   function showEvents() {
-    const words = plain(search.offsetParent ? search.value : "").split(/\\s+/).filter(Boolean); // Hidden on phones.
+    const words = plain(search.offsetParent ? search.value : "").split(/\\s+/).filter(Boolean);
     narrow();
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
       && (!venue.value || li.dataset.sources.split("|").includes(venue.value))
@@ -1724,7 +1724,7 @@ CSS = """
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* The venue menu, as quiet as the filter beside it: a small arrow after it, and white once a venue is
      chosen. As wide as what's chosen, where the browser can size it so. */
-  .venue { margin-left: auto; max-width: 12rem; padding: 0 1.05em 0 0; border: 0; border-radius: 0; color: #666;
+  .venue { max-width: 12rem; padding: 0 1.05em 0 0; border: 0; border-radius: 0; color: #666;
            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em;
            font: inherit; font-size: .8rem; text-overflow: ellipsis; cursor: pointer; field-sizing: content;
            -webkit-appearance: none; appearance: none; }
@@ -1732,8 +1732,16 @@ CSS = """
   .venue.chosen { color: #fff; }
   .venue:focus-visible { outline: 1px solid #444; outline-offset: 3px; }
   .venue option { background: #000; color: #fff; }
-  .venue ~ .search { margin-left: .35rem; }
-  @media (max-width: 34rem) { .venue { font-size: .95rem; } }
+  /* The venue menu and the search, together at the end of the filter's row. On a phone, where the newsfeed
+     leaves its search out, they're on a line of their own under the kinds, from the left, the search taking
+     the rest of it; at 16px, since iPhones zoom in on a smaller field when it's tapped. */
+  .finders { display: flex; align-items: baseline; gap: 1.4rem; margin-left: auto; }
+  .finders .search { margin-left: 0; }
+  @media (max-width: 34rem) {
+    .finders { flex-basis: 100%; gap: 1.1rem; margin: .4rem 0 0; }
+    .finders .search { display: block; flex: 1; min-width: 0; width: auto; font-size: 1rem; }
+    .venue { font-size: 1rem; }
+  }
   /* A film at several places: the row opens to each place's times, with a › that turns when it's open. */
   .row.combined { display: block; }
   .combined summary { display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline;

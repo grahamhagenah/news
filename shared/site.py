@@ -161,7 +161,8 @@ BASE_CSS = """
   .headline .title:hover ~ .preview { visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }
   @media (hover: none), (max-width: 34rem) { .preview { display: none; } }
   /* The search, at the end of the filter's row and as quiet as the filter. Not on phones, where the row has
-     no room; a page ignores its ?q= there, so nothing is hidden by a search that can't be seen. */
+     no room, unless a page makes room for it (the events pages do); a page ignores its ?q= where it's hidden,
+     so nothing is hidden by a search that can't be seen. */
   .search { margin-left: auto; width: 10rem; padding: 0 0 .15rem; border: 0; border-bottom: 1px solid #333;
             border-radius: 0; background: none; color: #fff; font: inherit; font-size: .8rem; outline: none;
             -webkit-appearance: none; appearance: none; }
