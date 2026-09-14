@@ -5,6 +5,7 @@ python3 -m news.build"""
 import gzip
 import html
 import json
+import os
 import re
 import shutil
 import sys
@@ -303,10 +304,58 @@ def read_feed(site):
     }
 
 
+# A YouTube channel's feed, by the channel's id, and the YouTube Data API's list of a playlist's videos.
+YOUTUBE_CHANNEL_FEED = re.compile(r"youtube\.com/feeds/videos\.xml\?channel_id=UC([\w-]{22})")
+YOUTUBE_PLAYLIST_API = "https://www.googleapis.com/youtube/v3/playlistItems"
+
+
+def read_youtube_api(site, channel, key):
+    """A YouTube channel's latest videos from the YouTube Data API, for when its feed won't load: YouTube's
+    feeds answer 404 now and then, for a while, for a channel that's fine. The channel's UULF playlist is its
+    uploads without Shorts or live streams, as its feed is once Shorts are left out. One request costs one
+    unit of the key's 10,000 a day."""
+    query = urlencode({"part": "snippet,contentDetails", "playlistId": f"UULF{channel}", "maxResults": 15, "key": key})
+    items = json.loads(fetch(f"{YOUTUBE_PLAYLIST_API}?{query}")[1]).get("items", [])
+    cutoff = datetime.now(timezone.utc) - timedelta(days=site["days"])
+    posts = []
+    for item in items:
+        snippet, details = item.get("snippet", {}), item.get("contentDetails", {})
+        video = details.get("videoId") or snippet.get("resourceId", {}).get("videoId")
+        date = parse_date(details.get("videoPublishedAt") or snippet.get("publishedAt"))
+        title = clean(snippet.get("title", ""))
+        # A video made private or deleted since stays in the playlist, under a stand-in title.
+        if not video or title in ("Private video", "Deleted video") or (date and date < cutoff):
+            continue
+        posts.append({
+            "title": title,
+            "link": f"https://www.youtube.com/watch?v={video}",
+            "date": date,
+            "summary": excerpt(html.escape(snippet.get("description", "")).replace("\n", "<br>")),
+            "comments": None,
+            "comment_count": None,
+            "audio": None,
+            "podcast": False,
+            "video": video,
+        })
+    name = site["name"] or (items[0]["snippet"].get("channelTitle", "") if items else "") or site["url"]
+    return {"name": name, "url": site["url"], "feed_url": site["url"], "pocketcasts": site["pocketcasts"],
+            "posts": posts[: site["limit"]]}
+
+
 def load(site):
     try:
         return read_feed(site)
     except Exception as error:
+        # A YouTube channel whose feed won't load comes from the YouTube Data API instead, given a key (the
+        # YOUTUBE_KEY secret). The key is kept out of any error, which the page publishes.
+        channel, key = YOUTUBE_CHANNEL_FEED.search(site["url"]), os.environ.get("YOUTUBE_KEY", "").strip()
+        if channel and key:
+            try:
+                feed = read_youtube_api(site, channel.group(1), key)
+                print(f"  {feed['name']}: its feed failed ({error}), so its videos came from the YouTube API", file=sys.stderr)
+                return feed
+            except Exception as api_error:
+                error = f"{error}; the YouTube API: {str(api_error).replace(key, '…')}"
         return {"name": site["name"] or site["url"], "url": site["url"], "error": str(error), "posts": []}
 
 

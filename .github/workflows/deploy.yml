@@ -40,6 +40,10 @@ jobs:
       # Both pages' readers against saved samples of their sources; a change that breaks one isn't deployed.
       - run: python3 -m unittest
       - run: python3 -m news.build
+        env:
+          # A YouTube Data API key, for a YouTube channel whose feed won't load. Without it, such a channel
+          # shows its videos from the last build, as any other failing feed does.
+          YOUTUBE_KEY: ${{ secrets.YOUTUBE_KEY }}
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist/news

@@ -20,7 +20,7 @@ Run everything from this top folder, with only the Python standard library:
 ## The newsfeed
 
 - Add or remove sites from the [sources page](https://news.grahamhagenah.com/sources.html), which opens a pre-filled issue that the `sources.yml` workflow applies to `news/feeds.txt`, or edit that file directly. A homepage URL is enough; the build finds the feed. Options like `limit=5` and `days=14` go at the end of a line, and `pocketcasts=<id>` ties a podcast to its Pocket Casts show when its feed address isn't the one Pocket Casts knows.
-- YouTube channels work like any site (a channel's page is enough). Their videos, and any post linking straight to a YouTube video, play on the page in YouTube's privacy-enhanced embedded player, in a plain window that closes when the video ends, before YouTube can suggest another. Shorts are left out. Hold a modifier key while clicking to open YouTube instead.
+- YouTube channels work like any site (a channel's page is enough). Their videos, and any post linking straight to a YouTube video, play on the page in YouTube's privacy-enhanced embedded player, in a plain window that closes when the video ends, before YouTube can suggest another. Shorts are left out. Hold a modifier key while clicking to open YouTube instead. YouTube's channel feeds sometimes answer 404 for a while; with a free YouTube Data API key kept as this repo's `YOUTUBE_KEY` secret, a channel whose feed fails comes from the API instead (its uploads without Shorts, one of the key's 10,000 daily units a request).
 
 ## The events page
 

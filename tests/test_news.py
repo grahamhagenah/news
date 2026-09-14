@@ -73,6 +73,44 @@ class Reading(unittest.TestCase):
         self.assertTrue(all(isinstance(post["comment_count"], int) for post in feed["posts"]))
         self.assertFalse(any(line.startswith(("Points:", "Article URL")) for post in feed["posts"] for line in post["summary"]))
 
+    def test_youtube_api_when_a_channel_feed_fails(self):
+        feed_url = "https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A"
+        asked = []
+
+        def answer(url, **kwargs):
+            asked.append(url)
+            if url.startswith(build.YOUTUBE_PLAYLIST_API):
+                return url, (FIXTURES / "youtube_api.json").read_bytes()
+            raise OSError("HTTP Error 404: Not Found")
+
+        with mock.patch.object(build, "fetch", answer), mock.patch.dict(os.environ, {"YOUTUBE_KEY": "secret-key"}):
+            feed = build.load(site(f"{feed_url}   Tiny Desk"))
+        self.assertNotIn("error", feed)
+        self.assertEqual([post["title"] for post in feed["posts"]], ["Tori Kelly: Tiny Desk Concert", "Ratboys: Tiny Desk Concert"])
+        self.assertEqual(feed["posts"][0]["video"], "dQw4w9WgXcQ")
+        self.assertEqual(feed["posts"][0]["link"], "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        self.assertTrue(feed["posts"][0]["summary"][0].startswith("Tori Kelly sings"))
+        self.assertEqual(feed["url"], feed_url, "listed under its feed, as before")
+        self.assertIn("playlistId=UULF4eYXhJI4-7wSWc8UNRwD4A", asked[-1], "its uploads without Shorts")
+
+    def test_youtube_api_error_keeps_the_key_out(self):
+        def answer(url, **kwargs):
+            raise OSError(f"HTTP Error 400: Bad Request for {url}")
+        with mock.patch.object(build, "fetch", answer), mock.patch.dict(os.environ, {"YOUTUBE_KEY": "secret-key"}):
+            feed = build.load(site("https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A"))
+        self.assertIn("the YouTube API", feed["error"])
+        self.assertNotIn("secret-key", feed["error"])
+
+    def test_no_youtube_api_without_a_key(self):
+        asked = []
+        def answer(url, **kwargs):
+            asked.append(url)
+            raise OSError("HTTP Error 404: Not Found")
+        with mock.patch.object(build, "fetch", answer), mock.patch.dict(os.environ, {"YOUTUBE_KEY": ""}):
+            feed = build.load(site("https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A"))
+        self.assertIn("404", feed["error"])
+        self.assertFalse(any(url.startswith(build.YOUTUBE_PLAYLIST_API) for url in asked))
+
     def test_youtube_videos_without_shorts(self):
         feed = self.read("https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A")
         self.assertEqual([(post["title"], post["video"]) for post in feed["posts"]],
