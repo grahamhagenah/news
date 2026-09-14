@@ -42,24 +42,24 @@ PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
-PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, aggregated from select venue calendars."
+PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from select venue calendars."
 # The public site's tonight page: what's still to come today. It holds tomorrow's too, and shows only the day it
 # is where it's read, so it rolls over at midnight, before the next build.
 PUBLIC_TONIGHT = ("tonight/", f"Things to do in Boston tonight · {PUBLIC_NAME}",
                   "Concerts, films and talks still to come today around Boston, Cambridge and Somerville, aggregated "
-                  "from each venue’s calendar.",
+                  "from select venue calendars.",
                   "Tonight around Boston, Cambridge, and Somerville: everything still to come today, aggregated from "
-                  "each venue’s calendar.")
+                  "select venue calendars.")
 
 # The public site's weekend pages, Friday to Sunday: this weekend's (the one it is, or from Monday to Thursday the
 # one coming) and next weekend's. Each: its address, what it's called, its title and description.
 PUBLIC_WEEKENDS = [
     ("weekend/", "This weekend", f"Things to do in Boston this weekend · {PUBLIC_NAME}",
      "Concerts, films and talks around Boston, Cambridge and Somerville this weekend, Friday to Sunday, "
-     "aggregated from each venue’s calendar."),
+     "aggregated from select venue calendars."),
     ("weekend/next/", "Next weekend", f"Things to do in Boston next weekend · {PUBLIC_NAME}",
      "Concerts, films and talks around Boston, Cambridge and Somerville next weekend, Friday to Sunday, "
-     "aggregated from each venue’s calendar."),
+     "aggregated from select venue calendars."),
 ]
 
 
@@ -81,20 +81,20 @@ def weekend_span(friday, sunday):
 PUBLIC_PAGES = {
     "music": ("music", f"Concerts around Boston · {PUBLIC_NAME}",
               "Concerts at clubs, bars and halls across Boston, Cambridge and Somerville for the next month, "
-              "aggregated from each venue’s calendar.",
-              "Concerts around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."),
+              "aggregated from select venue calendars.",
+              "Concerts around Boston, Cambridge, and Somerville, aggregated from select venue calendars."),
     "film": ("film", f"Movie showtimes and repertory film in Boston · {PUBLIC_NAME}",
              "Showtimes at the Brattle, the Coolidge, the Harvard Film Archive and more, from repertory screenings "
-             "to new releases, for the next month, aggregated from each theater’s calendar.",
+             "to new releases, for the next month, aggregated from select theater calendars.",
              "Films around Boston, Cambridge, and Somerville, from repertory screenings to new releases, "
-             "aggregated from each theater’s calendar."),
+             "aggregated from select theater calendars."),
     "art": ("talks", f"Art, exhibitions and talks in Boston · {PUBLIC_NAME}",
             "Artist talks, lectures, exhibition openings and museum nights around Boston, Cambridge and Somerville "
-            "for the next month, aggregated from each venue’s calendar.",
-            "Art and talks around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."),
+            "for the next month, aggregated from select venue calendars.",
+            "Art and talks around Boston, Cambridge, and Somerville, aggregated from select venue calendars."),
 }
 PUBLIC_DESCRIPTION = ("Concerts, film screenings and art talks at venues across Boston, Cambridge and Somerville for "
-                      "the next month, on one page, from each venue’s own calendar.")
+                      "the next month, on one page, from select venue calendars.")
 
 # Each venue's street address, town and ZIP, for the event listings search engines read; an event whose source
 # gives its own (a library branch, an MIT building) uses that instead. Check a new venue's address when adding it.
@@ -1320,7 +1320,7 @@ def public_footer(path, notes="", names=""):
         + "</ul></div>"
         for heading, links in groups
     )
-    where = f"<p>Listings from {names}, aggregated from each venue’s calendar every few hours.</p>\n" if names else ""
+    where = f"<p>Listings from {names}, aggregated from their own calendars every few hours.</p>\n" if names else ""
     return f'<footer>\n<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n{where}{notes}</footer>\n'
 
 
@@ -1367,7 +1367,7 @@ def render_about(sources, built_at):
     body = f"""<div class="prose">
 <p>{PUBLIC_NAME} lists concerts, films, and art and talks in Boston, Cambridge and Somerville for the next
 month, on one page, grouped by day.</p>
-<p>It’s gathered from each venue’s own calendar every few hours. Times and details can change, so check
+<p>It’s gathered from select venue calendars every few hours. Times and details can change, so check
 with the venue before you go: every listing links to its page there. The descriptions are the venues’ own
 words, in short.</p>
 <p>No ads, no accounts, nothing to sign up for.</p>
