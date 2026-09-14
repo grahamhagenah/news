@@ -122,7 +122,7 @@ BASE_CSS = """
   body { margin: 0; padding: 2rem 1.25rem 4rem; overflow-x: clip; color: #fff; background: #000;
          font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
   main { max-width: 46rem; margin: 0 auto; }
-  header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 2rem; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 2rem; }
   .header-note { color: #666; font-size: .8rem; white-space: nowrap; }
   .header-note time { margin: 0; font-size: inherit; }
   /* The newsfeed and the events page, as a pair: the one you're on in white, the other a gray link to it. */
