@@ -17,7 +17,7 @@ COLORS = {"music": "#a78bfa", "film": "#fbbf24", "art": "#60a5fa"}
 
 # The home card, then each kind's: its file, heading, the line under it, and the icons it shows.
 CARDS = [
-    ("home", build.PUBLIC_NAME, "Concerts, films, and talks around Boston, Cambridge, and Somerville.", list(COLORS), ""),
+    ("home", build.PUBLIC_NAME, build.PUBLIC_TAGLINE, list(COLORS), ""),
     ("music", "Concerts around Boston", "Clubs, bars and halls across Boston, Cambridge, and Somerville.", ["music"], "music/"),
     ("film", "Films around Boston", "Repertory screenings to new releases, at theaters across Boston, Cambridge, and Somerville.", ["film"], "film/"),
     ("talks", "Art & talks around Boston", "Artist talks, lectures and exhibitions around Boston, Cambridge, and Somerville.", ["art"], "talks/"),
