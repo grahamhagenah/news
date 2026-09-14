@@ -111,7 +111,6 @@ VENUE_ADDRESSES = {
     "Deep Cuts": ("21 Main St", "Medford", "02155"),
     "Midway Cafe": ("3496 Washington St", "Boston", "02130"),
     "Lizard Lounge": ("1667 Massachusetts Ave", "Cambridge", "02138"),
-    "The Mad Monkfish": ("524 Massachusetts Ave", "Cambridge", "02139"),
     "The Rockwell": ("255 Elm St", "Somerville", "02144"),
     "MIT": ("77 Massachusetts Ave", "Cambridge", "02139"),
     "Boston Public Library": ("700 Boylston St", "Boston", "02116"),
@@ -301,62 +300,6 @@ def axs_show_time(link):
         return None
     found = re.search(r'<label class="event_time">\s*Time\s*</label>\s*<span>\s*(\d{1,2}:\d{2} [AP]M)', page)
     return datetime.strptime(found.group(1), "%I:%M %p").time() if found else None
-
-
-# A time in a listing's name: "7pm", "(1-5pm)", "(3pm-6pm)", "12-1am".
-NAMED_TIME = re.compile(r"\s*\(?\b(\d{1,2}(?::\d{2})?\s*(?:[ap]m)?(?:\s*[–-]\s*\d{1,2}(?::\d{2})?)?\s*[ap]m)\b\)?", re.I)
-# What a BentoBox page says about every show: booking a table, and its streams on Facebook.
-BENTOBOX_BOILERPLATE = re.compile(r"reservation|facebook|live music is back", re.I)
-
-
-def read_bentobox(source):
-    """Restaurant sites on BentoBox with a schedule of shows (The Mad Monkfish's jazz): pages of ten, each a date
-    and a name, "9/13 Tim Ray Trio", a few with a time in the name. The rest give theirs on their own page, "1st
-    Show: 7:00-8:15pm and 2nd Show: 8:45-10:00pm", which is read for those soon enough to be listed, along with
-    what the page says about the band."""
-    today_ = today()
-    events, url = [], source["url"]
-    for _ in range(10):  # Pages, until they're past what's listed.
-        page = fetch(url)
-        for link, heading in re.findall(r'<a class="card__btn" href="([^"]+)".*?<h2 class="card__heading">(.*?)</h2>', page, re.S):
-            named = re.match(r"(\d{1,2})/(\d{1,2})\s+(.*)", text(heading))
-            if not named:
-                continue
-            day = date(today_.year, int(named.group(1)), int(named.group(2)))
-            if day < today_ - timedelta(days=60):  # January's shows, listed in December.
-                day = day.replace(year=today_.year + 1)
-            title, start = named.group(3), None
-            clock_text = NAMED_TIME.search(title)
-            if clock_text:
-                start = clock_range_start(clock_text.group(1))
-                if start and start.hour < 6:  # The Midnight Hour, 12-1am: listed on the night it ends, untimed.
-                    start = None
-                else:
-                    title = NAMED_TIME.sub("", title, count=1)
-            events.append(event(source, re.sub(r"\s+", " ", title).strip(), day, start, link=urljoin(url, html.unescape(link))))
-        more = re.search(r'data-paginator-next-url="([^"]+)"', page)
-        if not more or not events or events[-1]["date"] > window_end():
-            break
-        url = urljoin(url, html.unescape(more.group(1)))
-
-    untimed = [listing for listing in events if not listing["times"] and listing["date"] <= window_end()]
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        for listing, (times, described) in zip(untimed, pool.map(lambda listing: bentobox_show(listing["link"]), untimed)):
-            listing["times"], listing["about"] = times, described
-    return events
-
-
-def bentobox_show(link):
-    """A BentoBox show page's set times and what it says about the show, or neither if it doesn't load."""
-    try:
-        page = fetch(link, attempts=2, timeout=10)
-    except Exception:
-        return [], []
-    found = re.search(r'<div class="container-md revealable">\s*(<p>.*?)</div>', page, re.S)
-    body = found.group(1) if found else ""
-    sets = [clock_range_start(when) for when in re.findall(r"Show:\s*([\d:]+\s*(?:[ap]m)?(?:\s*[–-]\s*[\d:]+)?\s*[ap]m)", text(body), re.I)]
-    described = "".join(paragraph for paragraph in re.findall(r"<p>.*?</p>", body, re.S) if not BENTOBOX_BOILERPLATE.search(paragraph))
-    return sorted(start for start in sets if start), about(described)
 
 
 def read_ticketweb(source):
@@ -977,7 +920,6 @@ def read_harvard_art(source):
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
-    "bentobox": read_bentobox,
     "ticketweb": read_ticketweb,
     "jsonld": read_jsonld,
     "coolidge": read_coolidge,

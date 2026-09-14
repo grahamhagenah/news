@@ -21,10 +21,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "events"
 ROUTES = [
     ("aegwebprod", "roadrunner.json"),
     ("sinclaircambridge.com/events/detail/1460677", "sinclair_show.html"),
-    ("sinclaircambridge.com", "sinclair.html"),
-    ("themadmonkfish.com/jazz-schedule/?p=2", "monkfish_2.html"),
-    ("themadmonkfish.com/jazz-schedule/", "monkfish.html"),
-    ("themadmonkfish.com/event/913-tim-ray-trio/", "monkfish_event.html"),  # Its other shows' pages: no show time on them, so door times.
+    ("sinclaircambridge.com", "sinclair.html"),  # Its other shows' pages: no show time on them, so door times.
     ("mideastclub.com", "mideast.html"),
     ("brattlefilm.org", "brattle.html"),
     ("houseofblues.com", "houseofblues.html"),
@@ -107,27 +104,6 @@ class Readers(unittest.TestCase):
                 mock.patch.object(build, "today", lambda: date(2026, 8, 1)):  # Its sample's shows are all past the window then.
             build.read_axs(source("axs", "https://www.sinclaircambridge.com/events/all", "music", "The Sinclair"))
         self.assertEqual(asked, ["https://www.sinclaircambridge.com/events/all"])
-
-    def test_bentobox_times_from_names_and_show_pages(self):
-        with mock.patch.object(build, "today", lambda: date(2026, 9, 1)):
-            found = self.read("bentobox", "https://www.themadmonkfish.com/jazz-schedule/")
-        self.assertEqual([(item["date"], item["title"], item["times"]) for item in found], [
-            # Past midnight: on the night it ends, untimed, its time left in its name.
-            (date(2026, 9, 12), "The Midnight Hour w/Camila Quintero 12-1am", []),
-            (date(2026, 9, 13), "Tim Ray Trio", [time(19, 0), time(20, 45)]),  # Both sets, from its own page.
-            (date(2026, 9, 16), "Giuseppe Paradiso Trio (Mad Monkfish Concert Series)", [time(19, 0)]),
-            (date(2026, 9, 19), "PGB Cymbals with special guest Kupo builds cymbal tasting event", [time(13, 0)]),
-            (date(2026, 9, 26), "Late Night w/Gen Yoshimura", []),  # From the second page; its own page not saved.
-        ])
-        self.assertTrue(found[1]["about"][0].startswith("Tim Ray’s wide-ranging skills"), "not the notes on booking a table")
-        self.assertEqual(found[1]["link"], "https://www.themadmonkfish.com/event/913-tim-ray-trio/")
-
-    def test_bentobox_reads_only_what_is_soon_enough(self):
-        asked = []
-        with mock.patch.object(build, "fetch", lambda url, **options: asked.append(url) or sample(url)), \
-                mock.patch.object(build, "today", lambda: date(2026, 8, 1)):  # Its first page runs past the window then.
-            build.read_bentobox(source("bentobox", "https://www.themadmonkfish.com/jazz-schedule/", "music", "The Mad Monkfish"))
-        self.assertEqual(asked, ["https://www.themadmonkfish.com/jazz-schedule/"])
 
     def test_ticketweb_venue_without_room(self):
         found = self.read("ticketweb", "https://mideastclub.com/")
