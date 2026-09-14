@@ -1738,9 +1738,11 @@ CSS = """
   .finders { display: flex; align-items: baseline; gap: 1.4rem; margin-left: auto; }
   .finders .search { margin-left: 0; }
   @media (max-width: 34rem) {
-    .finders { flex-basis: 100%; gap: 1.1rem; margin: .4rem 0 0; }
-    .finders .search { display: block; flex: 1; min-width: 0; width: auto; font-size: 1rem; }
-    .venue { font-size: 1rem; }
+    /* Neither may push the line wider than the screen: a long venue's name ends in "…" past 60% of it,
+       and the search takes whatever's left. */
+    .finders { flex-basis: 100%; min-width: 0; gap: 1.1rem; margin: .4rem 0 0; }
+    .finders .search { display: block; flex: 1 1 0; min-width: 3rem; width: 0; font-size: 1rem; }
+    .venue { flex: 0 1 auto; min-width: 0; max-width: 60%; font-size: 1rem; }
   }
   /* A film at several places: the row opens to each place's times, with a › that turns when it's open. */
   .row.combined { display: block; }
