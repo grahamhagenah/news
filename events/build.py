@@ -1153,8 +1153,9 @@ def render_combined(item):
     return (
         f'<li class="row combined" data-category="{item["category"]}"><details><summary>'
         f'<span class="source">{icon(item["category"])}<span>{places} theaters</span></span>'
-        f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>{start}'
-        f'<span class="more" aria-hidden="true">›</span>{shared.preview(item["title"], item["about"])}</div></summary>'
+        f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
+        f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
+        f'{shared.preview(item["title"], item["about"])}</div></summary>'
         f'<ul class="showings">{showings}</ul></details></li>'
     )
 
@@ -1678,7 +1679,9 @@ CSS = """
     .headline:has(> .preview:not(.title-only)) > .title:hover,
     .combined summary:hover .headline:has(> .preview:not(.title-only)) > .title { text-decoration: underline; }
   }
-  .more { flex: none; display: inline-block; margin-left: .5em; color: #666; font-size: .8em; transition: transform .15s; }
+  /* The first time and the ›, together, so a narrow screen never leaves the › alone on a line. */
+  .tail, .tail .times { flex: none; white-space: nowrap; }
+  .more { display: inline-block; margin-left: .5em; color: #666; font-size: .8em; transition: transform .15s; }
   .combined details[open] .more { transform: rotate(90deg); }
   .showings { margin: .35rem 0 .2rem calc(10rem + 1.25rem); }
   .showings li { display: flex; align-items: baseline; gap: .6em; padding: .15rem 0; font-size: .9em; }
