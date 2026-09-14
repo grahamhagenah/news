@@ -42,7 +42,7 @@ PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
-PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from each venue’s calendar."
+PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, aggregated from select venue calendars."
 # The public site's tonight page: what's still to come today. It holds tomorrow's too, and shows only the day it
 # is where it's read, so it rolls over at midnight, before the next build.
 PUBLIC_TONIGHT = ("tonight/", f"Things to do in Boston tonight · {PUBLIC_NAME}",
