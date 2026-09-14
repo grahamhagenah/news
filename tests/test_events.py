@@ -235,6 +235,20 @@ class Readers(unittest.TestCase):
         self.assertTrue(all(item["times"] for item in found))
 
 
+class Skipping(unittest.TestCase):
+    def test_whole_words_in_any_case(self):
+        with mock.patch.object(build, "SKIP_FILE", FIXTURES.parent.parent / "fixtures" / "events" / "skip.txt"):
+            skip = build.skipping()
+        for title in ["IMPROV COMEDY: an evening of", "Comedy night", "Strummerville Ukulele Club"]:
+            self.assertTrue(skip.search(title), title)
+        for title in ["A Comedic Evening", "Ukulele Clubhouse Orchestra", "Armand Hammer"]:
+            self.assertFalse(skip.search(title), title)
+
+    def test_nothing_to_skip(self):
+        with mock.patch.object(build, "SKIP_FILE", FIXTURES / "no-such-file.txt"):
+            self.assertIsNone(build.skipping())
+
+
 class Fetching(unittest.TestCase):
     def test_a_page_read_twice_is_downloaded_once(self):
         calls = []

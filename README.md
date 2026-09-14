@@ -8,7 +8,7 @@ Two plain, black pages built from the same code:
 ## What's where
 
 - `news/`: the newsfeed. `feeds.txt` lists its sites; `build.py` reads their feeds (and links podcast episodes to Pocket Casts); `sources.py` is the bot behind the "Add a site" page.
-- `events/`: the events page. `sources.txt` lists its venues and how to read each; `build.py` has a reader for each kind of source and combines a film showing at several theaters into one row; `find_venue.py` looks up Ticketmaster venue ids.
+- `events/`: the events page. `sources.txt` lists its venues and how to read each; `skip.txt` has words and phrases that keep a listing off both events pages when its name has one ("comedy"), except films; `build.py` has a reader for each kind of source and combines a film showing at several theaters into one row; `find_venue.py` looks up Ticketmaster venue ids.
 - `shared/`: what both use. `site.py` has the page around each list (head, header, the styles they share, icons, the script that ages timestamps), fetching with retries, and the fallback and failure bookkeeping; `alerts.py` opens and closes "Source failing" issues.
 - `tests/`: each page's readers against saved samples of real sources (`tests/fixtures/news`, `tests/fixtures/events`), the fallback rules, and the shared page and alerts.
 

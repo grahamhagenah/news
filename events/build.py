@@ -19,6 +19,7 @@ from shared import site as shared
 
 ROOT = Path(__file__).parent
 SOURCES_FILE = ROOT / "sources.txt"
+SKIP_FILE = ROOT / "skip.txt"
 OUT_DIR = ROOT.parent / "dist" / "events"
 REPO_URL = "https://github.com/grahamhagenah/news"
 DAYS_AHEAD = 30  # How far ahead the page lists events.
@@ -149,6 +150,14 @@ def read_sources():
             sources.append({"kind": kind, "url": url, "category": category, "name": " ".join(name),
                             "public": len(name) == len(words)})
     return sources
+
+
+def skipping():
+    """skip.txt's words and phrases as one pattern, which finds any of them as whole words, in any case; None
+    when there are none."""
+    lines = SKIP_FILE.read_text().splitlines() if SKIP_FILE.exists() else []
+    phrases = [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+    return re.compile("|".join(rf"(?<!\w){re.escape(phrase)}(?!\w)" for phrase in phrases), re.I) if phrases else None
 
 
 _fetched, _fetching = {}, threading.Lock()
@@ -1781,7 +1790,10 @@ def main():
     if len(failed) + len(stale) == len(sources):
         sys.exit("No source loaded — not writing the page.")
 
-    events = merge_showings(events)
+    # Here, not in the readers, so it covers a source's listings from before too, and skip.txt takes effect at once.
+    # Not films, whose names are a work's title ("God's Comedy"), not what kind of event it is.
+    skip = skipping()
+    events = merge_showings([item for item in events if not (skip and item["category"] != "film" and skip.search(item["title"]))])
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
     (OUT_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at))
