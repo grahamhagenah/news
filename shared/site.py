@@ -135,6 +135,7 @@ BASE_CSS = """
   .filter button:hover, .filter a:hover { color: #999; text-decoration: none; }
   .filter button[aria-pressed="true"], .filter a[aria-current="page"] { color: #fff; }
   .filter .icon { margin-right: .4em; vertical-align: -1px; }
+  @media (max-width: 34rem) { .filter { column-gap: .9rem; } .filter button, .filter a { font-size: .95rem; } }
   /* Whatever the filter and pager hide stays hidden, however specific the rules that lay it out. */
   [hidden] { display: none !important; }
   ul { margin: 0; padding: 0; list-style: none; }
