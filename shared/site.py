@@ -118,7 +118,7 @@ def preview(title, paragraphs):
 
 BASE_CSS = """
   html { background: #000; }
-  body { margin: 0; padding: 3rem 1.25rem 4rem; color: #fff; background: #000;
+  body { margin: 0; padding: 2rem 1.25rem 4rem; color: #fff; background: #000;
          font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
   main { max-width: 46rem; margin: 0 auto; }
   header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 2rem; }
