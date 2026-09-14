@@ -1133,7 +1133,8 @@ def render_row(item):
         return render_combined(item)
     detail = f'<span class="detail">{html.escape(item["detail"])}</span>' if item["detail"] else ""
     return (
-        f'<li class="row" data-category="{item["category"]}"{address_attribute(item)}><span class="source">{icon(item["category"])}'
+        f'<li class="row" data-category="{item["category"]}" data-sources="{html.escape(item["source"])}"{address_attribute(item)}>'
+        f'<span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
         f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div></li>'
@@ -1143,21 +1144,31 @@ def render_row(item):
 def render_combined(item):
     """A film at several places: one row reading "4 theaters … from 12:10pm" that opens to each place's times."""
     places = len({showing["venue"] for showing in item["showings"]})
+    sources = "|".join(sorted({showing["source"] for showing in item["showings"]}))
     first = item["times"][0] if item["times"] else None
     start = f'<span class="times">from <time class="from" data-time="{first:%H:%M}">{clock(first)}</time></span>' if first else ""
     showings = "".join(
-        f'<li{address_attribute(showing)}><a href="{html.escape(showing["link"])}">{html.escape(showing["venue"])}</a>'
+        f'<li data-source="{html.escape(showing["source"])}"{address_attribute(showing)}>'
+        f'<a href="{html.escape(showing["link"])}">{html.escape(showing["venue"])}</a>'
         f'{render_times(showing["times"])}</li>'
         for showing in item["showings"]
     )
     return (
-        f'<li class="row combined" data-category="{item["category"]}"><details><summary>'
+        f'<li class="row combined" data-category="{item["category"]}" data-sources="{html.escape(sources)}"><details><summary>'
         f'<span class="source">{icon(item["category"])}<span>{places} theaters</span></span>'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
         f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
         f'{shared.preview(item["title"], item["about"])}</div></summary>'
         f'<ul class="showings">{showings}</ul></details></li>'
     )
+
+
+def venue_menu(venues):
+    """The venue filter: a quiet menu at the end of the filter's row, "All venues" or one of them, sorted
+    as they'd be said, "The Sinclair" among the S's."""
+    names = sorted(venues, key=lambda name: re.sub(r"^the\s+", "", name, flags=re.I).casefold())
+    options = "".join(f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in names)
+    return f'<select class="venue" aria-label="Venue"><option value="">All venues</option>{options}</select>'
 
 
 def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False):
@@ -1168,17 +1179,21 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
         events = [dict(item, about=shorter(item.get("about", []))) for item in events if item["source"] in shown]
+    # The venue filter's choices: every venue with events coming up, whatever their kind (on a kind's page, a
+    # choice goes to the home page, which has them all); on a weekend's or tonight's page, those with events then.
+    venues = {item["source"] for item in events}
+    if public:
         if category:
             events = [item for item in events if item["category"] == category]
             shown = {item["source"] for item in events}
         if weekend is not None:
             friday, sunday = weekend_days(built_at.astimezone(BOSTON).date(), weekend)
             events = [item for item in events if friday <= item["date"] <= sunday]
-            shown = {item["source"] for item in events}
+            shown = venues = {item["source"] for item in events}
         if tonight:
             day = built_at.astimezone(BOSTON).date()
             events = [item for item in events if day <= item["date"] <= day + timedelta(days=1)]
-            shown = {item["source"] for item in events}
+            shown = venues = {item["source"] for item in events}
         sources = [source for source in sources if source["name"] in shown]
         failed = [name for name in failed if name in shown]
         stale = [(name, fetched) for name, fetched in stale if name in shown]
@@ -1239,7 +1254,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         others = (f'<nav class="weekends"><span></span><a href="{href}">{name}, {days} →</a></nav>\n' if other else
                   f'<nav class="weekends"><a href="{href}">← {name}, {days}</a><span></span></nav>\n')
     body = (
-        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{shared.SEARCH}</nav>\n'
+        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{venue_menu(venues)}{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
@@ -1482,18 +1497,47 @@ INDEX_JS = """
   const remember = !kindPages && !filter.hasAttribute("data-here"); // The weekend page's choice isn't kept.
   let show = kindPages ? filter.dataset.current : "all";
   if (remember) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
-  search.value = new URLSearchParams(location.search).get("q") || "";
-  const query = () => (search.offsetParent && search.value.trim() ? "?" + new URLSearchParams({ q: search.value.trim() }) : "");
-  for (const a of filter.querySelectorAll("a")) a.dataset.href = a.getAttribute("href");
-  const address = page => {
+  // The venue menu shows one venue's events, of every kind, kept in the address too (?venue=).
+  const venue = document.querySelector(".venue");
+  const combined = [...document.querySelectorAll(".combined")];
+  const fromAddress = () => {
+    const params = new URLSearchParams(location.search);
+    search.value = params.get("q") || "";
+    venue.value = params.get("venue") || "";
+    if (venue.selectedIndex < 0) venue.value = ""; // A venue no longer listed.
+  };
+  fromAddress();
+  const params = () => {
     const params = new URLSearchParams();
     if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
-    if (page > 1) params.set("page", page);
-    return params.toString() ? "?" + params : location.pathname;
+    if (venue.value) params.set("venue", venue.value);
+    return params;
   };
+  const query = () => (params().toString() ? "?" + params() : "");
+  for (const a of filter.querySelectorAll("a")) a.dataset.href = a.getAttribute("href");
+  const address = page => {
+    const kept = params();
+    if (page > 1) kept.set("page", page);
+    return kept.toString() ? "?" + kept : location.pathname;
+  };
+  // A film at several theaters, with a venue chosen, shows just that theater's times.
+  function narrow() {
+    for (const li of combined) {
+      const places = [...li.querySelectorAll(".showings li")];
+      for (const place of places) place.hidden = Boolean(venue.value) && place.dataset.source !== venue.value;
+      const shown = places.filter(place => !place.hidden);
+      if (!shown.length) continue;
+      li.querySelector(".source > span").textContent = shown.length > 1 ? shown.length + " theaters" : shown[0].querySelector("a").textContent;
+      const first = shown.flatMap(place => [...place.querySelectorAll("time")]).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1)[0];
+      const from = li.querySelector("time.from");
+      if (first && from) { from.dataset.time = first.dataset.time; from.textContent = first.textContent; }
+    }
+  }
   function showEvents() {
     const words = plain(search.offsetParent ? search.value : "").split(/\\s+/).filter(Boolean); // Hidden on phones.
+    narrow();
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
+      && (!venue.value || li.dataset.sources.split("|").includes(venue.value))
       && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
@@ -1508,7 +1552,9 @@ INDEX_JS = """
       (page > 1 ? link(page - 1, "← Earlier") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Later →") : "<span></span>");
-    empty.textContent = words.length ? `Nothing coming up matches “${search.value.trim()}”.` : "Nothing coming up.";
+    const at = venue.value ? ` at ${venue.value}` : "";
+    empty.textContent = words.length ? `Nothing coming up${at} matches “${search.value.trim()}”.` : `Nothing coming up${at}.`;
+    venue.classList.toggle("chosen", Boolean(venue.value));
     empty.hidden = rows.length > 0;
     for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
     for (const a of filter.querySelectorAll("a")) {
@@ -1533,11 +1579,22 @@ INDEX_JS = """
     }
     showEvents();
   });
-  // Back and forward between the kinds the home page has shown.
+  // Back and forward between the kinds (and venues) the home page has shown.
   if (kindPages && everything) addEventListener("popstate", () => {
     const here = [...filter.querySelectorAll("a")].find(a => new URL(a.dataset.href, location.href).pathname === location.pathname);
     show = here ? here.dataset.show : "all";
-    search.value = new URLSearchParams(location.search).get("q") || "";
+    fromAddress();
+    showEvents();
+  });
+  // Choosing a venue shows all its events, whatever their kind. A kind's own page has only that kind's, so
+  // there the choice goes to the home page, which has them all.
+  venue.addEventListener("change", () => {
+    const home = filter.querySelector('a[data-show="all"]');
+    if (kindPages && !everything) { location.href = new URL(home.dataset.href, location.href).pathname + query(); return; }
+    show = "all";
+    if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
+    if (kindPages) history.pushState(null, "", new URL(home.dataset.href, location.href).pathname + query());
+    else history.replaceState(null, "", address(1));
     showEvents();
   });
   search.addEventListener("input", () => {
@@ -1665,6 +1722,18 @@ CSS = """
   .times time[data-time]:not(.from) { cursor: pointer; }
   .times time[data-time]:not(.from):hover, .times time[data-time]:not(.from):focus-visible { color: #ddd; outline: none; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* The venue menu, as quiet as the filter beside it: a small arrow after it, and white once a venue is
+     chosen. As wide as what's chosen, where the browser can size it so. */
+  .venue { margin-left: auto; max-width: 12rem; padding: 0 1.05em 0 0; border: 0; border-radius: 0; color: #666;
+           background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em;
+           font: inherit; font-size: .8rem; text-overflow: ellipsis; cursor: pointer; field-sizing: content;
+           -webkit-appearance: none; appearance: none; }
+  .venue:hover { color: #999; }
+  .venue.chosen { color: #fff; }
+  .venue:focus-visible { outline: 1px solid #444; outline-offset: 3px; }
+  .venue option { background: #000; color: #fff; }
+  .venue ~ .search { margin-left: .35rem; }
+  @media (max-width: 34rem) { .venue { font-size: .95rem; } }
   /* A film at several places: the row opens to each place's times, with a › that turns when it's open. */
   .row.combined { display: block; }
   .combined summary { display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline;

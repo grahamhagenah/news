@@ -7,6 +7,7 @@ sample alongside the fix.
 """
 
 import os
+import re
 import sys
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
@@ -471,11 +472,17 @@ class Fallback(unittest.TestCase):
 
 
 class Page(unittest.TestCase):
+    def test_venue_menu(self):
+        menu = build.venue_menu({"The Sinclair", "Brattle", "Arts at the Armory", "Club Passim"})
+        self.assertEqual(re.findall(r'<option value="([^"]*)">', menu), ["", "Arts at the Armory", "Brattle", "Club Passim", "The Sinclair"],
+                         "All venues first, then as they'd be said: The Sinclair among the S's")
+        self.assertIn("All venues", menu)
+
     def test_renders_rows_and_filters(self):
         with mock.patch.object(build, "fetch", sample):
             found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json"))
         page = build.render_index(found, [source("aeg", "x", name="Roadrunner")], [], [], datetime.now(timezone.utc))
-        self.assertEqual(page.count('<li class="row" data-category="music">'), len(found))
+        self.assertEqual(page.count('<li class="row" data-category="music" data-sources="Somewhere">'), len(found))
         self.assertEqual(page.count('<div class="preview">'), sum(bool(item["about"]) for item in found))
         for key in build.CATEGORIES:
             self.assertIn(f'data-show="{key}"', page)
@@ -550,7 +557,10 @@ class Page(unittest.TestCase):
         self.assertIn(f"<title>{build.PUBLIC_PAGES['film'][1]}</title>", film)
         # The film page has only films, and says which sources they're from.
         self.assertEqual(film.count('class="row" data-category="music"'), 0)
-        self.assertGreater(film.count('data-category="film"><'), 0)
+        self.assertGreater(film.count('data-category="film" data-sources='), 0)
+        # Its venue menu has every venue, whatever its kind: a choice goes to the home page, which has them all.
+        menu = film.split('<select class="venue"')[1].split("</select>")[0]
+        self.assertIn('<option value="Roadrunner">', menu)
         self.assertNotIn("Roadrunner", film.split("<footer>")[1])
         # Your own page keeps its buttons.
         self.assertIn('<button data-show="film">', mine)
