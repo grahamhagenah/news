@@ -14,3 +14,4 @@ improvisation
 queeraoke
 open mic
 lilypad variety show
+trivia
