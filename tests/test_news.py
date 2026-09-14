@@ -129,6 +129,13 @@ class Reading(unittest.TestCase):
         feed = self.read("https://www.slowboring.com/")
         self.assertTrue(all(post["summary"] for post in feed["posts"]))
 
+    def test_only_posts_whose_titles_have_a_phrase(self):
+        line = 'https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A   Tiny Desk   days=36500   only="ratboys: tiny"'
+        parsed = build.parse_site(line)
+        self.assertEqual((parsed["name"], parsed["only"], parsed["days"]), ("Tiny Desk", "ratboys: tiny", 36500))
+        feed = build.load(parsed)
+        self.assertEqual([post["title"] for post in feed["posts"]], ["Ratboys: Tiny Desk Concert"])
+
     def test_finds_a_homepages_feed(self):
         feed = self.read("https://waxy.org/")
         self.assertEqual(feed["feed_url"], "https://waxy.org/feed/")

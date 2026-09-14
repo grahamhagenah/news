@@ -1,6 +1,7 @@
 # One site per line. A homepage is fine — the build finds its feed.
 # Add a name after the URL to use instead of the feed's own title.
-# Options at the end of a line: limit=5 (at most 5 posts), days=14 (keep posts for 14 days).
+# Options at the end of a line: limit=5 (at most 5 posts), days=14 (keep posts for 14 days), and
+# only="Full Performance" (only posts whose titles have that in them, in any case).
 # Defaults are 15 posts from the last 3 days.
 # For a podcast whose feed address isn't the one Pocket Casts knows, pocketcasts=<show id> links it to
 # the right show (the id is in the show's pocketcasts.com address).
@@ -66,11 +67,21 @@ https://audioboom.com/channels/5174627.rss   Still Counting   days=30
 
 # Video (YouTube channels, which play here; a channel's page works too, like https://www.youtube.com/@nprmusic).
 # Shorts are left out. NPR Music's channel is its Tiny Desk concerts, besides those.
+# Channels posting several times a week keep only the last week's, and only a few, so they don't crowd the
+# rest out; ones posting once or twice a month keep a month or two's, so their latest is usually here.
+# KEXP's full sets, not each of their songs again on its own, and COLORS' performances, not its interviews.
 https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A   Tiny Desk   days=30
+https://www.youtube.com/feeds/videos.xml?channel_id=UC3I2GFN_F8WudD_2jUZbojA   KEXP   days=7   limit=4   only="Full Performance"
+https://www.youtube.com/feeds/videos.xml?channel_id=UC2Qw1dzXDBAZPwS7zm37g8g   COLORS   days=7   limit=4   only="A COLORS SHOW"
+https://www.youtube.com/feeds/videos.xml?channel_id=UCGBpxWJr9FNOcFYA5GkKrMg   Boiler Room   days=7   limit=6
+https://www.youtube.com/feeds/videos.xml?channel_id=UCQAnY_suiNH0MvdTHk5GiBA   Keep Hush   days=7   limit=4
+https://www.youtube.com/feeds/videos.xml?channel_id=UCPKT_csvP72boVX0XrMtagQ   Cercle   days=30
+https://www.youtube.com/feeds/videos.xml?channel_id=UCXkNod_JcH7PleOjwK_8rYQ   Polyphonic   days=45
 https://www.youtube.com/feeds/videos.xml?channel_id=UCfgtNfWCtsLKutY-BHzIb9Q   City Nerd   days=30
 https://www.youtube.com/feeds/videos.xml?channel_id=UC0intLFzLaudFG-xAvUEO-A   Not Just Bikes   days=60
-https://www.youtube.com/feeds/videos.xml?channel_id=UCGBpxWJr9FNOcFYA5GkKrMg   Boiler Room   days=7   limit=6
-https://www.youtube.com/feeds/videos.xml?channel_id=UCPKT_csvP72boVX0XrMtagQ   Cercle   days=30
+https://www.youtube.com/feeds/videos.xml?channel_id=UCuVLG9pThvBABcYCm7pkNkA   Climate Town   days=60
+https://www.youtube.com/feeds/videos.xml?channel_id=UC6n8I1UDTKP1IWjQMg6_TwA   The B1M   days=21
+https://www.youtube.com/feeds/videos.xml?channel_id=UCUyvQV2JsICeLZP4c_h40kA   Thomas Flight   days=60
 
 # Added from the sources page
 https://www.theverge.com/ The Verge

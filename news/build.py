@@ -50,9 +50,14 @@ def is_site_line(line):
 
 
 def parse_site(line):
-    """A feeds.txt line: a URL, then an optional name and options like limit=5 or days=14."""
+    """A feeds.txt line: a URL, then an optional name and options like limit=5, days=14 or only="Full
+    Performance" (only posts whose titles have that in them)."""
+    only = re.search(r'\sonly="([^"]*)"', line)
+    if only:
+        line = line[:only.start()] + line[only.end():]
     url, *words = line.split()
-    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "pocketcasts": ""}
+    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "pocketcasts": "",
+            "only": only.group(1) if only else ""}
     name = []
     for word in words:
         option = re.fullmatch(r"(limit|days)=(\d+)", word)
@@ -278,7 +283,7 @@ def read_feed(site):
         date = parse_date(child_text(entry, "pubDate", "published", "updated", "date"))
         if "youtube.com/shorts/" in link:
             continue  # Shorts are the endless-scroll kind of video this page is meant to be free of.
-        if title and link and (date is None or date >= cutoff):
+        if title and link and (date is None or date >= cutoff) and site["only"].casefold() in title.casefold():
             link = without_tracking(urljoin(feed_url, link))
             video = YOUTUBE_VIDEO.match(link)
             summary = excerpt(child_text(entry, "encoded", "content", "description", "summary") or media_description(entry))
@@ -324,7 +329,8 @@ def read_youtube_api(site, channel, key):
         date = parse_date(details.get("videoPublishedAt") or snippet.get("publishedAt"))
         title = clean(snippet.get("title", ""))
         # A video made private or deleted since stays in the playlist, under a stand-in title.
-        if not video or title in ("Private video", "Deleted video") or (date and date < cutoff):
+        if not video or title in ("Private video", "Deleted video") or (date and date < cutoff) \
+                or site["only"].casefold() not in title.casefold():
             continue
         posts.append({
             "title": title,
