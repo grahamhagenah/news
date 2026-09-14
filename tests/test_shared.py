@@ -32,6 +32,11 @@ class Page(unittest.TestCase):
         self.assertIn('<symbol id="icon-film"', page)
         self.assertIn('content="Events"', page)
 
+    def test_a_way_back_to_the_top(self):
+        page = site.page("events", "Events", "<ul></ul>")
+        self.assertIn('<button class="to-top" type="button" aria-label="Back to top">', page)
+        self.assertLess(page.index("</main>"), page.index('class="to-top"'), "outside the page's content")
+
     def test_icons(self):
         self.assertIn('aria-label="Film"', site.icon("film", "Film"))
         self.assertIn('aria-hidden="true"', site.icon("film"))
@@ -103,8 +108,8 @@ class Scripts(unittest.TestCase):
         from events import build as events_build
         from news import build as news_build
         scripts = {"events": events_build.INDEX_JS, "news": news_build.INDEX_JS}
-        for name in ("AGES", "PREVIEWS", "SEARCH_KEYS"):
-            scripts[name] = re.sub(r"</?script>", "", getattr(site, name))
+        for name in ("AGES", "PREVIEWS", "SEARCH_KEYS", "TO_TOP"):
+            scripts[name] = "".join(re.findall(r"<script>(.*?)</script>", getattr(site, name), re.S))
         for name, script in scripts.items():
             with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as file:
                 file.write(script)

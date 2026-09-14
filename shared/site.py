@@ -171,6 +171,15 @@ BASE_CSS = """
   .pager { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
   .pager a, .pager a:visited { color: #999; }
   .empty { color: #666; font-size: .9rem; }
+  /* Back to the top: a quiet arrow in the corner, faded in once the page has been scrolled a screen or so. */
+  .to-top { position: fixed; z-index: 2; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(1.5rem, env(safe-area-inset-bottom));
+            display: grid; place-items: center; width: 2.25rem; height: 2.25rem; padding: 0; border: 1px solid #262626;
+            border-radius: 50%; background: rgba(0, 0, 0, .8); color: #777; cursor: pointer;
+            opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s, color .15s, border-color .15s; }
+  .to-top.shown { opacity: 1; visibility: visible; transition: opacity .2s, color .15s, border-color .15s; }
+  .to-top:hover, .to-top:focus-visible { color: #ddd; border-color: #444; outline: none; }
+  .to-top svg { width: 14px; height: 14px; }
+  @media (max-width: 34rem) { .to-top { right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); } }
   a { color: #fff; text-decoration: none; }
   a:hover { text-decoration: underline; }
   footer { margin-top: 4rem; color: #666; font-size: .8em; }
@@ -209,6 +218,27 @@ PREVIEWS = """
       headline.classList.toggle("truncated", title.scrollWidth > title.clientWidth);
       const preview = headline.querySelector(".preview");
       if (preview) preview.classList.toggle("above", title.getBoundingClientRect().bottom + preview.offsetHeight + 24 > innerHeight);
+    });
+  }
+</script>"""
+
+
+# The arrow back to the top, shown once the page is scrolled more than a screen down. From the keyboard, it
+# also puts focus back at the top, on the header, rather than on itself as it fades out.
+TO_TOP = """
+<button class="to-top" type="button" aria-label="Back to top"><svg viewBox="0 0 16 16" aria-hidden="true"><path
+  d="M8 13V3.5M3.5 8L8 3.5 12.5 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+  stroke-linejoin="round"/></svg></button>
+<script>
+  {
+    const button = document.querySelector(".to-top");
+    const place = () => button.classList.toggle("shown", scrollY > innerHeight);
+    addEventListener("scroll", place, {passive: true});
+    place();
+    button.addEventListener("click", event => {
+      const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      scrollTo({top: 0, behavior: still ? "auto" : "smooth"});
+      if (event.detail === 0) document.querySelector("header a")?.focus({preventScroll: true});
     });
   }
 </script>"""
@@ -270,7 +300,7 @@ def page(site, title, body, css="", head="", symbols="", updated=None, links=Non
 <main>
 <header><nav class="sites" aria-label="Sites">{links}</nav>{note}</header>
 {body}
-</main>{AGES}{PREVIEWS}{SEARCH_KEYS}
+</main>{TO_TOP}{AGES}{PREVIEWS}{SEARCH_KEYS}
 </body>
 </html>
 """
