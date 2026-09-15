@@ -1699,6 +1699,11 @@ FAQS = [
     ("Why isn’t my favorite venue here?",
      "It may not publish its calendar in a way that can be read automatically, or I may not have found it yet. "
      "<a href=\"{root}contact/\">Tell me about it</a> and I’ll take a look."),
+    ("Will you make this for my city?",
+     "I’d rather keep it to places I know well. I add every venue one by one, and choosing them for a city I "
+     "don’t know would be hard to do well. But if there’s enough interest in another city or area, I’ll look into "
+     "starting one there, and it would go much faster with help from someone who knows its venues. If that’s you, "
+     "<a href=\"{root}contact/\">get in touch</a>."),
     ("How often is it updated?",
      "Every few hours, from each venue’s own calendar. Shows added or changed since then appear with the next "
      "update, so check the venue’s page before you go."),
@@ -1706,7 +1711,7 @@ FAQS = [
      "Some venues post only the date, or only when their doors open, not when the show starts. The listing links "
      "to the venue’s page, which usually has the rest."),
     ("Does it track me?",
-     "Only anonymously. It counts visits, and which listings are followed and added to calendars, with "
+     "Only anonymously. It counts visits, and which listings are opened, followed to their venues, and shared, with "
      "<a href=\"https://www.goatcounter.com\">GoatCounter</a>, which uses no cookies and keeps nothing personal, "
      "so I can tell whether people are using it. There are no ads and no accounts, and your venue and search "
      "choices live only in the page’s address."),
