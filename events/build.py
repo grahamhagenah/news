@@ -1396,7 +1396,7 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
 # The About page's questions, each with its answer (markup, with {root} for the site's root), in Graham's words.
 FAQS = [
     ("Who makes this?",
-     "I’m Graham Hagenah. I live in Somerville and love supporting my local theaters and concert venues, and I "
+     "I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I live in Somerville and love supporting my local theaters and concert venues, and I "
      "wanted an easier way to track what’s coming up than relying on Google or visiting each venue’s website."),
     ("Why isn’t the Somerville Theatre on here?",
      "Its concerts are, but not its films. The theater’s website has no public calendar feed and doesn’t allow "
@@ -1471,7 +1471,8 @@ to it.</li>
     # The questions, for search engines too, which can show them in their results.
     answers = [(question, answer.replace("{root}", root)) for question, answer in FAQS]
     data = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
-        {"@type": "Question", "name": question, "acceptedAnswer": {"@type": "Answer", "text": text(answer)}}
+        {"@type": "Question", "name": question,
+         "acceptedAnswer": {"@type": "Answer", "text": html.unescape(re.sub(r"<[^>]+>", "", answer))}}  # Links' words kept.
         for question, answer in answers]}
     return public_page("about/", f"About · {PUBLIC_NAME}", body,
                        description=f"What {PUBLIC_NAME} is, how to use it, the Boston, Cambridge and Somerville venues it "
