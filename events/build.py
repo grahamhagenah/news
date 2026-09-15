@@ -1732,12 +1732,12 @@ def render_about(sources, built_at, events=()):
                 + (f' <span class="count">{count}</span>' if count else "") + "</li>")
 
     kind_feeds = "".join(
-        f'<li>{html.escape(CATEGORIES[key])}: <a class="subscribe-kind" href="{calendar_address(f"calendar/{slug}.ics")}">Apple Calendar</a>'
+        f'<li data-category="{key}">{icon(key, decorative=True)}{html.escape(CATEGORIES[key])}: <a class="subscribe-kind" href="{calendar_address(f"calendar/{slug}.ics")}">Apple Calendar</a>'
         f' · <a href="{calendar_address(f"calendar/{slug}.ics", google=True)}">Google Calendar</a></li>'
         for key, (slug, *_) in PUBLIC_PAGES.items())
 
     groups = "".join(
-        f'<h2>{html.escape(CATEGORIES[key])}</h2>\n<ul class="venues">{"".join(venue(name, key) for name in shared.as_said(kinds[key]))}</ul>\n'
+        f'<h2 data-category="{key}">{icon(key, decorative=True)}{html.escape(CATEGORIES[key])}</h2>\n<ul class="venues">{"".join(venue(name, key) for name in shared.as_said(kinds[key]))}</ul>\n'
         for key in CATEGORIES if kinds.get(key)
     )
     faq = "\n".join(f"<details><summary>{html.escape(question)}</summary><p>{answer.replace('{root}', root)}</p></details>"
@@ -1765,7 +1765,7 @@ to it.</li>
 </ul>
 <h2 id="calendars">Calendars</h2>
 <p>Subscribe in your calendar app, and new listings appear there on their own, updated every few hours.</p>
-<ul class="tips">
+<ul class="tips feeds">
 {kind_feeds}
 </ul>
 <h2>Venues</h2>
@@ -2466,6 +2466,9 @@ PUBLIC_CSS = """
   .tips { padding-left: 1.15em; list-style: disc; }
   .tips li { margin: 0 0 .6em; padding-left: .2em; }
   .tips li::marker { color: #555; }
+  /* Each kind's mark before its name, as in the filter: over its venues, and in place of a bullet before its calendar. */
+  .prose h2 .icon, .feeds .icon { margin-right: .45em; vertical-align: -1px; }
+  .tips.feeds { padding-left: 0; list-style: none; }
   /* The venues, each a link to its events, with how many it has coming up after it in gray; in two columns,
      down the first and then the second, so they read in order. */
   .venues { columns: 13rem 2; column-gap: 1.5rem; }
