@@ -1113,6 +1113,11 @@ ICON_DRAWINGS = {
             '<path d="M5 2v12M11 2v12M2 5.5h3M2 10.5h3M11 5.5h3M11 10.5h3"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
+# Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
+# favicon's pin (events/pushpin) as a line drawing.
+PIN_MARK = ('<svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" '
+            'stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4"/>'
+            '<path d="M9 15l-4.5 4.5"/><path d="M14.5 4l5.5 5.5"/></g></svg>')
 
 
 def icon(category, decorative=False):
@@ -1374,7 +1379,7 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
     brand, _, city = PUBLIC_NAME.partition(" ")
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
                        updated=built_at, links=links, indexable=True,
-                       marked={PUBLIC_NAME: f'{html.escape(brand)} <span class="city">{html.escape(city)}</span>'})
+                       marked={PUBLIC_NAME: f'{PIN_MARK}{html.escape(brand)} <span class="city">{html.escape(city)}</span>'})
 
 
 def render_about(sources, built_at):
@@ -1709,6 +1714,7 @@ INDEX_JS = """
 PUBLIC_CSS = """
   /* Its name in the header: Pushpin as the site's, the city after it lighter. */
   .sites .city { font-weight: 400; }
+  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; color: #f87171; }
   .sites a[aria-current] .city { color: #8c8c8c; }
   /* What the site is, in a line under its name, as quiet as the rest. */
   .tagline { margin: -1rem 0 2.25rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
