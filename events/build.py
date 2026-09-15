@@ -2199,11 +2199,11 @@ INDEX_JS = """
     part("venue").textContent = venue;
     part("day").textContent = dayName(li.closest(".day").dataset.date);
     part("title").textContent = title;
-    // Its picture, in a frame kept its size while it loads, and gone if it doesn't; a poster or a square
-    // flyer shown whole, not cropped to the frame.
+    // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
+    // poster or a square flyer shown whole, not cropped to the frame.
     const picture = part("image"), img = picture.firstElementChild;
     img.removeAttribute("src");
-    picture.classList.remove("whole");
+    picture.classList.remove("whole", "loaded");
     picture.hidden = !li.dataset.image;
     if (li.dataset.image) img.src = li.dataset.image;
     part("facts").replaceChildren(...[li.dataset.price, li.dataset.ages].filter(Boolean).map(fact =>
@@ -2265,9 +2265,18 @@ INDEX_JS = """
   view.addEventListener("close", () => { if (closing) closing = false; else restore(); });
   view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
   part("close").addEventListener("click", closeEvent);
-  part("image").firstElementChild.addEventListener("load", event => {
-    const img = event.target;
+  // It fades in once it's all there and decoded, rather than drawing itself top to bottom.
+  part("image").firstElementChild.addEventListener("load", async event => {
+    const img = event.target, src = img.src;
+    await img.decode().catch(() => {});
+    if (img.src !== src) return; // Another listing's, by now.
     part("image").classList.toggle("whole", img.naturalWidth / img.naturalHeight < 1.3);
+    part("image").classList.add("loaded");
+  });
+  // Fetched as a listing's pressed, a moment before its view opens.
+  document.addEventListener("pointerdown", event => {
+    const src = event.target.closest?.(".day > ul > li.row")?.dataset.image;
+    if (src) Object.assign(new Image(), { referrerPolicy: "no-referrer", src });
   });
   part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
   view.addEventListener("click", event => { if (event.target === view) closeEvent(); }); // Outside it, on the backdrop.
@@ -2460,7 +2469,15 @@ CSS = """
   .close-mark { width: 14px; height: 14px; }
   /* Its picture across the top, edge to edge; a tall or square one whole, on grey. */
   .event-image { aspect-ratio: 16 / 9; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; border-radius: 13px 13px 0 0; background: #151515; }
-  .event-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .event-image img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease-out; }
+  .event-image.loaded img { opacity: 1; }
+  .event-image:not(.loaded) { background: linear-gradient(100deg, #151515 40%, #1d1d1d 50%, #151515 60%) 0 0 / 250% 100%;
+                              animation: shimmer 1.6s linear infinite; }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .event-image img { transition: none; }
+    .event-image:not(.loaded) { animation: none; }
+  }
   .event-image.whole img { object-fit: contain; }
   dialog.event:has(.event-image:not([hidden])) .event-close { z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
