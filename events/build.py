@@ -248,13 +248,31 @@ def image_of(value):
     return value if isinstance(value, str) and value.startswith("http") else ""
 
 
+# "Sold out" in a listing's name, as some venues mark one ("Yana – SOLD OUT!", "SOLD OUT: …"): taken out of the
+# name, and the listing marked.
+SOLD_OUT_NAME = re.compile(r"\s*(?:[-–—|:]\s*|\(\s*)sold[ -]?out!*\s*\)?\s*$|^\s*sold[ -]?out!*\s*[-–—|:]\s*", re.I)
+
+
+def sold_times(item):
+    """Which of a listing's times ("19:15") are sold out: all of them, for one sold out altogether."""
+    times = {f"{moment:%H:%M}" for moment in item["times"]}
+    return times if item.get("sold_out") else times & set(item.get("sold_out_times") or [])
+
+
+def is_sold_out(item):
+    """A listing with nothing left: marked so, or every one of its times sold out."""
+    return bool(item.get("sold_out") or (item["times"] and len(sold_times(item)) == len(set(item["times"]))))
+
+
 def event(source, title, day, start=None, link="", detail="", venue="", about=(), address=None, image="", price="",
-          ages=""):
+          ages="", sold_out=False):
     """One listing. start is a time of day in Boston, or None when the source gives only the date; about is
     what the source says about it, a few short paragraphs for its preview. image, price and ages when the source
     gives them; otherwise a price and ages from its short lines of facts ("$10 cover · 21+"), not its prose,
     where a "$1 from every ticket" isn't one."""
     facts = " · ".join([detail] + [paragraph for paragraph in list(about)[:3] if len(paragraph) <= FACT_LINE_CHARS])
+    named_sold_out = bool(SOLD_OUT_NAME.search(title))
+    title = SOLD_OUT_NAME.sub("", title).strip() or title
     return {
         "title": title,
         "date": day,
@@ -271,6 +289,9 @@ def event(source, title, day, start=None, link="", detail="", venue="", about=()
         "image": image or "",
         "price": price or price_from(facts),
         "ages": ages_from(ages) or ages_from(facts) or ages_from(" ".join(AGES_STATED.findall(" ".join(about)))),
+        # Sold out altogether, as the source says; or only some of its times ("19:15"), as a theater's do.
+        "sold_out": bool(sold_out or named_sold_out),
+        "sold_out_times": [],
     }
 
 
@@ -348,6 +369,7 @@ def read_aeg(source):
             image=aeg_image(item.get("relatedMedia")),
             price=price_from(f"{item.get('ticketPriceLow') or ''} {item.get('ticketPriceHigh') or ''}"),  # "$0" for none.
             ages=item.get("age") or "",
+            sold_out=((item.get("ticketing") or {}).get("status") or "").casefold() == "sold out",
         ))
     return events
 
@@ -373,7 +395,8 @@ def read_axs(source):
             return text(found.group(1)) if found else ""
         name = re.search(r'class="carousel_item_title_small">\s*<a href="([^"]+)"[^>]*>(.*?)</a>', entry, re.S)
         day = re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", field(r'<span class="date">.*?</span>(.*?)</span>'))
-        if not name or not day or field(r'class="btn-tickets[^"]*"[^>]*>(.*?)</a>').casefold() == "cancelled":
+        button = field(r'class="btn-tickets[^"]*"[^>]*>(.*?)</a>').casefold()
+        if not name or not day or button == "cancelled":
             continue
         doors = re.search(r"\d{1,2}:\d{2} [AP]M", field(r'<span class="time">.*?</span>(.*?)</span>'))
         start = datetime.strptime(doors.group(), "%I:%M %p").time() if doors else None
@@ -391,6 +414,7 @@ def read_axs(source):
             about=[" · ".join(fact for fact in facts if fact)],
             image=html.unescape(picture.group(1)) if picture else "",
             ages=age,
+            sold_out=button == "sold out",
         ))
     soon = [listing for listing in events if listing["date"] <= window_end(source["category"])]
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -463,6 +487,8 @@ def read_jsonld(source):
         except ValueError:
             continue
 
+    # DICE says which of its shows are sold out only in its page's own data, by name.
+    sold = {json.loads(f'"{name}"') for name in re.findall(r'"name":"((?:[^"\\]|\\.)*)","status":"sold-out"', page)}
     events = []
     for item in found:
         if str(item.get("eventStatus", "")).endswith("EventCancelled"):
@@ -474,9 +500,10 @@ def read_jsonld(source):
         work = works.get(work.get("@id"), work) if isinstance(work, dict) else {}
         offers = item.get("offers") or {}
         offers = offers[0] if isinstance(offers, list) and offers else offers if isinstance(offers, dict) else {}
+        sold_out = str(offers.get("availability", "")).endswith("SoldOut") or html.unescape(item.get("name", "")) in sold
         events.append(event(source, title, day, start if "T" in item["startDate"] else None, link=item.get("url", ""),
                             about=jsonld_about(item, work), image=lighter(image_of(item.get("image")) or image_of(work.get("image")), page),
-                            price=price_of(offers.get("lowPrice") or offers.get("price"), offers.get("highPrice"))))
+                            price=price_of(offers.get("lowPrice") or offers.get("price"), offers.get("highPrice")), sold_out=sold_out))
     return events
 
 
@@ -547,12 +574,51 @@ def read_coolidge(source):
             listing = event(source, html.unescape(film.group(1)), day, link=f"https://coolidge.org{film.group(2)}",
                             about=about(blurb.group(1) if blurb else "") + facts,
                             image=urljoin("https://coolidge.org/", html.unescape(picture.group(1))) if picture else "")
-            listing["times"] = [
-                datetime.strptime(clock.strip().upper(), "%I:%M%p").time()
-                for clock in re.findall(r'class="showtime-ticket__time">([^<]+)<', card)
-            ]
+            listing["times"] = [coolidge_clock(clock) for clock in re.findall(r'class="showtime-ticket__time">([^<]+)<', card)]
+            listing["sold_out_times"] = sorted(f"{coolidge_clock(clock):%H:%M}" for state, clock in COOLIDGE_SHOWTIME.findall(card)
+                                               if state in COOLIDGE_SOLD_OUT)
             events.append(listing)
+    # The showtimes pages can be an hour behind a film's own, which says a showing's sold out as soon as it is.
+    films = sorted({listing["link"] for listing in events})
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        states = dict(zip(films, pool.map(coolidge_film_states, films)))
+    for listing in events:
+        known = states.get(listing["link"]) or {}
+        listing["sold_out_times"] = sorted(
+            clock for clock in (f"{moment:%H:%M}" for moment in listing["times"])
+            if (known[listing["date"], clock] in COOLIDGE_SOLD_OUT if (listing["date"], clock) in known else clock in listing["sold_out_times"]))
     return events
+
+
+# A Coolidge showtime and its state: DuringSales on sale, AfterSalesBeforeEvent no longer sold online, and
+# DisplayCustomMessage what its site's key calls "Sold out/unavailable".
+COOLIDGE_SHOWTIME = re.compile(r'sales-state--(\w+)"[^>]*>\s*<a[^>]*>\s*<span class="showtime-ticket">\s*'
+                               r'<span class="showtime-ticket__time">([^<]+)<')
+COOLIDGE_SOLD_OUT = {"DisplayCustomMessage", "SoldOut"}
+
+
+def coolidge_clock(text_):
+    return datetime.strptime(text_.strip().upper(), "%I:%M%p").time()
+
+
+def coolidge_film_states(link):
+    """Each showtime's state on a Coolidge film's own page, by (date, "19:15"): its days, each "Tue 9/15" and
+    no year. Nothing, if the page doesn't load; the showtimes pages' states stand then."""
+    try:
+        page = fetch(link, attempts=1, timeout=10)
+    except Exception:
+        return {}
+    today_, states = today(), {}
+    for block in page.split('class="film-showtime-list"')[1:]:
+        day = re.search(r'class="datepicker__date">(\d{1,2})/(\d{1,2})<', block)
+        if not day:
+            continue
+        when = date(today_.year, int(day.group(1)), int(day.group(2)))
+        if when < today_ - timedelta(days=60):  # January's, in December.
+            when = when.replace(year=today_.year + 1)
+        for state, clock in COOLIDGE_SHOWTIME.findall(block):
+            states[when, f"{coolidge_clock(clock):%H:%M}"] = state
+    return states
 
 
 def read_alamo(source):
@@ -946,7 +1012,8 @@ def read_passim(source):
         start = datetime.strptime(f"{when.group(1)}:{when.group(2) or '00'} {when.group(3).upper()}", "%I:%M %p").time() if when else None
         picture = field("imageurl")
         events.append(event(source, title, date.fromisoformat(day), start, link=field("link"), detail=field("detail"),
-                            image=urljoin("https://www.passim.org/", picture) if picture else ""))
+                            image=urljoin("https://www.passim.org/", picture) if picture else "",
+                            sold_out='class="tickets sold-out"' in show))
     return events
 
 
@@ -1213,9 +1280,13 @@ def merge_showings(events):
     for item in events:
         key = (item["date"], item["venue"], item["title"].casefold())
         if key in merged:
-            merged[key]["times"] = sorted(set(merged[key]["times"] + item["times"]))
+            kept = merged[key]
+            sold = sold_times(kept) | sold_times(item)
+            kept["times"] = sorted(set(kept["times"] + item["times"]))
+            kept["sold_out"] = bool(kept.get("sold_out") and item.get("sold_out"))
+            kept["sold_out_times"] = sorted(sold)  # Each showing's own, whichever it came with.
         else:
-            merged[key] = dict(item, times=sorted(item["times"]))
+            merged[key] = dict(item, times=sorted(item["times"]), sold_out_times=sorted(sold_times(item)))
     return list(merged.values())
 
 
@@ -1333,10 +1404,12 @@ def icon(category, decorative=False):
     return shared.icon(category, None if decorative else CATEGORIES[category])
 
 
-def render_times(moments):
+def render_times(moments, sold=()):
     # data-time lets the page drop today's showings once they've started. The commas between are their own,
-    # so one goes with a time that's gone.
-    times = '<span class="sep">, </span>'.join(f'<time data-time="{moment:%H:%M}">{clock(moment)}</time>' for moment in moments)
+    # so one goes with a time that's gone. A sold-out one is struck through.
+    struck = ' class="sold"'
+    times = '<span class="sep">, </span>'.join(
+        f'<time data-time="{moment:%H:%M}"{struck if f"{moment:%H:%M}" in sold else ""}>{clock(moment)}</time>' for moment in moments)
     return f'<span class="times">{times}</span>' if times else ""
 
 
@@ -1353,10 +1426,11 @@ def address_attribute(item):
 
 
 def facts_attributes(item):
-    """What the listing's view shows that the row doesn't: its picture, price and ages, when known; and that
-    there's more of what it's about on its own page (data-more)."""
+    """What the listing's view shows that the row doesn't: its picture, price and ages, when known; that
+    there's more of what it's about on its own page (data-more); and that it's sold out altogether (data-sold),
+    which its times, struck through, don't say where it has none."""
     return ("".join(f' data-{key}="{html.escape(item[key])}"' for key in ("image", "price", "ages") if item.get(key))
-            + ' data-more=""' * bool(item.get("more")))
+            + ' data-more=""' * bool(item.get("more")) + ' data-sold=""' * bool(item.get("sold_out") and not item["times"]))
 
 
 def listing_id(day, title, venue=""):
@@ -1379,7 +1453,7 @@ def render_row(item):
         f'<span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div></li>'
+        f'{render_times(item["times"], sold_times(item))}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div></li>'
     )
 
 
@@ -1392,7 +1466,7 @@ def render_combined(item):
     showings = "".join(
         f'<li data-source="{html.escape(showing["source"])}">'
         f'<a href="{html.escape(showing["link"])}">{html.escape(showing["venue"])}</a>'
-        f'{render_times(showing["times"])}</li>'
+        f'{render_times(showing["times"], sold_times(showing))}</li>'
         for showing in item["showings"]
     )
     ident, series = listing_id(item["showings"][0]["date"], item["title"])
@@ -1833,7 +1907,8 @@ def render_event_page(item, day):
         when = f"from {clock(item['times'][0])}" if item["times"] else ""
     else:
         where, when = item["venue"], ", ".join(clock(moment) for moment in item["times"])
-    description = " · ".join(filter(None, [where, f"{day:%a, %b} {day.day}", when, item.get("price"), item.get("ages")]))
+    sold_out = all(is_sold_out(showing) for showing in item["showings"]) if combined else is_sold_out(item)
+    description = " · ".join(filter(None, [where, f"{day:%a, %b} {day.day}", when, "Sold out" if sold_out else item.get("price"), item.get("ages")]))
     title = f"{item['title']} · {PUBLIC_NAME}"
     # Its own picture when the venue gives one; else its kind's card, whose size is known.
     image = item.get("image") or f"{PUBLIC_URL}share/{PUBLIC_PAGES[item['category']][0]}.png?pin"
@@ -1976,6 +2051,16 @@ INDEX_JS = """
     const byNext = (a, b) => next(a) < next(b) ? -1 : next(a) > next(b) ? 1 : 0;
     for (const list of todays.querySelectorAll(":scope > ul, .showings")) [...list.children].sort(byNext).forEach(el => list.append(el));
     if (!todays.querySelector("li")) todays.remove();
+  }
+  // A listing with nothing left says so after its times: every time it has struck through, or none, and marked
+  // sold out altogether.
+  for (const li of document.querySelectorAll(".day > ul > li")) {
+    const times = li.querySelectorAll(":scope time:not(.from)");
+    if ("sold" in li.dataset || (times.length && [...times].every(t => t.classList.contains("sold")))) {
+      li.classList.add("sold-out");
+      li.querySelector(".headline").insertBefore(Object.assign(document.createElement("span"), { className: "sold-tag", textContent: "Sold out" }),
+        li.querySelector(".headline > .preview"));
+    }
   }
 
   // The filter shows every category or just one. On the public site each is a page of its own (music/, film/,
@@ -2142,7 +2227,11 @@ INDEX_JS = """
   let shown = null, pushed = false;
   for (const opener of document.querySelectorAll(".day a.title, .combined summary")) opener.setAttribute("aria-haspopup", "dialog");
   // Its times, as the listing has them.
-  const timeLabels = times => group([...times].map(t => Object.assign(document.createElement("span"), { className: "event-time", textContent: t.textContent })));
+  const timeLabels = times => group([...times].map(t => {
+    const label = Object.assign(document.createElement("span"), { className: "event-time", textContent: t.textContent });
+    if (t.classList.contains("sold")) { label.classList.add("sold"); label.title = "Sold out"; label.setAttribute("aria-label", t.textContent + ", sold out"); }
+    return label;
+  }));
   // Together, to the right of what they're for, going on to another line there when there are more than fit.
   const group = labels => {
     const times = Object.assign(document.createElement("span"), { className: "event-group" });
@@ -2191,8 +2280,11 @@ INDEX_JS = """
     picture.classList.remove("whole", "loaded");
     picture.hidden = !li.dataset.image;
     if (li.dataset.image) img.src = li.dataset.image;
-    part("facts").replaceChildren(...[li.dataset.price, li.dataset.ages].filter(Boolean).map(fact =>
-      Object.assign(document.createElement("span"), { className: "event-fact", textContent: fact })));
+    // Sold out, all of it or some of its times, before its price and ages.
+    const struck = li.querySelectorAll("time.sold:not(.from)").length;
+    const sold = li.classList.contains("sold-out") ? "Sold out" : struck ? (struck > 1 ? "Some showings sold out" : "One showing sold out") : "";
+    part("facts").replaceChildren(...[sold, li.dataset.price, li.dataset.ages].filter(Boolean).map(fact =>
+      Object.assign(document.createElement("span"), { className: "event-fact" + (fact === sold ? " sold" : ""), textContent: fact })));
     part("detail").textContent = li.querySelector(".detail")?.textContent || "";
     part("note").textContent = note;
     // Where it is, the same way whether it's at one place or a film at several: each place, a link to its page
@@ -2444,6 +2536,10 @@ CSS = """
   .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
+  /* A sold-out time, struck through; a listing with nothing left, a quiet tag after its times. */
+  .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
+  .sold-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
+              font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* A listing opens its own view (below) wherever it's clicked. */
   .day > ul > li.row { cursor: pointer; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -2491,6 +2587,8 @@ CSS = """
   /* Each place it's at, a link to its page (for tickets), with its times to the right, going on to another line
      there, not under it, when there are more than fit. */
   .event-time { color: #ddd; font-size: .9rem; font-variant-numeric: tabular-nums; }
+  .event-time.sold { color: #666; text-decoration: line-through; }
+  .event-fact.sold { background: none; box-shadow: inset 0 0 0 1px #3a3a3a; color: #bbb; }
   .event-places { margin: 1.1rem 0 1rem; }
   .event-group { display: flex; flex-wrap: wrap; gap: .2rem .9rem; }
   .event-places li { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .75rem; padding: .55rem 0;
@@ -2572,6 +2670,8 @@ def saved(item):
         "image": item.get("image", ""),
         "price": item.get("price", ""),
         "ages": item.get("ages", ""),
+        "sold_out": item.get("sold_out", False),
+        "sold_out_times": item.get("sold_out_times", []),
     }
 
 

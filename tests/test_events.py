@@ -119,11 +119,12 @@ class Readers(unittest.TestCase):
     def test_armory_by_kind(self):
         found = build.read_armory(source("armory", "https://artsatthearmory.org/events.ics", "music", "Arts at the Armory"))
         self.assertEqual({item["title"]: item["category"] for item in found}, {
-            "SOLD OUT: The Bowery Presents ear with Oral": "music",
+            "The Bowery Presents ear with Oral": "music",
             "Lovestruck Books Presents: Grim Tidings Release-Day Bash with B.K. Borison": "art",
             '"A Cell Phone Movie" Screening': "film",
             "Get to the Gig Presents Armand Hammer with Curly Castro": "music",
         })  # Not its comedy, or the show it moved to the Royale.
+        self.assertEqual([item["title"] for item in found if item["sold_out"]], ["The Bowery Presents ear with Oral"], "SOLD OUT: out of its name")
         reading = next(item for item in found if item["category"] == "art")
         self.assertEqual((reading["date"], reading["times"]), (date(2026, 9, 15), [time(18, 30)]))
         self.assertFalse(any("$(" in line or "fbq(" in line for item in found for line in item["about"]), "not its ticket button's script")
@@ -370,6 +371,40 @@ class Descriptions(unittest.TestCase):
         self.assertIn('<div class="about"><p>Paragraph 0', own)
         self.assertIn("Paragraph 5 says", own)
         self.assertIn('<button class="event-more" type="button" hidden', page)
+
+
+class SoldOut(unittest.TestCase):
+    def test_marked_in_a_name(self):
+        club = source("ics", "x")
+        for name, clean in [("Yana – SOLD OUT!", "Yana"), ("SOLD OUT: The Bowery Presents ear", "The Bowery Presents ear"),
+                            ("Jackie Evans (Sold Out)", "Jackie Evans")]:
+            item = build.event(club, name, date(2026, 9, 13))
+            self.assertEqual((item["title"], item["sold_out"]), (clean, True), name)
+        self.assertFalse(build.event(club, "The Sold Out Crowd", date(2026, 9, 13))["sold_out"])
+
+    def test_some_showings_or_all(self):
+        coolidge = dict(source("coolidge", "x", "film", "Coolidge Corner"), public=True)
+        day = date(2026, 9, 15)
+        first, second = build.event(coolidge, "Union County", day, time(19, 15)), build.event(coolidge, "Union County", day, time(19, 45))
+        second["sold_out"] = True
+        merged = build.merge_showings([first, second])[0]
+        self.assertEqual((merged["times"], merged["sold_out_times"], build.is_sold_out(merged)), ([time(19, 15), time(19, 45)], ["19:45"], False))
+        page = build.render_index([merged], [coolidge], [], [], datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
+        self.assertIn('<time data-time="19:15">7:15pm</time><span class="sep">, </span><time data-time="19:45" class="sold">7:45pm</time>', page)
+        merged["sold_out_times"] = ["19:15", "19:45"]
+        self.assertTrue(build.is_sold_out(merged))
+        own = build.event_pages([coolidge], [merged])["e/2026-09-15-union-county-coolidge-corner/index.html"]
+        self.assertIn("Coolidge Corner · Tue, Sep 15 · 7:15pm, 7:45pm · Sold out", own)
+
+    def test_coolidge_film_pages_are_fresher(self):
+        page = ('<div class="film-showtime-list"><div class="datepicker "><span class="datepicker__day">Tue</span>'
+                '<span class="datepicker__date">9/15</span></div><div class="views-row-inactive availability--individual '
+                'sales-state--DisplayCustomMessage"><a href="x"><span class="showtime-ticket"><span class="showtime-ticket__time">7:15pm'
+                '</span></span></a></div><div class="views-row-active-agiletix availability--individual sales-state--DuringSales">'
+                '<a href="y"><span class="showtime-ticket"><span class="showtime-ticket__time">9:30pm</span></span></a></div></div>')
+        with mock.patch.object(build, "fetch", lambda *args, **kwargs: page), mock.patch.object(build, "today", lambda: date(2026, 9, 14)):
+            states = build.coolidge_film_states("https://coolidge.org/films/union-county")
+        self.assertEqual(states, {(date(2026, 9, 15), "19:15"): "DisplayCustomMessage", (date(2026, 9, 15), "21:30"): "DuringSales"})
 
 
 class SharedLinks(unittest.TestCase):
