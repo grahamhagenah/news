@@ -1295,9 +1295,20 @@ def read_phoenix(source):
                                         datetime.strptime(session["Starttime"], "%H:%M:%S").time(),
                                         link=f"{address.scheme}://{address.netloc}/movies/{title.lower().replace(' ', '-')}/{code}",
                                         about=about(film.get("Synopsis") or "") + ([facts] if facts else []),
-                                        image=f"https://ticketing.phoenixmovies.net/CDN/media/entity/get/FilmPosterGraphic/{code}",
+                                        image=phoenix_image(film),
                                         sold_out=bool(session.get("SoldOut"))))
     return events
+
+
+def phoenix_image(film):
+    """A film's wide picture at Phoenix Theatres, 800 pixels across, as its pages ask for it (its backdrop's id,
+    with f- before it); else its poster."""
+    art = "https://ticketing.phoenixmovies.net/CDN/media/entity/get/"
+    if film.get("Backdrop_ID"):
+        return f"{art}FilmBackdrop/f-{film['Backdrop_ID']}?width=800&referenceScheme=Global&allowPlaceHolder=true&fallbackMediaType=FilmTitleGraphic"
+    if film.get("Poster_ID"):
+        return f"{art}FilmPosterGraphic/f-{film['Poster_ID']}?height=1000&width=600&referenceScheme=Global&allowPlaceHolder=true"
+    return ""
 
 
 def read_spektrix(source):

@@ -379,7 +379,9 @@ class WesternMass(unittest.TestCase):
         self.assertEqual(len(films), 2)
         self.assertTrue(all(len(film["times"]) > 1 for film in films))
         self.assertTrue(films[0]["link"].startswith("https://www.phoenixmovies.net/movies/"))
-        self.assertTrue(films[0]["image"].startswith("https://ticketing.phoenixmovies.net/CDN/media/entity/get/FilmPosterGraphic/"))
+        self.assertTrue(films[0]["image"].startswith("https://ticketing.phoenixmovies.net/CDN/media/entity/get/FilmBackdrop/f-"), "its wide picture")
+        self.assertEqual(build.phoenix_image({"Poster_ID": "HO1"}), "https://ticketing.phoenixmovies.net/CDN/media/entity/get/FilmPosterGraphic/"
+                         "f-HO1?height=1000&width=600&referenceScheme=Global&allowPlaceHolder=true", "its poster, without a backdrop")
 
     def test_colonial_theatre(self):
         with mock.patch.object(build, "today", lambda: date(2026, 9, 15)):
