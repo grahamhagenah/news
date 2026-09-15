@@ -45,6 +45,9 @@ PUBLIC_DIR = ROOT.parent / "dist" / "public"
 # address bar without loading it, and a relative link would then go astray.
 PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
 CITY_DIR = PUBLIC_DIR / PUBLIC_ROOT.strip("/")
+# Where Pushpin Boston's visits are counted: GoatCounter, which uses no cookies and keeps nothing personal.
+# The personal events page isn't counted.
+GOATCOUNTER = "https://hagenah.goatcounter.com/count"
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
@@ -1385,6 +1388,7 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         '<meta property="og:image:height" content="630">',
         f'<meta property="og:image:alt" content="{html.escape(PUBLIC_NAME)}: {html.escape(PUBLIC_TAGLINE)}">',
         '<meta name="twitter:card" content="summary_large_image">',
+        f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>',
     ] + [f'<script type="application/ld+json">{json.dumps(data, ensure_ascii=False, separators=(",", ":"))}</script>'] * bool(data))
     brand, _, city = PUBLIC_NAME.partition(" ")
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
@@ -1412,8 +1416,10 @@ FAQS = [
      "Some venues post only the date, or only when their doors open, not when the show starts. The listing links "
      "to the venue’s page, which usually has the rest."),
     ("Does it track me?",
-     "No. There are no ads, no accounts, no cookies, and no analytics. Your venue and search choices live only "
-     "in the page’s address."),
+     "Only anonymously. It counts visits, and which listings are followed and added to calendars, with "
+     "<a href=\"https://www.goatcounter.com\">GoatCounter</a>, which uses no cookies and keeps nothing personal, "
+     "so I can tell whether people are using it. There are no ads and no accounts, and your venue and search "
+     "choices live only in the page’s address."),
 ]
 
 
@@ -1538,6 +1544,11 @@ def render_contact():
 
 
 INDEX_JS = """
+  // What's used on Pushpin Boston, counted with GoatCounter along with its visits (no cookies, nothing personal):
+  // listings followed to their venue, showtimes added to a calendar, venues chosen. The personal events page
+  // has no counter, so there these do nothing.
+  const tally = (path, title) => window.goatcounter?.count?.({ path, title, event: true });
+  const venueOf = el => el.closest(".showings li")?.dataset.source || el.closest(".day > ul > li")?.dataset.sources || "";
   // Today and Tomorrow, from this device's clock, so an older build still reads right; days already
   // past are hidden until the next build drops them.
   const key = d => d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -1702,8 +1713,10 @@ INDEX_JS = """
     if (!b || !everything || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     show = b.dataset.show;
-    if (kindPages) history.pushState(null, "", new URL(b.dataset.href, location.href).pathname + query());
-    else {
+    if (kindPages) {
+      history.pushState(null, "", new URL(b.dataset.href, location.href).pathname + query());
+      window.goatcounter?.count?.({ path: location.pathname }); // A kind's page, shown in place, is a visit to it.
+    } else {
       if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
       history.replaceState(null, "", address(1)); // Back to page one.
     }
@@ -1719,6 +1732,7 @@ INDEX_JS = """
   // Choosing a venue shows all its events, whatever their kind. A kind's own page has only that kind's, so
   // there the choice goes to the home page, which has them all.
   venue.addEventListener("change", () => {
+    if (venue.value) tally("venue/" + venue.value);
     const home = filter.querySelector('a[data-show="all"]');
     if (kindPages && !everything) { location.href = new URL(home.dataset.href, location.href).pathname + query(); return; }
     show = "all";
@@ -1758,6 +1772,7 @@ INDEX_JS = """
   }
   function addToCalendar(t) {
     const { title, where, link, start, end } = showing(t);
+    tally("calendar/" + venueOf(t), title);
     if (/Android/i.test(navigator.userAgent)) {
       const details = { action: "TEMPLATE", text: title, dates: `${start}/${end}`, ctz: "America/New_York", location: where, details: link };
       open("https://calendar.google.com/calendar/render?" + new URLSearchParams(details), "_blank", "noopener");
@@ -1792,6 +1807,15 @@ INDEX_JS = """
     const t = event.target.closest && event.target.closest(addable);
     if (t && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); addToCalendar(t); }
   });
+
+  // A listing followed to its venue's page, counted as the venue's (by a click, or a middle click for a new tab).
+  const followed = event => {
+    const a = event.target.closest(".day a.title, .showings a");
+    const row = a && (a.closest(".combined") || a.closest(".headline")); // A film at several theaters: its name.
+    if (a && event.button < 2) tally("listing/" + venueOf(a), row?.querySelector(".title")?.textContent || a.textContent);
+  };
+  document.addEventListener("click", followed);
+  document.addEventListener("auxclick", followed);
 """
 
 
