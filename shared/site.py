@@ -108,10 +108,15 @@ def excerpt(markup, max_chars=600, skip=None, min_words=4, max_paragraphs=3):
 SEARCH = '<input class="search" type="search" placeholder="Search" aria-label="Search" autocomplete="off" spellcheck="false">'
 
 
+def as_said(names):
+    """Names in the order they'd be said, "The Sinclair" among the S's."""
+    return sorted(names, key=lambda name: re.sub(r"^the\s+", "", name, flags=re.I).casefold())
+
+
 def menu(names, everything, label):
     """A menu for the filter's row, beside the search: everything, or just one of names, sorted as they'd be
-    said ("The Sinclair" among the S's). everything is what the first choice says ("All venues")."""
-    ordered = sorted(names, key=lambda name: re.sub(r"^the\s+", "", name, flags=re.I).casefold())
+    said. everything is what the first choice says ("All venues")."""
+    ordered = as_said(names)
     options = "".join(f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in ordered)
     return (f'<select class="pick" aria-label="{html.escape(label)}"><option value="">{html.escape(everything)}</option>'
             f"{options}</select>")

@@ -649,6 +649,24 @@ class Page(unittest.TestCase):
         self.assertIsNone(build.postal("355 W 16th St, Manhattan, New York, New York, 10011"))
         self.assertIsNone(build.postal(""))
 
+    def test_about_lists_venues_by_kind_with_links_and_counts(self):
+        mfa = dict(source("mfa", "x", "art", "MFA"), public=True)
+        sinclair = dict(source("axs", "y", "music", "The Sinclair"), public=True)
+        quiet = dict(source("ics", "z", "music", "Lizard Lounge"), public=True)  # Nothing coming up.
+        hidden = dict(source("jsonld", "w", "film", "Not Ours"), public=False)
+        day = date(2026, 9, 20)
+        items = [build.event(sinclair, "A", day), build.event(sinclair, "B", day), build.event(mfa, "Talk", day),
+                 dict(build.event(mfa, "A Film", day), category="film"), build.event(hidden, "Theirs", day)]
+        about = build.render_about([mfa, sinclair, quiet, hidden], datetime(2026, 9, 13, tzinfo=timezone.utc), items)
+        sections = {h: body for h, body in re.findall(r"<h2>([^<]+)</h2>\n<ul class=\"venues\">(.*?)</ul>", about)}
+        self.assertIn(f'<a href="{R}?venue=The+Sinclair">The Sinclair</a> <span class="count">2</span>', sections["Music"])
+        self.assertLess(sections["Music"].index("Lizard Lounge"), sections["Music"].index("The Sinclair"), "The Sinclair among the S's")
+        self.assertIn(f'<a href="{R}?venue=Lizard+Lounge">Lizard Lounge</a></li>', sections["Music"], "listed, with no count")
+        self.assertIn("MFA</a> <span class=\"count\">1</span>", sections["Film"], "under each kind it has")
+        self.assertIn("MFA</a> <span class=\"count\">1</span>", sections["Art &amp; talks"])
+        self.assertNotIn("Not Ours", about)
+        self.assertIn("How to use it", about)
+
     def test_sitemap(self):
         sitemap = build.render_sitemap(datetime(2026, 9, 13, tzinfo=timezone.utc))
         for path in ("", "about/", "contact/"):

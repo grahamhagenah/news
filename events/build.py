@@ -9,6 +9,7 @@ import re
 import shutil
 import sys
 import threading
+from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -1392,28 +1393,51 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
                        here=PAGE_NAMES.get(path, ""))
 
 
-def render_about(sources, built_at):
-    """What the public page is, where its listings come from, and each venue by kind."""
-    venues = {}
-    for source in sources:
-        if source.get("public", True):
-            venues.setdefault(source["category"], []).append(source["name"])
+def render_about(sources, built_at, events=()):
+    """What the public site is, how to use it, and every venue it reads, by kind: each a link to its events,
+    with how many it has coming up. A venue is under each kind it has events of (the MFA's concerts and films
+    as well as its talks); one with none right now, under its own kind."""
+    root = PUBLIC_ROOT
+    public = [source for source in sources if source.get("public", True)]
+    names = {source["name"] for source in public}
+    counts = Counter((item["source"], item["category"]) for item in events if item["source"] in names)
+    kinds = {key: {name for name, category in counts if category == key} for key in CATEGORIES}
+    for source in public:
+        if not any(name == source["name"] for name, _ in counts):
+            kinds.setdefault(source["category"], set()).add(source["name"])
+
+    def venue(name, key):
+        count = counts.get((name, key))
+        return (f'<li><a href="{root}?{urlencode({"venue": name})}">{html.escape(name)}</a>'
+                + (f' <span class="count">{count}</span>' if count else "") + "</li>")
+
     groups = "".join(
-        f'<h2>{CATEGORIES[key]}</h2>\n<p>{html.escape(", ".join(sorted(set(venues[key]))))}</p>\n'
-        for key in CATEGORIES if venues.get(key)
+        f'<h2>{html.escape(CATEGORIES[key])}</h2>\n<ul class="venues">{"".join(venue(name, key) for name in shared.as_said(kinds[key]))}</ul>\n'
+        for key in CATEGORIES if kinds.get(key)
     )
     body = f"""<div class="prose">
-<p>{PUBLIC_NAME} lists concerts for the next two months, and films, and art and talks for the next month, in
-Boston, Cambridge and Somerville, on one page, grouped by day.</p>
+<p>{PUBLIC_NAME} puts concerts, films, and talks from venues across Boston, Cambridge, and Somerville on one page,
+day by day: concerts two months ahead, films and talks one month.</p>
 <p>It’s gathered from select venues every few hours. Times and details can change, so check
 with the venue before you go: every listing links to its page there. The descriptions are the venues’ own
 words, in short.</p>
 <p>No ads, no accounts, nothing to sign up for.</p>
+<h2>How to use it</h2>
+<ul class="tips">
+<li>Click a showtime (tap it, on a phone) to add it to your calendar.</li>
+<li><a href="{root}tonight/">Tonight</a> and <a href="{root}weekend/">This weekend</a> show just what’s on then.</li>
+<li>Pick a venue from the menu beside the search to see only its events. The page’s address keeps your choice,
+so you can share it.</li>
+<li>Search matches names, venues, and descriptions: a band, a director, “35mm”. On a keyboard, press / to
+jump to it.</li>
+</ul>
+<h2>Venues</h2>
+<p>Every venue it reads, with how many listings each has coming up. Choose one to see just its events.</p>
 {groups}
-<p>Know a venue that should be here, or spotted a mistake? <a href="{PUBLIC_ROOT}contact/">Get in touch</a>.</p>
+<p>Know a venue that should be here, or spotted a mistake? <a href="{root}contact/">Get in touch</a>.</p>
 </div>"""
     return public_page("about/", f"About · {PUBLIC_NAME}", body,
-                       description=f"What {PUBLIC_NAME} is, and the Boston, Cambridge and Somerville venues it lists.")
+                       description=f"What {PUBLIC_NAME} is, how to use it, and the Boston, Cambridge and Somerville venues it lists.")
 
 
 def render_redirect(address, paths=False):
@@ -1756,6 +1780,17 @@ PUBLIC_CSS = """
   .prose p { margin: 0 0 1em; }
   .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   .prose h2 { margin-top: 2rem; }
+  .prose h2 + p { margin-top: -.25rem; }
+  /* How to use it: short lines, a little apart. */
+  .tips li { margin: 0 0 .6em; }
+  /* The venues, each a link to its events, with how many it has coming up after it in gray; in two columns,
+     down the first and then the second, so they read in order. */
+  .venues { columns: 13rem 2; column-gap: 1.5rem; }
+  .venues li { margin-bottom: .35rem; break-inside: avoid; }
+  .venues + p { margin-top: 2rem; }
+  .prose .venues a { text-decoration: none; }
+  .prose .venues a:hover { text-decoration: underline; text-decoration-color: #555; }
+  .venues .count { margin-left: .35em; color: #666; font-size: .8em; }
   .contact { display: grid; gap: 1.1rem; margin-top: 1.5rem; }
   .contact label { display: grid; gap: .35rem; color: #888; font-size: .8rem; }
   .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
@@ -1961,7 +1996,7 @@ def main():
     shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
     shutil.copytree(ROOT / "share", CITY_DIR / "share", dirs_exist_ok=True)
     (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
-    for page, render in (("about", lambda: render_about(sources, built_at)), ("contact", render_contact)):
+    for page, render in (("about", lambda: render_about(sources, built_at, events)), ("contact", render_contact)):
         (CITY_DIR / page).mkdir(exist_ok=True)
         (CITY_DIR / page / "index.html").write_text(render())
         # Where they were first, as about.html and contact.html, on to where they are.
