@@ -1,9 +1,10 @@
 """The images a link to Pushpin Boston shows when it's shared (1200×630): one for the home page, one for each
 kind's page. They don't change with the listings, so they're made by hand, not by each build, with Chrome
 installed: python3 -m events.share_cards. Run it again after renaming the site or rewording a page; it writes
-events/share/*.png, which the build copies to the public site."""
+events/share/*.png, and events/pushpin/apple-touch-icon.png, which the build copies to the public site."""
 
 import html
+import re
 import shutil
 import subprocess
 import tempfile
@@ -13,6 +14,7 @@ from events import build
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 OUT = Path(__file__).parent / "share"
+PUSHPIN = Path(__file__).parent / "pushpin"  # The site's own icons: favicon.svg, and the home screen's, made here.
 COLORS = {"music": "#a78bfa", "film": "#fbbf24", "art": "#60a5fa"}
 
 # The home card, then each kind's: its file, heading, the line under it, and the icons it shows.
@@ -53,17 +55,31 @@ def card(heading, line, kinds, path):
 """
 
 
+def touch_icon():
+    """The icon an iPhone puts on its home screen (180×180), which it won't take as SVG: the favicon's red pin,
+    on black to the edges, since the phone rounds the corners itself."""
+    pin = re.search(r'<svg x=.*?</svg>', (PUSHPIN / "favicon.svg").read_text()).group()
+    pin = re.sub(r'x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*"', 'x="34" y="34" width="112" height="112"', pin)
+    return (f'<!doctype html><style>html, body {{ margin: 0; width: 180px; height: 180px; background: #000; }}</style>'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">{pin}</svg>')
+
+
+def shoot(html_page, size, destination, scratch):
+    page = Path(scratch) / (destination.stem + ".html")
+    page.write_text(html_page)
+    subprocess.run([CHROME, "--headless=new", "--hide-scrollbars", "--force-device-scale-factor=1",
+                    f"--window-size={size[0]},{size[1]}", f"--screenshot={Path(scratch) / destination.name}", page.as_uri()],
+                   check=True, capture_output=True)
+    shutil.move(Path(scratch) / destination.name, destination)
+    print(f"Wrote {destination.relative_to(Path.cwd()) if destination.is_relative_to(Path.cwd()) else destination}")
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory() as scratch:
         for name, heading, line, kinds, path in CARDS:
-            page = Path(scratch) / f"{name}.html"
-            page.write_text(card(heading, line, kinds, path))
-            subprocess.run([CHROME, "--headless=new", "--hide-scrollbars", "--force-device-scale-factor=1",
-                            "--window-size=1200,630", f"--screenshot={Path(scratch) / name}.png", page.as_uri()],
-                           check=True, capture_output=True)
-            shutil.move(Path(scratch) / f"{name}.png", OUT / f"{name}.png")
-            print(f"Wrote {OUT.relative_to(Path.cwd()) if OUT.is_relative_to(Path.cwd()) else OUT}/{name}.png")
+            shoot(card(heading, line, kinds, path), (1200, 630), OUT / f"{name}.png", scratch)
+        shoot(touch_icon(), (180, 180), PUSHPIN / "apple-touch-icon.png", scratch)
 
 
 if __name__ == "__main__":

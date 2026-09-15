@@ -1353,7 +1353,9 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
     head = "\n".join([
-        f'<link rel="icon" href="{root}favicon.svg" type="image/svg+xml">',
+        # The pin (events/pushpin). ?pin, since browsers keep a site's old icon long after it changes.
+        f'<link rel="icon" href="{root}favicon.svg?pin" type="image/svg+xml">',
+        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?pin">',
         f'<link rel="canonical" href="{address}">',
         f'<meta name="description" content="{html.escape(description)}">',
         # What a link to it shows when shared.
@@ -1369,8 +1371,10 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         f'<meta property="og:image:alt" content="{html.escape(PUBLIC_NAME)}: {html.escape(PUBLIC_TAGLINE)}">',
         '<meta name="twitter:card" content="summary_large_image">',
     ] + [f'<script type="application/ld+json">{json.dumps(data, ensure_ascii=False, separators=(",", ":"))}</script>'] * bool(data))
+    brand, _, city = PUBLIC_NAME.partition(" ")
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
-                       updated=built_at, links=links, indexable=True)
+                       updated=built_at, links=links, indexable=True,
+                       marked={PUBLIC_NAME: f'{html.escape(brand)} <span class="city">{html.escape(city)}</span>'})
 
 
 def render_about(sources, built_at):
@@ -1703,6 +1707,9 @@ INDEX_JS = """
 
 # The public site's About and Contact pages: plain text, and a form as quiet as the search.
 PUBLIC_CSS = """
+  /* Its name in the header: Pushpin as the site's, the city after it lighter. */
+  .sites .city { font-weight: 400; }
+  .sites a[aria-current] .city { color: #8c8c8c; }
   /* What the site is, in a line under its name, as quiet as the rest. */
   .tagline { margin: -1rem 0 2.25rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
   .tagline + .filter { margin-top: 0; }
@@ -1912,6 +1919,7 @@ def main():
     # The public site, from the same listings.
     CITY_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", CITY_DIR, dirs_exist_ok=True)
+    shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
     shutil.copytree(ROOT / "share", CITY_DIR / "share", dirs_exist_ok=True)
     (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
     (CITY_DIR / "about.html").write_text(render_about(sources, built_at))
@@ -1926,7 +1934,7 @@ def main():
         (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
     (CITY_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
     # The site's root: straight to Boston, the only city so far, and robots.txt, which only works there.
-    shutil.copytree(ROOT / "static", PUBLIC_DIR, dirs_exist_ok=True)
+    shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
     (PUBLIC_DIR / "index.html").write_text(render_redirect(PUBLIC_URL))
     (PUBLIC_DIR / "404.html").write_text(render_redirect(PUBLIC_URL, paths=True))
     (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")

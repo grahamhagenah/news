@@ -293,16 +293,18 @@ SEARCH_KEYS = """
 </script>"""
 
 
-def page(site, title, body, css="", head="", symbols="", updated=None, links=None, indexable=False):
+def page(site, title, body, css="", head="", symbols="", updated=None, links=None, indexable=False, marked=None):
     """A whole page: the shared head, header and styles, then this site's styles, icons and body. Its header
-    links are the two sites, unless it gives its own as (label, address, whether it's this page); only a page
-    meant for anyone (the public events page) lets search engines list it."""
+    links are the two sites, unless it gives its own as (label, address, whether it's this page); marked gives
+    a label's own markup, for one set in two weights ("Pushpin <span>Boston</span>"). Only a page meant for
+    anyone (the public events page) lets search engines list it."""
+    marked = marked or {}
     name = SITES[site][0] if links is None else links[0][0]
     if links is None:
         links = [(label, "./" if key == site else url, key == site) for key, (label, url) in SITES.items()]
     current_page = ' aria-current="page"'
     links = "".join(
-        f'<a href="{html.escape(url)}"{current_page if current else ""}>{html.escape(label)}</a>'
+        f'<a href="{html.escape(url)}"{current_page if current else ""}>{marked.get(label, html.escape(label))}</a>'
         for label, url, current in links
     )
     note = (
