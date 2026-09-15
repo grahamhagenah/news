@@ -59,6 +59,15 @@ ROUTES = [
     ("core.service.elfsight.com", "elfsight.json"),
     ("thedrakeamherst.org/events?format=json", "drake.json"),
     ("mahaiwe.org/events/?ical=1", "mahaiwe.ics"),
+    ("sheatheater.org/d/0/?thisMonth=10", "shea_month.html"),
+    ("sheatheater.org/d/0/", "empty.html"),  # Its other months: nothing.
+    ("aomtheatre.com/event-calendar", "academy.html"),
+    ("aomtheatre.com/aom_event/", "academy_event.html"),
+    ("phoenixmovies.net/?/api_cinemamanager", "phoenix.json"),
+    ("spektrix.com/berkshiretheatregroup/api/v3/events", "spektrix_events.json"),
+    ("spektrix.com/berkshiretheatregroup/api/v3/instances", "spektrix_instances.json"),
+    ("berkshiretheatregroup.org/", "btg_home.html"),  # Its calendar and home page, for each event's page.
+    ("arts.umass.edu/performing-arts/events", "umass_fac.html"),
 ]
 
 
@@ -335,13 +344,72 @@ class WesternMass(unittest.TestCase):
         self.assertEqual((indigo["venue"], indigo["detail"]), ("Mahaiwe", "Indigo Room"))
         self.assertEqual(indigo["address"][:2], ["20 Castle Street", "Great Barrington"], "next door, at its own address")
 
+    def test_shea_theater(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 10, 1)):
+            found = build.read_shea(source("shea", "https://sheatheater.org/", "music", "Shea Theater"))
+        by_title = {item["title"]: item for item in found}
+        self.assertEqual((by_title["Sam Grisman Project"]["date"], by_title["Sam Grisman Project"]["times"]), (date(2026, 10, 2), [time(20, 0)]))
+        self.assertEqual(by_title["Sam Grisman Project"]["detail"], "", "Shea Presents: out of its name, and not its detail")
+        self.assertTrue(by_title["Sam Grisman Project"]["image"].endswith("/calendar/calendar_23292_large.jpg"))
+        self.assertTrue(by_title["Sam Grisman Project"]["about"])
+        screening = next(item for item in found if item["title"].startswith("Friday the 13th"))
+        self.assertEqual(screening["category"], "film")
+
+    def test_academy_of_music(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 15)):
+            found = build.read_academy_of_music(source("academyofmusic", "https://aomtheatre.com/event-calendar/", "music", "Academy of Music"))
+        self.assertEqual(found[0]["title"], "World Ballet Company: Swan Lake")
+        self.assertEqual((found[0]["date"], found[0]["times"]), (date(2026, 9, 18), [time(19, 0)]))
+        self.assertEqual(found[0]["detail"], "Gorskaya-Hartwick Productions presents")
+        self.assertTrue(all(item["image"] and item["about"] for item in found))
+
+    def test_kinds_guessed(self):
+        for name, described, kind in [("Ivy League of Comedy Tour", "", None), ("Gary Gulman", "The comedian returns", None),
+                                      ("Friday the 13th Part VII Screening", "", "film"), ("World Ballet Company: Swan Lake", "", "art"),
+                                      ("An Evening with David Sedaris", "", "art"), ("Randy Travis", "his co-star in independent film The Price", "music"),
+                                      ("Deadgrass", "A Grateful Dead tribute", "music")]:
+            self.assertEqual(build.guess_kind(name, described), kind, name)
+        self.assertEqual(build.presented("DSP Shows Presents: Beth Orton", "Shea"), ("Beth Orton", "DSP Shows presents"))
+        self.assertEqual(build.presented("Shea Presents: Upstate", "Shea"), ("Upstate", ""))
+
+    def test_beacon_cinema(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 18)):
+            found = build.read_phoenix(source("phoenix", "https://www.phoenixmovies.net/theatres/beacon-cinema/005", "film", "Beacon Cinema"))
+        films = build.merge_showings(found)
+        self.assertEqual(len(films), 2)
+        self.assertTrue(all(len(film["times"]) > 1 for film in films))
+        self.assertTrue(films[0]["link"].startswith("https://www.phoenixmovies.net/movies/"))
+        self.assertTrue(films[0]["image"].startswith("https://ticketing.phoenixmovies.net/CDN/media/entity/get/FilmPosterGraphic/"))
+
+    def test_colonial_theatre(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 15)):
+            found = build.read_spektrix(source("spektrix", "https://www.berkshiretheatregroup.org/calendar/?spektrix=berkshiretheatregroup",
+                                               "music", "Colonial Theatre"))
+        titles = {item["title"] for item in found}
+        self.assertIn("Klezmer by Candlelight", titles)
+        self.assertNotIn("Summer, 1976", titles, "the Unicorn's, not the Colonial's")
+        self.assertFalse(any("Comedy" in title for title in titles))
+        klezmer = next(item for item in found if item["title"] == "Klezmer by Candlelight")
+        self.assertTrue(klezmer["detail"].startswith("featuring"), "the line after its name")
+        self.assertEqual(klezmer["link"], "https://www.berkshiretheatregroup.org/event/klezmer-by-candlelight/")
+
+    def test_umass_fine_arts_center(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 15)):
+            found = build.read_umass_fac(source("umassfac", "https://arts.umass.edu/performing-arts/events", "music", "UMass Fine Arts Center"))
+        self.assertEqual((found[0]["title"], found[0]["date"], found[0]["times"]), ("The Carpenters Songbook", date(2026, 9, 25), [time(19, 30)]))
+        self.assertEqual(found[0]["detail"], "Frederick C. Tillis Performance Hall", "its hall")
+        self.assertTrue(found[0]["link"].startswith("https://arts.umass.edu/performing-arts/events/"))
+        self.assertTrue(all(item["image"] for item in found))
+
     def test_every_source_readable_and_placed(self):
         sources = build.read_sources(WESTERN_MASS_SOURCES, "westernma")
         self.assertEqual({s["name"] for s in sources}, {"Mass MoCA", "Amherst Cinema", "Images Cinema", "Triplex Cinema",
-                                                       "Iron Horse", "Parlor Room", "The Drake", "Mahaiwe"})
+                                                       "Iron Horse", "Parlor Room", "The Drake", "Mahaiwe", "Shea Theater",
+                                                       "Academy of Music", "Beacon Cinema", "Colonial Theatre", "UMass Fine Arts Center"})
         for s in sources:
             self.assertIn(s["kind"], build.READERS)
-            self.assertIn(s["name"], build.VENUE_ADDRESSES)
+            if s["name"] != "UMass Fine Arts Center":  # Its events are in halls around campus, and town, which each says.
+                self.assertIn(s["name"], build.VENUE_ADDRESSES)
             self.assertEqual(s["city"], "westernma")
 
 

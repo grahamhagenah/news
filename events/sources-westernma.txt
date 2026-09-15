@@ -9,3 +9,8 @@ elfsight       https://core.service.elfsight.com/p/boot/?page=https%3A%2F%2Fwww.
 elfsight       https://core.service.elfsight.com/p/boot/?page=https%3A%2F%2Fwww.ironhorse.org%2Fshows&w=c4b76df1-e520-4ed0-9318-f18bd056c38a   music   Parlor Room
 squarespace    https://www.thedrakeamherst.org/events                  music  The Drake
 mahaiwe        https://www.mahaiwe.org/events/?ical=1                  music  Mahaiwe
+shea           https://sheatheater.org/                                music  Shea Theater
+academyofmusic https://aomtheatre.com/event-calendar/                  music  Academy of Music
+phoenix        https://www.phoenixmovies.net/theatres/beacon-cinema/005   film   Beacon Cinema
+spektrix       https://www.berkshiretheatregroup.org/calendar/?spektrix=berkshiretheatregroup   music   Colonial Theatre
+umassfac       https://arts.umass.edu/performing-arts/events           music  UMass Fine Arts Center

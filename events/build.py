@@ -153,6 +153,10 @@ VENUE_ADDRESSES = {
     "Parlor Room": ("32 Masonic St", "Northampton", "01060"),
     "The Drake": ("44 N Pleasant St", "Amherst", "01002"),
     "Mahaiwe": ("14 Castle St", "Great Barrington", "01230"),
+    "Shea Theater": ("71 Avenue A", "Turners Falls", "01376"),
+    "Academy of Music": ("274 Main St", "Northampton", "01060"),
+    "Beacon Cinema": ("57 North St", "Pittsfield", "01201"),
+    "Colonial Theatre": ("111 South St", "Pittsfield", "01201"),
 }
 
 
@@ -1155,6 +1159,226 @@ def read_elfsight(source):
     return events
 
 
+def guess_kind(name, described=""):
+    """A kind, for a venue whose calendar doesn't say (the Academy of Music's, the Colonial's), from what an
+    event's called and what it says about itself: None for comedy, which isn't listed; film for a screening;
+    art & talks for dance, a talk or a reading, or a young people's production; else music."""
+    both = f"{name} {described}"
+    if re.search(r"\bcomed(?:y|ian|ians|ic)\b|\bstand-?up\b", both, re.I):
+        return None
+    # By its name, or a description that says it's a screening; not a singer's co-star "in independent film".
+    if re.search(r"\b(?:film|films|screening|documentary|movie)\b", name, re.I) or re.search(r"\bscreening\b", described, re.I):
+        return "film"
+    if (re.search(r"\b(?:ballet|dance|lecture|talk|conversation|an evening with|reading|stories|story ?slam|storytelling|poetry|jr\.?)(?:\b|$)", name, re.I)
+            or re.search(r"\b(?:ballet|dance company|authors?|writer|humorist|essayist|storyteller|lecture)\b", described, re.I)):
+        return "art"
+    return "music"
+
+
+PRESENTS = re.compile(r"^(.{2,40}?)\s+presents?:\s+", re.I)
+
+
+def presented(title, house):
+    """A name without its presenter before it ("DSP Shows Presents: Beth Orton"), and the presenter, as its
+    detail, unless it's the venue itself ("Shea Presents: …")."""
+    found = PRESENTS.match(title)
+    if not found:
+        return title, ""
+    presenter = found.group(1).strip()
+    return title[found.end():].strip(), "" if presenter.casefold().startswith(house.casefold()) else f"{presenter} presents"
+
+
+def read_shea(source):
+    """The Shea Theater's calendar (Turners Falls), a month's grid to a page (?thisMonth=10&thisYear=2026), each
+    show with its time, name, link and a line about it; its picture is at an address from its id."""
+    start, end = today(), window_end("music")
+    months = sorted({(day.year, day.month) for day in (start + timedelta(days=n) for n in range((end - start).days + 1))})
+    events = []
+    for year, month in months:
+        page = fetch(urljoin(source["url"], f"/d/0/?thisMonth={month}&thisYear={year}&cid=0&tid=0"))
+        last = 0
+        for cell in page.split("<span class='calendarDateNumber'>")[1:]:
+            number = int(re.match(r"(\d+)", cell).group(1))
+            if number < last:  # The next month's days, filling out the last week.
+                break
+            last = number
+            for item in cell.split('<div class="calendarItem')[1:]:
+                shown = re.search(r'calendarDateTime">([^<]*)</span>\s*<br>\s*<a href="(/d/(\d+)/[^"]+)">(.*?)</a>', item, re.S)
+                if not shown:
+                    continue
+                clock_text = re.match(r"\s*(\d{1,2}:\d{2} [ap]m)", shown.group(1))
+                tooltip = re.search(r'data-title="([^"]*)"', item)
+                line = re.search(r"cal-description'>(.*?)</span>", html.unescape(tooltip.group(1)) if tooltip else "", re.S)
+                title, detail = presented(text(shown.group(4)), "Shea")
+                title, support = with_support(title)
+                detail = support or detail
+                described = text(line.group(1)) if line else ""
+                category = guess_kind(title, described)
+                if not category:
+                    continue
+                listing = event(source, title, date(year, month, number),
+                                datetime.strptime(clock_text.group(1).upper(), "%I:%M %p").time() if clock_text else None,
+                                link=urljoin(source["url"], html.unescape(shown.group(2))), detail=detail,
+                                about=[described] if described else [], image=urljoin(source["url"], f"/calendar/calendar_{shown.group(3)}_large.jpg"))
+                events.append(dict(listing, category=category))
+    return events
+
+
+def read_academy_of_music(source):
+    """The Academy of Music's event calendar (Northampton), a card for each event, with who presents it, its
+    date and time and its page, which has its picture and what it's about. It doesn't say what kind each is,
+    so that's guessed (guess_kind), and its comedy left out."""
+    events = []
+    cards = fetch(source["url"]).split('<div class="event_card">')[1:]
+    for card in cards:
+        title = re.search(r'class="event_card_title">\s*<h5>(.*?)</h5>', card, re.S)
+        when = re.search(r'class="event_card_date_times">\s*\w+, (\w+ \d{1,2})(?:st|nd|rd|th)?, (\d{4})(?: at (\d{1,2})(?::(\d{2}))?\s*([ap])m)?', card)
+        link = re.search(r'class="event_card_details_button">\s*<a href="([^"]+)"', card)
+        if not (title and when and link):
+            continue
+        presents = re.search(r'class="event_card_presents">(.*?)</div>', card, re.S)
+        start = None
+        if when.group(3):
+            start = datetime.min.time().replace(hour=int(when.group(3)) % 12 + (12 if when.group(5) == "p" else 0), minute=int(when.group(4) or 0))
+        (name, support), by = with_support(text(title.group(1))), text(presents.group(1)) if presents else ""
+        events.append(event(source, name, datetime.strptime(f"{when.group(1)} {when.group(2)}", "%B %d %Y").date(), start,
+                            link=html.unescape(link.group(1)),
+                            detail=support or (f"{by} presents" if by and by.casefold() not in name.casefold() else "")))
+    soon = [listing for listing in events if listing["date"] <= window_end("music")]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        details = dict(zip([listing["link"] for listing in soon], pool.map(academy_event, [listing["link"] for listing in soon])))
+    found = []
+    for listing in soon:
+        detail = details.get(listing["link"]) or {}
+        category = guess_kind(listing["title"], " ".join(detail.get("about", [])))
+        # Its price from its page's line of facts ("Doors at 7:30 pm · $52.36–$99.46"), as event() would have.
+        price = price_from(" · ".join(line for line in detail.get("about", [])[:3] if len(line) <= FACT_LINE_CHARS))
+        if category:
+            found.append(dict(listing, category=category, price=price, **detail))
+    return found
+
+
+def academy_event(link):
+    """An Academy of Music event's picture and what it's about, from its own page."""
+    try:
+        page = fetch(link, attempts=1, timeout=15)
+    except Exception:
+        return {}
+    picture = re.search(r'<meta property="og:image" content="([^"]+)"', page)
+    # Its description is the longest block of text on its page (a shorter one says "Meet & Greet Add-Ons are now available").
+    blocks = re.findall(r'<div class="et_pb_text_inner">(.*?)</div>', page, re.S)
+    body = max(blocks, key=lambda block: len(text(block)), default="")
+    # Not its notes on buying tickets ("DSP presale begins …", "Fees always apply to purchase").
+    described = [line for line in about(body) if not re.search(r"\bpresale\b|fees always apply|tickets can be purchased", line, re.I)]
+    return {"image": html.unescape(picture.group(1)) if picture else "", "about": described}
+
+
+def read_phoenix(source):
+    """Phoenix Theatres' cinemas (the Beacon, in Pittsfield), through the data their pages ask for, a day at a
+    time, by the cinema's number (the last part of its page's address): each film's showings, each sold out
+    or not, and its poster and synopsis."""
+    address = urlsplit(source["url"])
+    theater = address.path.rstrip("/").rsplit("/", 1)[-1]
+    api = f"{address.scheme}://{address.netloc}/?/api_cinemamanager/showtimes_by_cinema2/{theater}/"
+    first = json.loads(fetch(api + today().isoformat()))
+    days = [date.fromisoformat(entry["Date"]) for entry in first.get("AvailableDates") or []] or [today()]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        answers = [first] + list(pool.map(lambda day: json.loads(fetch(api + day.isoformat())), days[1:]))
+    events = []
+    for answer in answers:
+        for code, film in (answer.get("MovieInformation") or {}).items():
+            title = film.get("Title") or ""
+            facts = " · ".join(filter(None, [film.get("RunTime") or "", film.get("Rating") if film.get("Rating") not in (None, "", "NR") else ""]))
+            for sessions in (by_format for formats in (film.get("Schedule") or {}).values() for by_format in formats.values()):
+                for session in sessions:
+                    events.append(event(source, title, date.fromisoformat(session["Date"]),
+                                        datetime.strptime(session["Starttime"], "%H:%M:%S").time(),
+                                        link=f"{address.scheme}://{address.netloc}/movies/{title.lower().replace(' ', '-')}/{code}",
+                                        about=about(film.get("Synopsis") or "") + ([facts] if facts else []),
+                                        image=f"https://ticketing.phoenixmovies.net/CDN/media/entity/get/FilmPosterGraphic/{code}",
+                                        sold_out=bool(session.get("SoldOut"))))
+    return events
+
+
+def read_spektrix(source):
+    """Theaters that sell tickets through Spektrix (Berkshire Theatre Group's), from its public data: each
+    event (with its stage) and each of its performances. The source's address is its calendar page, whose
+    links are each event's own page, with ?spektrix= and the theater's Spektrix name. A company with several
+    stages has a source for each, keeping the events on the stage its name names (the Colonial Theatre's, The
+    Colonial Theatre, 111 South St). It doesn't say what kind each is, so that's guessed (guess_kind)."""
+    address = urlsplit(source["url"])
+    client = dict(pair.split("=", 1) for pair in address.query.split("&") if "=" in pair)["spektrix"]
+    calendar_page = f"{address.scheme}://{address.netloc}{address.path}"
+    api = f"https://system.spektrix.com/{client}/api/v3/"
+    named = lambda name: re.sub(r"^the\s+", "", name or "", flags=re.I).casefold()
+    shows = {item["id"]: item for item in json.loads(fetch(api + "events"))
+             if named(item.get("attribute_Venue")).startswith(named(source["name"]))}
+    # Each event's own page, as its calendar and home page link them, by the end of its address (WordPress's
+    # for its name: rev-tors-30th-anniversary-jam, ronstadt-rewind).
+    pages = {}
+    for page in (calendar_page, f"{address.scheme}://{address.netloc}/"):
+        try:
+            pages.update({slug: link for link, slug in re.findall(r'href="(https?://[^"]+/event/([^/"]+)/)"', fetch(page))})
+        except Exception:
+            pass
+    slugged = lambda name: calendar_slug(re.sub(r"[’'‘]", "", name))
+    events = []
+    for instance in json.loads(fetch(api + f"instances?startFrom={today().isoformat()}")):
+        show = shows.get((instance.get("event") or {}).get("id"))
+        if not show or instance.get("cancelled"):
+            continue
+        # Its name, and a line after it, two spaces apart: "Klezmer by Candlelight   featuring Frank London".
+        title, _, rest = re.sub(r"\s{2,}", "\n", (show.get("name") or "").strip()).partition("\n")
+        described = show.get("description") or show.get("attribute_20WordDescription") or ""
+        category = guess_kind(title, described)
+        if not category:
+            continue
+        slug = next((slug for slug in pages for whole in (slugged(show["name"]), slugged(title)) if whole == slug or whole.startswith(slug + "-")), None)
+        if not slug:  # One its pages don't link: its page at the address WordPress would give it, if it's there.
+            slug = slugged(title)
+            try:
+                fetch(f"{address.scheme}://{address.netloc}/event/{slug}/", attempts=1, timeout=10)
+                pages[slug] = f"{address.scheme}://{address.netloc}/event/{slug}/"
+            except Exception:
+                pages[slug] = calendar_page
+        moment = datetime.fromisoformat(instance["start"])
+        listing = event(source, title.strip(), moment.date(), moment.time(), link=pages[slug],
+                        detail=rest.strip(), about=about(described), image=show.get("imageUrl") or "")
+        events.append(dict(listing, category=category))
+    return events
+
+
+def read_umass_fac(source):
+    """The UMass Fine Arts Center's performing arts events, each with its date and time (no year), its hall,
+    a line about it, its picture and its page. Some are in other halls around town (The Drake), which each
+    says. It doesn't say what kind each is, so that's guessed (guess_kind)."""
+    today_ = today()
+    events = []
+    for tile in fetch(source["url"]).split('class="tile spx-event')[1:]:
+        field = lambda name: re.search(rf'class="spx-{name}">(.*?)</div>', tile, re.S)
+        when, title, hall, line = field("date"), field("title"), field("location"), field("description")
+        link = re.search(r'class="spx-event-link">\s*<a href="([^"]+)"', tile)
+        found = re.match(r"\s*\w+, (\w{3}) (\d{1,2})(?:\s*\|\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.m\.)?", text(when.group(1))) if when else None
+        if not (found and title):
+            continue
+        day = datetime.strptime(f"{found.group(1)} {found.group(2)} {today_.year}", "%b %d %Y").date()
+        if day < today_ - timedelta(days=60):  # Next year's, as the season runs from fall to spring.
+            day = day.replace(year=today_.year + 1)
+        start = None
+        if found.group(3):
+            start = datetime.min.time().replace(hour=int(found.group(3)) % 12 + (12 if found.group(5) == "p" else 0), minute=int(found.group(4) or 0))
+        picture = re.search(r'<img[^>]+src="([^"]+)"', tile)
+        name, described = text(title.group(1)), text(line.group(1)) if line else ""
+        category = guess_kind(name, described)
+        if not category:
+            continue
+        listing = event(source, name, day, start, link=urljoin(source["url"], html.unescape(link.group(1))) if link else source["url"],
+                        detail=text(hall.group(1)) if hall else "", about=[described] if described else [],
+                        image=urljoin(source["url"], html.unescape(picture.group(1))) if picture else "")
+        events.append(dict(listing, category=category))
+    return events
+
+
 def read_amherst_cinema(source):
     """Amherst Cinema's calendar, a page for each day (/calendar/month/2026-09-16, despite its name), each
     film with its series and its times; and each film's own page, for its picture and what it's about."""
@@ -1468,6 +1692,11 @@ READERS = {
     "massmoca": read_mass_moca,
     "mahaiwe": read_mahaiwe,
     "elfsight": read_elfsight,
+    "shea": read_shea,
+    "academyofmusic": read_academy_of_music,
+    "phoenix": read_phoenix,
+    "spektrix": read_spektrix,
+    "umassfac": read_umass_fac,
     "amherstcinema": read_amherst_cinema,
     "indy": read_indy,
     "hfa": read_hfa,
@@ -1813,7 +2042,7 @@ def event_data(item):
     start = item["date"].isoformat()
     if item["times"]:
         start = datetime.combine(item["date"], item["times"][0], tzinfo=BOSTON).isoformat()
-    street, town, zip_code = item.get("address") or VENUE_ADDRESSES.get(item["venue"]) or ("", "Boston", "")
+    street, town, zip_code = item.get("address") or VENUE_ADDRESSES.get(item["venue"]) or ("", "", "")
     address = {"@type": "PostalAddress", "streetAddress": street, "addressLocality": town, "addressRegion": "MA",
                "postalCode": zip_code, "addressCountry": "US"}
     data = {
@@ -1990,8 +2219,8 @@ def city_texts(slug, name, place, around, film_description, who):
 
 
 WESTERN_MASS = city_texts("westernma", "Pushpin Western Mass", "Western Mass", "the Pioneer Valley and the Berkshires",
-                          "Showtimes at Amherst Cinema, Images Cinema and the Triplex, for the next month, aggregated from "
-                          "select theaters.",
+                          "Showtimes at Amherst Cinema, Images Cinema, the Triplex and the Beacon, for the next month, "
+                          "aggregated from select theaters.",
                           "I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I grew up in Western Mass, and I love "
                           "supporting its theaters and concert venues. I wanted an easier way to track what’s coming up than "
                           "relying on Google or visiting each venue’s website.")
