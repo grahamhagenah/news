@@ -25,6 +25,7 @@ SOURCES_FILE = ROOT / "sources.txt"  # Boston's; each city has its own (CITIES).
 SKIP_FILE = ROOT / "skip.txt"
 OUT_DIR = ROOT.parent / "dist" / "events"
 REPO_URL = "https://github.com/grahamhagenah/news"
+NEW_DAYS = 7  # How long a listing counts as just announced, after the day it first turned up.
 DAYS_AHEAD = 30  # How far ahead the page lists events,
 MUSIC_DAYS_AHEAD = 60  # and concerts, which venues announce (and people buy tickets for) further ahead.
 # Each build publishes its listings beside the page; a source that fails next time falls back to its copy
@@ -64,6 +65,11 @@ PUBLIC_TONIGHT = ("tonight/", f"Things to do in Boston tonight · {PUBLIC_NAME}"
                   "from select venues.",
                   "Tonight around Boston, Cambridge, and Somerville: everything still to come today, aggregated from "
                   "select venues.")
+
+# The public site's Just announced page: what's turned up in the last week, newest first.
+PUBLIC_NEW = ("new/", f"Just announced in Boston · {PUBLIC_NAME}",
+              "Concerts and talks just added around Boston, Cambridge and Somerville, from select venues.",
+              "Just announced: concerts and talks added in the last week, from select venues.")
 
 # The public site's weekend pages, Friday to Sunday: this weekend's (the one it is, or from Monday to Thursday the
 # one coming) and next weekend's. Each: its address, what it's called, its title and description.
@@ -1893,11 +1899,42 @@ def listing_id(day, title, venue=""):
     return f"{day.isoformat()}-{series}", series
 
 
+# Just announced: concerts and talks first seen in the last week. Not films, whose theaters add showtimes
+# every day, which would crowd out everything else.
+NEW_KINDS = {"music", "art"}
+FRESH_SHOWN = 4  # How many the home page's strip shows, before "More just announced".
+
+
+def newly_added(events, built_at):
+    """The listings first seen in the last NEW_DAYS days, newest first, then soonest."""
+    since = (built_at.astimezone(BOSTON).date() - timedelta(days=NEW_DAYS)).isoformat()
+    fresh = [item for item in events if item["category"] in NEW_KINDS and item.get("added", "") > since]
+    return sorted(fresh, key=lambda item: (item["added"], [-part for part in item["date"].timetuple()[:3]]), reverse=True)
+
+
+def fresh_strip(events, built_at):
+    """The home page's Just announced strip: the newest few, each a way into its view, and the page with the
+    rest. Nothing, when nothing's turned up this week."""
+    fresh = newly_added(events, built_at)[:FRESH_SHOWN]
+    if not fresh:
+        return ""
+    rows = "".join(
+        f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}">'
+        f'<span class="source">{icon(item["category"])}<span>{html.escape(item["venue"])}</span></span>'
+        f'<span class="fresh-title">{html.escape(item["title"])}</span>'
+        f'<span class="fresh-when">{item["date"]:%a, %b} {item["date"].day}</span></a></li>'
+        for item in fresh)
+    return (f'<section class="fresh"><h2>Just announced</h2>\n<ul>{rows}</ul>\n'
+            f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">More just announced →</a></section>\n')
+
+
 def render_row(item):
-    """Laid out like the newsfeed: the venue on the left, then the name with that day's times after it."""
+    """Laid out like the newsfeed: the venue on the left, then the name with that day's times after it. With
+    dated (Just announced, where the heading is the day it turned up), the day it's on comes first."""
     if "showings" in item:
         return render_combined(item)
     detail = f'<span class="detail">{html.escape(item["detail"])}</span>' if item["detail"] else ""
+    when = f'<span class="when">{item["date"]:%a, %b} {item["date"].day}</span>' if item.get("dated") else ""
     ident, series = listing_id(item["date"], item["title"], item["venue"])
     return (
         f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
@@ -1905,7 +1942,7 @@ def render_row(item):
         f'<span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{render_times(item["times"], sold_times(item))}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div></li>'
+        f'{when}{render_times(item["times"], sold_times(item))}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div></li>'
     )
 
 
@@ -1933,10 +1970,11 @@ def render_combined(item):
     )
 
 
-def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False):
+def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False, added=False):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
     page (music/, film/, talks/), holding only that kind's events, or with weekend (0 for this one, 1 for the
-    next), only Friday to Sunday's, or tonight, only today's (and tomorrow's, for after midnight)."""
+    next), only Friday to Sunday's, or tonight, only today's (and tomorrow's, for after midnight), or added,
+    what's turned up in the last week, by the day it did."""
     root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
@@ -1958,32 +1996,40 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             day = built_at.astimezone(BOSTON).date()
             events = [item for item in events if day <= item["date"] <= day + timedelta(days=1)]
             shown = venues = {item["source"] for item in events}
+        if added:
+            events = newly_added(events, built_at)
+            shown = venues = {item["source"] for item in events}
         sources = [source for source in sources if source["name"] in shown]
         failed = [name for name in failed if name in shown]
         stale = [(name, fetched) for name, fetched in stale if name in shown]
     days = {}
     for item in events:
-        days.setdefault(item["date"], []).append(item)
+        days.setdefault(item["added"] if added else item["date"], []).append(item)
 
     sections = []
-    for day in sorted(days):
-        # Untimed listings first, then by time, then by name.
-        rows = combine_films(days[day])
-        rows.sort(key=lambda item: (bool(item["times"]), item["times"][:1], item["title"].casefold()))
-        sections.append(
-            f'<section class="day" data-date="{day.isoformat()}">'
-            f'<h2><span class="relative"></span><span class="date"><span class="weekday">{day:%a}</span>, {day:%b} {day.day}</span></h2>\n'
-            '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>"
-        )
+    # Just announced goes by the day each turned up, newest first; every other page by the day it's on.
+    for day in sorted(days, reverse=added):
+        if added:  # Each row says the day it's on, which isn't its heading's; the newest of a day first.
+            rows = [dict(item, dated=True) for item in days[day]]
+            when = date.fromisoformat(day)
+            heading = (f'<section class="day" data-added="{day}">'
+                       f'<h2><span class="relative">Added</span> <span class="date">{when:%a}, {when:%b} {when.day}</span></h2>\n')
+        else:
+            # Untimed listings first, then by time, then by name.
+            rows = combine_films(days[day])
+            rows.sort(key=lambda item: (bool(item["times"]), item["times"][:1], item["title"].casefold()))
+            heading = (f'<section class="day" data-date="{day.isoformat()}">'
+                       f'<h2><span class="relative"></span><span class="date"><span class="weekday">{day:%a}</span>, {day:%b} {day.day}</span></h2>\n')
+        sections.append(heading + '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>")
 
     buttons = '<button data-show="all">All</button>' + "".join(
         f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>' for key, label in CATEGORIES.items()
     )
     filter_attributes = ""
-    if public and (weekend is not None or tonight):
+    if public and (weekend is not None or tonight or added):
         # Its buttons show a kind of the weekend's (or tonight's) events in place, not remembered; and the whole
         # weekend is on one page, its pager going between the weekends instead. Tonight's shows only today.
-        filter_attributes = " data-here data-one-page" + " data-today" * tonight
+        filter_attributes = " data-here" + " data-one-page" * (weekend is not None or tonight) + " data-today" * tonight
     elif public:
         # Links to each kind's page, the current one marked; on the home page the script shows a kind in place.
         current = category or "all"
@@ -2005,7 +2051,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     places = {item["venue"]: written(VENUE_ADDRESSES[item["venue"]]) for item in events if item["venue"] in VENUE_ADDRESSES}
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
     path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else PUBLIC_TONIGHT[0] if tonight else
-            f"{PUBLIC_PAGES[category][0]}/" if category else "")
+            PUBLIC_NEW[0] if added else f"{PUBLIC_PAGES[category][0]}/" if category else "")
     footer = (public_footer(path, failed_note, names) if public else
               f"<footer>\n<p>From {names}.</p>\n{failed_note}"
               f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n')
@@ -2020,7 +2066,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     body = (
         f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}<span class="finders">{shared.menu(venues, "All venues", "Venue")}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
-        + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
+        + '\n<p class="empty" hidden>{"Nothing announced in the last week." if added else "Nothing coming up."}</p>\n<nav class="pager"></nav>\n' + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
         + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)}, SHARE_URL = {json.dumps(PUBLIC_URL)};</script>\n"
@@ -2034,7 +2080,10 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
                        f"{sunday:%A, %B} {sunday.day}.")
         if tonight:
             _, title, description, tagline = PUBLIC_TONIGHT
-        return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + body, built_at, description=description,
+        if added:
+            _, title, description, tagline = PUBLIC_NEW
+        strip = fresh_strip(events, built_at) if not (category or tonight or added or weekend is not None) else ""
+        return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + strip + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
 
@@ -2081,7 +2130,8 @@ def public_footer(path, notes="", names=""):
     and, under a list of events, where they come from, then any source it couldn't reach."""
     root = PUBLIC_ROOT
     groups = [
-        ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]),
+        ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]
+         + [("Just announced", PUBLIC_NEW[0])]),
         ("When", [("Tonight", PUBLIC_TONIGHT[0])] + [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
         (PUBLIC_NAME, [("About", "about/"), ("Calendars", "about/#calendars"), ("Contact", "contact/")]
          + [("All cities", "/")] * (len(CITIES) > 1)),  # pushpin.city itself, which lists them.
@@ -2099,7 +2149,8 @@ def public_footer(path, notes="", names=""):
 
 
 # Each page's name, after the site's in the header ("Pushpin Boston / Film"); the home page has none.
-PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, (slug, *_) in PUBLIC_PAGES.items()} | {PUBLIC_TONIGHT[0]: "Tonight"}
+PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, (slug, *_) in PUBLIC_PAGES.items()}
+              | {PUBLIC_TONIGHT[0]: "Tonight", PUBLIC_NEW[0]: "Just announced"}
               | {path: name for path, name, *_ in PUBLIC_WEEKENDS} | {"about/": "About", "contact/": "Contact"})
 # The pages with a share card of their own (events/share); the rest show the home page's.
 SHARE_CARDS = {slug for slug, *_ in PUBLIC_PAGES.values()} | {"tonight", "weekend"}
@@ -2186,6 +2237,7 @@ class City:
     description: str
     around: str
     tonight: tuple
+    new: tuple
     weekends: list
     pages: dict
     faqs: list
@@ -2196,7 +2248,7 @@ class City:
 
 
 BOSTON_CITY = City("boston", PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_TONIGHT,
-                   PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS)
+                   PUBLIC_NEW, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS)
 
 
 def city_texts(slug, name, place, around, film_description, who):
@@ -2212,6 +2264,9 @@ def city_texts(slug, name, place, around, film_description, who):
         ("tonight/", f"Things to do in {place} tonight · {name}",
          f"Concerts, films and talks still to come today around {around}, aggregated from select venues.",
          f"Tonight around {around}: everything still to come today, aggregated from select venues."),
+        ("new/", f"Just announced in {place} · {name}",
+         f"Concerts and talks just added around {around}, from select venues.",
+         "Just announced: concerts and talks added in the last week, from select venues."),
         [("weekend/", "This weekend", f"Things to do in {place} this weekend · {name}",
           f"Concerts, films and talks around {around} this weekend, Friday to Sunday, aggregated from select venues."),
          ("weekend/next/", "Next weekend", f"Things to do in {place} next weekend · {name}",
@@ -2243,10 +2298,11 @@ def use_city(city):
     """Point the public site's names (PUBLIC_NAME, PUBLIC_URL, and the rest) at a city's: its pages are written
     one city at a time, and read these as they go."""
     global PUBLIC_NAME, PUBLIC_URL, PUBLIC_ROOT, CITY_DIR, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND
-    global PUBLIC_TONIGHT, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS
+    global PUBLIC_TONIGHT, PUBLIC_NEW, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS
     PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND = (
         city.name, city.title, city.tagline, city.description, city.around)
-    PUBLIC_TONIGHT, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS = city.tonight, city.weekends, city.pages, city.faqs
+    PUBLIC_TONIGHT, PUBLIC_NEW = city.tonight, city.new
+    PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS = city.weekends, city.pages, city.faqs
     PUBLIC_URL = f"{PUBLIC_SITE}{city.slug}/"
     PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
     CITY_DIR = PUBLIC_DIR / city.slug
@@ -2543,7 +2599,7 @@ def event_pages(sources, events):
 
 def render_sitemap(built_at):
     """The public site's pages for search engines: the listings, changing every few hours, and the others."""
-    pages = ([("", "hourly", "1.0"), (PUBLIC_TONIGHT[0], "hourly", "0.9")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
+    pages = ([("", "hourly", "1.0"), (PUBLIC_TONIGHT[0], "hourly", "0.9"), (PUBLIC_NEW[0], "daily", "0.8")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
              + [("about/", "monthly", "0.5"), ("contact/", "yearly", "0.3")])
     urls = "".join(
         f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
@@ -2594,9 +2650,17 @@ INDEX_JS = """
   const key = d => d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const today = key(new Date());
   const tomorrow = key(new Date(Date.now() + 86400000));
+  const yesterday = key(new Date(Date.now() - 86400000));
   const days = [...document.querySelectorAll(".day")];
   const todayOnly = document.querySelector(".filter").hasAttribute("data-today"); // The tonight page.
   for (const day of days) {
+    // Just announced: its headings are the day each listing turned up, not the day it's on.
+    if (day.dataset.added) {
+      if (day.dataset.added === today || day.dataset.added === yesterday) {
+        day.querySelector(".date").textContent = day.dataset.added === today ? "today" : "yesterday";
+      }
+      continue;
+    }
     if (day.dataset.date < today || (todayOnly && day.dataset.date !== today)) day.remove();
     else day.querySelector(".relative").textContent =
       day.dataset.date === today ? "Today" : day.dataset.date === tomorrow ? "Tomorrow" : "";
@@ -2867,7 +2931,7 @@ INDEX_JS = """
     const venue = li.querySelector(".source > span").textContent;
     view.dataset.category = li.dataset.category;
     part("icon").replaceChildren(li.querySelector(".source .icon").cloneNode(true));
-    part("day").textContent = dayName(li.closest(".day").dataset.date);
+    part("day").textContent = dayName(li.dataset.id.slice(0, 10));  // Its own day, which its heading isn't on Just announced.
     part("title").textContent = title;
     // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
     // poster or a square flyer shown whole, not cropped to the frame.
@@ -2907,7 +2971,7 @@ INDEX_JS = """
     // The same show (or film, anywhere) on its other days.
     const others = [...document.querySelectorAll(".day > ul > li[data-series]")].filter(other => other.dataset.series === li.dataset.series && other !== li);
     part("also").replaceChildren(...(others.length ? ["Also ", ...others.slice(0, 8).flatMap((other, i) => [i ? " · " : "",
-      Object.assign(document.createElement("a"), { href: withEvent(other.dataset.id), textContent: dayName(other.closest(".day").dataset.date) })])] : []));
+      Object.assign(document.createElement("a"), { href: withEvent(other.dataset.id), textContent: dayName(other.dataset.id.slice(0, 10)) })])] : []));
     for (const [i, a] of part("also").querySelectorAll("a").entries()) a.addEventListener("click", event => {
       event.preventDefault();
       history.replaceState(null, "", withEvent(others[i].dataset.id));
@@ -2961,6 +3025,15 @@ INDEX_JS = """
   });
   part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
   view.addEventListener("click", event => { if (event.target === view) closeEvent(); }); // Outside it, on the backdrop.
+  // Just announced, at the top of the home page: each opens its view here, rather than loading the page again.
+  document.addEventListener("click", event => {
+    const link = event.target.closest(".fresh a[href*='?event=']");
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const li = rowWith(new URL(link.href, location.href).searchParams.get("event"));
+    if (!li) return;
+    event.preventDefault();
+    openEvent(li, true);
+  });
   document.addEventListener("click", event => {
     const li = event.target.closest(".day > ul > li.row");
     if (!li) return;
@@ -2980,7 +3053,7 @@ INDEX_JS = """
     const id = eventInAddress();
     if (id) {
       const li = rowWith(id);
-      const next = li || [...document.querySelectorAll(".day > ul > li[data-series]")].find(other => id.endsWith("-" + other.dataset.series) && id.slice(0, 10) <= other.closest(".day").dataset.date);
+      const next = li || [...document.querySelectorAll(".day > ul > li[data-series]")].find(other => id.endsWith("-" + other.dataset.series) && id.slice(0, 10) <= other.dataset.id.slice(0, 10));
       if (next) openEvent(next, false, li ? "" : "The showing you were sent has passed; this is the next one.");
       else { history.replaceState(null, "", withEvent(null)); toast("That listing has passed"); }
     }
@@ -3137,6 +3210,24 @@ CSS = """
   .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .sold-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
+  /* Just announced, above the list on the home page: the newest few, and the way to the rest. */
+  .fresh { margin: 0 0 1.75rem; }
+  .fresh h2 { margin: 0 0 .35rem; color: #777; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .fresh li { border-top: 1px solid #1c1c1c; }
+  .fresh li:last-of-type { border-bottom: 1px solid #1c1c1c; }
+  .fresh a { display: grid; grid-template-columns: 10rem 1fr auto; gap: 1.25rem; align-items: baseline; padding: .4rem 0; color: inherit; }
+  .fresh a:hover { text-decoration: none; }
+  .fresh a:hover .fresh-title { text-decoration: underline; }
+  .fresh-title { color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fresh-when { color: #888; font-size: .9em; white-space: nowrap; }
+  .fresh-more { display: inline-block; margin-top: .55rem; color: #888; font-size: .85rem; }
+  .fresh-more:hover { color: #fff; }
+  @media (max-width: 34rem) {
+    .fresh a { grid-template-columns: 1fr auto; gap: .5rem; }
+    .fresh .source { grid-column: 1 / -1; }
+  }
+  /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
+  .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }
   /* A listing opens its own view (below) wherever it's clicked. */
   .day > ul > li.row { cursor: pointer; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -3264,6 +3355,7 @@ def saved(item):
         "category": item["category"],
         "about": item.get("about", []),
         "address": item.get("address"),
+        "added": item.get("added", ""),
         "image": item.get("image", ""),
         "price": item.get("price", ""),
         "ages": item.get("ages", ""),
@@ -3288,9 +3380,11 @@ def previous_build():
 
 def gather(results, previous, built_at):
     """Each source's upcoming listings: fresh when it loaded, else its last good ones from the previous build
-    if they're recent enough. Returns the events; the sources that failed with nothing to fall back on; the
-    ones shown from before, with when; the listings to save for next time; and why each failing one failed."""
+    if they're recent enough. Returns the events (each with the day it was first seen, for Just announced);
+    the sources that failed with nothing to fall back on; the ones shown from before, with when; the listings
+    to save for next time; when each was first seen; and why each failing one failed."""
     today = built_at.astimezone(BOSTON).date()
+    seen_before, seen = previous.get("first_seen") or {}, {}
     def ahead(item):  # Soon enough to list: two months for a concert, a month for the rest.
         return today <= item["date"] <= today + timedelta(days=days_ahead(item["category"]))
     kept_sources = previous.get("sources", {})
@@ -3314,12 +3408,24 @@ def gather(results, previous, built_at):
             found = [restored(item, source) for item in kept["events"]]
             stale.append((source["name"], fetched))
             print(f"  {source['name']}: showing its listings from {kept['fetched']} instead", file=sys.stderr)
+        # When each of its listings turned up, from everything it lists, not only what's coming up: a show
+        # announced months ahead isn't new when it comes into the window. A source's first build stamps its
+        # listings as older than that, so adding a venue doesn't announce its whole calendar; so does the
+        # first build of all, which is every listing's.
+        settling = not kept or not seen_before
+        stamp = (built_at.date() - timedelta(days=NEW_DAYS + 1) if settling else built_at.date()).isoformat()
+        for item in found:
+            item["added"] = seen[listing_id(item["date"], item["title"], item["venue"])[0]] = \
+                seen_before.get(listing_id(item["date"], item["title"], item["venue"])[0], stamp)
         upcoming = [item for item in found if ahead(item)]
         if fetched == built_at:
             print(f"✓ {source['name']}: {len(upcoming)} coming up ({len(found)} listed)")
         listings[source["name"]] = {"fetched": fetched.isoformat(), "events": [saved(item) for item in upcoming]}
         events += upcoming
-    return events, failed, stale, listings, errors
+    # What a source that failed this time listed before, so its shows aren't announced again when it's back.
+    for ident, when in seen_before.items():
+        seen.setdefault(ident, when) if ident[:10] >= today.isoformat() else None
+    return events, failed, stale, listings, errors, seen
 
 
 still_failing = shared.still_failing
@@ -3347,7 +3453,7 @@ def main():
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(load, sources))
 
-    events, failed, stale, listings, errors = gather(results, previous, built_at)
+    events, failed, stale, listings, errors, first_seen = gather(results, previous, built_at)
     if len(failed) + len(stale) == len(sources):
         sys.exit("No source loaded — not writing the page.")
 
@@ -3360,7 +3466,8 @@ def main():
     # The personal events page: Boston's. Its listings.json keeps every city's, for falling back on.
     personal = by_city(BOSTON_CITY, events, sources, failed, stale)
     (OUT_DIR / "index.html").write_text(render_index(*personal, built_at))
-    record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at)}
+    record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at),
+              "first_seen": first_seen}
     (OUT_DIR / "listings.json").write_text(json.dumps(record, ensure_ascii=False))
     print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html with {len(personal[0])} listings, and listings.json")
 
@@ -3403,6 +3510,8 @@ def write_city(city, events, sources, failed, stale, built_at):
         (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
     (CITY_DIR / PUBLIC_TONIGHT[0]).mkdir(parents=True, exist_ok=True)
     (CITY_DIR / PUBLIC_TONIGHT[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, tonight=True))
+    (CITY_DIR / PUBLIC_NEW[0]).mkdir(parents=True, exist_ok=True)
+    (CITY_DIR / PUBLIC_NEW[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, added=True))
     for ahead, (path, *_) in enumerate(PUBLIC_WEEKENDS):
         (CITY_DIR / path).mkdir(parents=True, exist_ok=True)
         (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
@@ -3414,7 +3523,7 @@ def write_city(city, events, sources, failed, stale, built_at):
     (CITY_DIR / "calendar").mkdir(exist_ok=True)
     for path, feed in calendar_feeds(sources, events, built_at).items():
         (CITY_DIR / path).write_bytes(feed.encode())  # As written: its lines end \r\n, as the format asks.
-    print(f"Wrote {CITY_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, weekend/, weekend/next/, "
+    print(f"Wrote {CITY_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, new/, weekend/, weekend/next/, "
           f"about/, contact/ and sitemap.xml, with {len(events)} listings")
 
 

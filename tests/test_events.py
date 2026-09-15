@@ -589,6 +589,61 @@ class Descriptions(unittest.TestCase):
         self.assertIn('<button class="event-more" type="button" hidden', page)
 
 
+class JustAnnounced(unittest.TestCase):
+    def setUp(self):
+        self.built = datetime(2026, 9, 15, 12, tzinfo=timezone.utc)
+        self.venue = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+
+    def listing(self, day, title="A show", category="music"):
+        return dict(build.event(self.venue, title, date(2026, 9, day), time(20, 0)), category=category)
+
+    def gather(self, found, previous):
+        return build.gather([(self.venue, found, None)], previous, self.built)
+
+    def test_first_seen_stamped_and_kept(self):
+        # The first build of all: everything older than new, so nothing is announced.
+        *_, seen = self.gather([self.listing(20)], {"sources": {"The Sinclair": {"fetched": self.built.isoformat(), "events": []}}})
+        self.assertEqual(set(seen.values()), {"2026-09-07"})
+        # A build after that: what's turned up since is stamped today, and what was there keeps its day.
+        before = {"sources": {"The Sinclair": {"fetched": self.built.isoformat(), "events": []}},
+                  "first_seen": {"2026-09-20-a-show-the-sinclair": "2026-09-01"}}
+        events, *_, seen = self.gather([self.listing(20), self.listing(21, "New show")], before)
+        self.assertEqual(seen["2026-09-20-a-show-the-sinclair"], "2026-09-01", "as it was")
+        self.assertEqual(seen["2026-09-21-new-show-the-sinclair"], "2026-09-15")
+        self.assertEqual([item["added"] for item in events], ["2026-09-01", "2026-09-15"])
+
+    def test_a_source_that_failed_keeps_its_days(self):
+        before = {"sources": {}, "first_seen": {"2026-09-20-a-show-the-sinclair": "2026-09-01", "2026-08-01-old-show-the-sinclair": "2026-07-01"}}
+        *_, seen = build.gather([(self.venue, [], OSError("520"))], before, self.built)
+        self.assertEqual(seen, {"2026-09-20-a-show-the-sinclair": "2026-09-01"}, "what it still has ahead, not what's passed")
+
+    def test_newly_added_is_this_week_without_films(self):
+        fresh = dict(self.listing(20), added="2026-09-15")
+        older = dict(self.listing(21, "Older"), added="2026-09-01")
+        film = dict(self.listing(22, "A film", "film"), added="2026-09-15")
+        soonest = dict(self.listing(18, "Sooner"), added="2026-09-15")
+        found = build.newly_added([older, fresh, film, soonest], self.built)
+        self.assertEqual([item["title"] for item in found], ["Sooner", "A show"], "this week's, soonest first; films stay out")
+
+    def test_the_strip_and_the_page(self):
+        events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(6)]
+        strip = build.fresh_strip(events, self.built)
+        self.assertEqual(strip.count("<li>"), build.FRESH_SHOWN)
+        self.assertIn(f'href="{R}?event=2026-09-20-show-0-the-sinclair"', strip)
+        self.assertIn(f'<a class="fresh-more" href="{R}new/">More just announced →</a>', strip)
+        self.assertEqual(build.fresh_strip([dict(self.listing(20), added="2026-09-01")], self.built), "", "nothing new, no strip")
+        page = build.render_index(events, [self.venue], [], [], self.built, public=True, added=True)
+        self.assertIn('<section class="day" data-added="2026-09-15"><h2><span class="relative">Added</span>', page)
+        self.assertIn('<span class="when">Sun, Sep 20</span>', page, "the day each is on, beside its name")
+        self.assertIn("<title>Just announced in Boston · Pushpin Boston</title>", page)
+        self.assertIn("Nothing announced in the last week.", page)
+        home = build.render_index(events, [self.venue], [], [], self.built, public=True)
+        self.assertIn('<section class="fresh">', home)
+        self.assertNotIn('<section class="fresh">', page, "not on the page itself")
+        self.assertIn(f'<li><a href="{R}new/">Just announced</a></li>', build.public_footer(""))
+        self.assertIn(f"<loc>{build.PUBLIC_URL}new/</loc>", build.render_sitemap(self.built))
+
+
 class SoldOut(unittest.TestCase):
     def test_marked_in_a_name(self):
         club = source("ics", "x")
@@ -868,12 +923,12 @@ class Fallback(unittest.TestCase):
         return {"sources": {"Roadrunner": {"fetched": fetched, "events": [build.saved(self.listing(days_ahead, "Kept"))]}}}
 
     def test_fresh(self):
-        events, failed, stale, listings, errors = build.gather([(self.venue, [self.listing(1)], None)], {}, self.built)
+        events, failed, stale, listings, errors, seen = build.gather([(self.venue, [self.listing(1)], None)], {}, self.built)
         self.assertEqual(([e["title"] for e in events], failed, stale, errors), (["Show"], [], [], {}))
         self.assertEqual(listings["Roadrunner"]["fetched"], self.built.isoformat())
 
     def test_error_uses_recent_listings(self):
-        events, failed, stale, listings, errors = build.gather([(self.venue, [], OSError("520"))], self.previous(6), self.built)
+        events, failed, stale, listings, errors, _ = build.gather([(self.venue, [], OSError("520"))], self.previous(6), self.built)
         self.assertEqual([e["title"] for e in events], ["Kept"])
         self.assertEqual([name for name, _ in stale], ["Roadrunner"])
         self.assertEqual(listings["Roadrunner"]["fetched"], (self.built - timedelta(hours=6)).isoformat(),
@@ -885,12 +940,12 @@ class Fallback(unittest.TestCase):
         self.assertEqual((events, failed, stale), ([], ["Roadrunner"], []))
 
     def test_empty_after_having_shows_uses_listings(self):
-        events, failed, stale, _, errors = build.gather([(self.venue, [], None)], self.previous(3), self.built)
+        events, failed, stale, _, errors, _ = build.gather([(self.venue, [], None)], self.previous(3), self.built)
         self.assertEqual([e["title"] for e in events], ["Kept"])
         self.assertEqual(errors["Roadrunner"], "returned no listings")
 
     def test_empty_and_nothing_before_is_just_empty(self):
-        events, failed, stale, _, errors = build.gather([(self.venue, [], None)], {}, self.built)
+        events, failed, stale, _, errors, _ = build.gather([(self.venue, [], None)], {}, self.built)
         self.assertEqual((events, failed, stale, errors), ([], [], [], {}))
 
     def test_past_listings_are_not_restored(self):
