@@ -22,7 +22,8 @@ SOURCES_FILE = ROOT / "sources.txt"
 SKIP_FILE = ROOT / "skip.txt"
 OUT_DIR = ROOT.parent / "dist" / "events"
 REPO_URL = "https://github.com/grahamhagenah/news"
-DAYS_AHEAD = 30  # How far ahead the page lists events.
+DAYS_AHEAD = 30  # How far ahead the page lists events,
+MUSIC_DAYS_AHEAD = 60  # and concerts, which venues announce (and people buy tickets for) further ahead.
 # Each build publishes its listings beside the page; a source that fails next time falls back to its copy
 # there, if it's no older than this.
 LISTINGS_URL = "https://events.grahamhagenah.com/listings.json"
@@ -80,7 +81,7 @@ def weekend_span(friday, sunday):
 # search engines and readers it is.
 PUBLIC_PAGES = {
     "music": ("music", f"Concerts around Boston · {PUBLIC_NAME}",
-              "Concerts at clubs, bars and halls across Boston, Cambridge and Somerville for the next month, "
+              "Concerts at clubs, bars and halls across Boston, Cambridge and Somerville for the next two months, "
               "aggregated from select venues.",
               "Concerts around Boston, Cambridge, and Somerville, aggregated from select venues."),
     "film": ("film", f"Movie showtimes and repertory film in Boston · {PUBLIC_NAME}",
@@ -93,8 +94,8 @@ PUBLIC_PAGES = {
             "for the next month, aggregated from select venues.",
             "Art and talks around Boston, Cambridge, and Somerville, aggregated from select venues."),
 }
-PUBLIC_DESCRIPTION = ("Concerts, film screenings and art talks around Boston, Cambridge and Somerville for "
-                      "the next month, on one page, from select venues.")
+PUBLIC_DESCRIPTION = ("Concerts for the next two months, and film screenings and art talks for the next month, around "
+                      "Boston, Cambridge and Somerville, on one page, from select venues.")
 
 # Each venue's street address, town and ZIP, for the event listings search engines read; an event whose source
 # gives its own (a library branch, an MIT building) uses that instead. Check a new venue's address when adding it.
@@ -295,7 +296,7 @@ def read_axs(source):
             detail=f"with {support}" if support else "",
             about=[" · ".join(fact for fact in facts if fact)],
         ))
-    soon = [listing for listing in events if listing["date"] <= window_end()]
+    soon = [listing for listing in events if listing["date"] <= window_end(source["category"])]
     with ThreadPoolExecutor(max_workers=4) as pool:
         for listing, start in zip(soon, pool.map(lambda listing: axs_show_time(listing["link"]), soon)):
             if start:
@@ -526,7 +527,7 @@ def read_ica(source):
         link = html.unescape(title.group(1))
         # Its own page for what it's about, only when it's soon enough to be listed.
         listing = event(source, name, day, clock_range_start(clock_text), link=link,
-                        about=ica_about(link) if day <= window_end() else [])
+                        about=ica_about(link) if day <= window_end(category) else [])
         listing["category"] = category
         events.append(listing)
     return events
@@ -622,7 +623,7 @@ def read_landmark(source):
     theater = json.dumps({"id": source["url"], "timeZone": "America/New_York"}, separators=(",", ":"))
     query = urlencode({
         "from": f"{today}T03:00:00",
-        "to": f"{today + timedelta(days=DAYS_AHEAD + 1)}T03:00:00",
+        "to": f"{today + timedelta(days=days_ahead(source['category']) + 1)}T03:00:00",
         "theaters": theater,
     })
     schedule = json.loads(fetch(f"{LANDMARK_API}/schedule?{query}"))[source["url"]]["schedule"]
@@ -794,7 +795,8 @@ def read_tribe(source):
     """WordPress sites using The Events Calendar (Lizard Lounge, The Rockwell), through its REST API. The URL
     can pick a category, like ?categories=music for The Rockwell's music among its comedy and theater."""
     today = datetime.now(BOSTON).date()
-    window = {"start_date": today.isoformat(), "end_date": f"{today + timedelta(days=DAYS_AHEAD)} 23:59:59", "per_page": 50}
+    end = today + timedelta(days=days_ahead(source["category"]))
+    window = {"start_date": today.isoformat(), "end_date": f"{end} 23:59:59", "per_page": 50}
     url = source["url"] + ("&" if "?" in source["url"] else "?") + urlencode(window)
     events = []
     while url:
@@ -815,8 +817,14 @@ def today():
     return datetime.now(BOSTON).date()
 
 
-def window_end():
-    return today() + timedelta(days=DAYS_AHEAD)
+def days_ahead(category):
+    """How many days ahead a kind of event is listed: two months for concerts, a month for the rest."""
+    return MUSIC_DAYS_AHEAD if category == "music" else DAYS_AHEAD
+
+
+def window_end(category=None):
+    """The last day a kind of event is listed; without one, the rest's."""
+    return today() + timedelta(days=days_ahead(category))
 
 
 def opening(source, title, first, last, link, start=None, about=()):
@@ -887,7 +895,7 @@ LIBRARY_AUDIENCES = LIBRARY_YOUNG | {"All Adults", "College Students", "Older Ad
 def read_bibliocommons(source):
     """A library's events feed from BiblioCommons (the Boston Public Library's), filtered by type in its URL
     (?types=…), 25 to a page in date order, which the rest of its own filters can't narrow further."""
-    end = window_end()
+    end = window_end(source["category"])
     events = []
     for page in range(1, 21):
         feed = fetch(f"{source['url']}&page={page}")
@@ -926,9 +934,9 @@ MFA_SECTIONS = [("lectures", "art"), ("special-event", "art"), ("film", "film"),
 def read_mfa(source):
     """The MFA's lectures, special events, films and concerts, 25 to a page, soonest first. A program spanning
     several days (a course, a festival) is a heading over its own dated programs, so only single days are kept."""
-    end = window_end()
     events = []
     for section, category in MFA_SECTIONS:
+        end = window_end(category)
         for page in range(10):
             markup = fetch(f"{source['url']}/{section}" + (f"?page={page}" if page else ""))
             programs = re.findall(
@@ -976,7 +984,7 @@ def harvard_art_listings(url, months):
 
 
 def read_harvard_art(source):
-    months = sorted({(day.year, day.month) for day in (today(), window_end())})
+    months = sorted({(day.year, day.month) for day in (today(), window_end(source["category"]))})
     events = []
     for item in harvard_art_listings(source["url"], months):
         category = HARVARD_ART_KINDS.get(int(item.get("type") or 0))
@@ -1380,8 +1388,8 @@ def render_about(sources, built_at):
         for key in CATEGORIES if venues.get(key)
     )
     body = f"""<div class="prose">
-<p>{PUBLIC_NAME} lists concerts, films, and art and talks in Boston, Cambridge and Somerville for the next
-month, on one page, grouped by day.</p>
+<p>{PUBLIC_NAME} lists concerts for the next two months, and films, and art and talks for the next month, in
+Boston, Cambridge and Somerville, on one page, grouped by day.</p>
 <p>It’s gathered from select venues every few hours. Times and details can change, so check
 with the venue before you go: every listing links to its page there. The descriptions are the venues’ own
 words, in short.</p>
@@ -1813,13 +1821,14 @@ def gather(results, previous, built_at):
     if they're recent enough. Returns the events; the sources that failed with nothing to fall back on; the
     ones shown from before, with when; the listings to save for next time; and why each failing one failed."""
     today = built_at.astimezone(BOSTON).date()
-    last_day = today + timedelta(days=DAYS_AHEAD)
+    def ahead(item):  # Soon enough to list: two months for a concert, a month for the rest.
+        return today <= item["date"] <= today + timedelta(days=days_ahead(item["category"]))
     kept_sources = previous.get("sources", {})
     events, failed, stale, listings, errors = [], [], [], {}, {}
     for source, found, error in results:
         fetched = built_at
         kept = kept_sources.get(source["name"])
-        if not error and not any(today <= item["date"] <= last_day for item in found):
+        if not error and not any(ahead(item) for item in found):
             # A source that had listings coming up last time and has none now is more likely broken for the
             # moment (a feed served empty) than suddenly without shows, so it gets the same fallback.
             if kept and any(date.fromisoformat(item["date"]) >= today for item in kept["events"]):
@@ -1835,9 +1844,9 @@ def gather(results, previous, built_at):
             found = [restored(item, source) for item in kept["events"]]
             stale.append((source["name"], fetched))
             print(f"  {source['name']}: showing its listings from {kept['fetched']} instead", file=sys.stderr)
-        upcoming = [item for item in found if today <= item["date"] <= last_day]
+        upcoming = [item for item in found if ahead(item)]
         if fetched == built_at:
-            print(f"✓ {source['name']}: {len(upcoming)} in the next {DAYS_AHEAD} days ({len(found)} listed)")
+            print(f"✓ {source['name']}: {len(upcoming)} coming up ({len(found)} listed)")
         listings[source["name"]] = {"fetched": fetched.isoformat(), "events": [saved(item) for item in upcoming]}
         events += upcoming
     return events, failed, stale, listings, errors

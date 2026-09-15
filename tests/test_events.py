@@ -105,7 +105,7 @@ class Readers(unittest.TestCase):
     def test_axs_reads_show_pages_only_for_shows_in_the_window(self):
         asked = []
         with mock.patch.object(build, "fetch", lambda url, **options: asked.append(url) or sample(url)), \
-                mock.patch.object(build, "today", lambda: date(2026, 8, 1)):  # Its sample's shows are all past the window then.
+                mock.patch.object(build, "today", lambda: date(2026, 6, 1)):  # Its sample's shows are all past the window then.
             build.read_axs(source("axs", "https://www.sinclaircambridge.com/events/all", "music", "The Sinclair"))
         self.assertEqual(asked, ["https://www.sinclaircambridge.com/events/all"])
 
@@ -250,6 +250,14 @@ class Skipping(unittest.TestCase):
             self.assertIsNone(build.skipping())
 
 
+class Window(unittest.TestCase):
+    def test_concerts_two_months_ahead_the_rest_one(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 1)):
+            self.assertEqual(build.window_end("music"), date(2026, 10, 31))
+            self.assertEqual(build.window_end("film"), date(2026, 10, 1))
+            self.assertEqual(build.window_end(), date(2026, 10, 1))
+
+
 class Fetching(unittest.TestCase):
     def test_a_page_read_twice_is_downloaded_once(self):
         calls = []
@@ -272,7 +280,7 @@ class Fetching(unittest.TestCase):
     def test_ica_reads_event_pages_only_for_events_in_the_window(self):
         asked = []
         with mock.patch.object(build, "fetch", lambda url, **options: asked.append(url) or sample(url)), \
-                mock.patch.object(build, "today", lambda: date(2026, 8, 1)):  # Its sample's events are all past the window then.
+                mock.patch.object(build, "today", lambda: date(2026, 6, 1)):  # Its sample's events are all past the window then.
             build.read_ica(source("ica", "https://www.icaboston.org/calendar", "art", "ICA"))
         self.assertEqual(asked, ["https://www.icaboston.org/calendar"])
 

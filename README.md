@@ -3,7 +3,7 @@
 Two plain, black pages built from the same code:
 
 - **Newsfeed**, the latest posts, podcast episodes and videos from a few sites, newest first: https://news.grahamhagenah.com/
-- **Events**, concerts, films, and art and talks in Boston, Cambridge and Somerville over the next 30 days, grouped by day: https://events.grahamhagenah.com/
+- **Events**, concerts over the next 60 days (venues announce them further ahead) and films, and art and talks, over the next 30, in Boston, Cambridge and Somerville, grouped by day (`MUSIC_DAYS_AHEAD` and `DAYS_AHEAD` in `events/build.py`): https://events.grahamhagenah.com/
 
 ## What's where
 
