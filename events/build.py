@@ -1313,14 +1313,13 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <p class="event-facts"></p>
 <p class="event-detail"></p>
 <p class="event-note"></p>
-<a class="event-tickets" href=""><span></span> ↗</a>
+<div class="event-actions"><a class="event-tickets" href=""><span></span> ↗</a><button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button></div>
 <div class="event-times"></div>
 <ul class="event-places"></ul>
 <div class="event-about"></div>
 <button class="event-more" type="button" hidden aria-expanded="false">Read more</button>
 <p class="event-place"></p>
 <p class="event-also"></p>
-<button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button>
 </dialog>
 """
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
@@ -2255,7 +2254,10 @@ INDEX_JS = """
     part("tickets").hidden = combined;
     if (!combined) {
       part("tickets").href = link.href;
-      part("tickets").firstElementChild.textContent = (li.dataset.category === "art" ? "Details at " : "Tickets at ") + venue;
+      // "Tickets ↗", the venue being in the line above; to a screen reader, whose.
+      const label = li.dataset.category === "art" ? "Details" : "Tickets";
+      part("tickets").firstElementChild.textContent = label;
+      part("tickets").setAttribute("aria-label", label + " at " + venue);
     }
     const times = combined ? [] : li.querySelectorAll("time[data-time]:not(.from)");
     part("times").replaceChildren(...(times.length ? [Object.assign(document.createElement("span"), { className: "event-label", textContent: "Add to calendar" }), timeButtons(times)] : []));
@@ -2542,9 +2544,11 @@ CSS = """
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
   .event-detail:empty, .event-note:empty, .event-place:empty, .event-also:empty, .event-times:empty, .event-places:empty { display: none; }
   .event-note { color: #bbb; }
-  .event-tickets { display: flex; justify-content: center; gap: .3em; margin: 1.1rem 0 .9rem; padding: .7rem 1rem; border-radius: 10px;
-                   background: #fff; color: #000; font-weight: 600; text-decoration: none; }
-  .event-tickets:hover { background: #e2e2e2; text-decoration: none; }
+  /* Its way to the venue's page, a white pill, the view's one filled button; and Copy link beside it. */
+  .event-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 1rem 0 .9rem; }
+  .event-tickets { display: inline-flex; align-items: center; gap: .3em; padding: .4rem 1rem; border: 1px solid #fff; border-radius: 999px;
+                   background: #fff; color: #000; font-size: .9rem; font-weight: 600; text-decoration: none; }
+  .event-tickets:hover { border-color: #e2e2e2; background: #e2e2e2; text-decoration: none; }
   /* Its times to the right of what they're for ("Add to calendar", or each theater), going on to another line
      there, not under it, when there are more than fit. */
   .event-times { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .6rem; margin: 0 0 1rem; }
@@ -2568,8 +2572,8 @@ CSS = """
   .event-more:hover, .event-more:focus-visible { color: #fff; text-decoration-color: #aaa; outline: none; }
   .event-place, .event-also { margin: .9rem 0 0; color: #888; font-size: .85rem; }
   .event-place a, .event-also a { color: #ccc; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
-  .event-copy { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1.2rem; padding: .4rem .9rem;
-                 border: 1px solid #333; border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .85rem; cursor: pointer; }
+  .event-copy { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .9rem; border: 1px solid #333;
+                border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; }
   .event-copy:hover, .event-copy:focus-visible, .event-copy.copied { border-color: #888; color: #fff; outline: none; }
   .link-mark, .check-mark { width: 15px; height: 15px; }
   .event-copy .check-mark, .event-copy.copied .link-mark { display: none; }
