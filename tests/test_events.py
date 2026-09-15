@@ -420,7 +420,8 @@ class SharedLinks(unittest.TestCase):
         pages = build.event_pages([coolidge, alamo, hidden], items)
         self.assertEqual(set(pages), {"e/2026-09-15-akira-4k-restoration-coolidge-corner/index.html", "e/2026-09-15-hope/index.html"})
         akira = pages["e/2026-09-15-akira-4k-restoration-coolidge-corner/index.html"]
-        self.assertIn('<meta property="og:title" content="Akira (4K Restoration)">', akira)
+        self.assertIn('<meta property="og:title" content="Showtimes for Akira (4K Restoration) at Coolidge Corner · Tue, Sep 15">', akira)
+        self.assertIn('<meta property="og:title" content="Showtimes for Hope · Tue, Sep 15">', pages["e/2026-09-15-hope/index.html"])
         self.assertIn('<meta property="og:description" content="Coolidge Corner · Tue, Sep 15 · 3:30pm, 6:45pm">', akira)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png?pin">', akira)
         self.assertIn(f'location.replace("{build.PUBLIC_URL}?event=2026-09-15-akira-4k-restoration-coolidge-corner")', akira)
@@ -436,6 +437,10 @@ class SharedLinks(unittest.TestCase):
         self.assertIn('<meta property="og:image" content="https://therockwell.org/t.png">', page)
         self.assertNotIn("og:image:width", page, "its size isn't known")
         self.assertIn('content="The Rockwell · Fri, Sep 18 · 7pm · $18–$20 · 21+"', page)
+        self.assertIn('<meta property="og:title" content="Telescreens at The Rockwell · Fri, Sep 18, 7pm">', page)
+        armory = dict(source("armory", "x", "music", "Arts at the Armory"), public=True)
+        spotlight = build.event(armory, "Arts at the Armory Spotlight Series Presents L. Shankar", date(2026, 9, 17), time(19, 0))
+        self.assertEqual(build.share_title(spotlight, date(2026, 9, 17)), "Arts at the Armory Spotlight Series Presents L. Shankar · Thu, Sep 17, 7pm")
 
     def test_a_passed_listings_page_goes_to_its_view(self):
         missing = build.render_redirect(build.PUBLIC_URL, paths=True)

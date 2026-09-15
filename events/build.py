@@ -1893,8 +1893,8 @@ def calendar_feeds(sources, events, built_at):
 
 
 def render_event_page(item, day):
-    """A listing's own small page (/boston/e/<its id>/), for the preview a shared link shows: its name, when and
-    where, its price and ages, and its picture (or its kind's card); and all of what it's about, which the
+    """A listing's own small page (/boston/e/<its id>/), for the preview a shared link shows: what it is, when
+    and where (share_title), its price and ages, and its picture (or its kind's card); and all of what it's about, which the
     listing's view reads from it. A link's preview comes from the page it points to, and the apps that show one
     don't run the page's script, so the home page's ?event= address would show only the home page's. Someone
     who opens it goes straight on to the listing's view there."""
@@ -1909,13 +1909,14 @@ def render_event_page(item, day):
         where, when = item["venue"], ", ".join(clock(moment) for moment in item["times"])
     sold_out = all(is_sold_out(showing) for showing in item["showings"]) if combined else is_sold_out(item)
     description = " · ".join(filter(None, [where, f"{day:%a, %b} {day.day}", when, "Sold out" if sold_out else item.get("price"), item.get("ages")]))
-    title = f"{item['title']} · {PUBLIC_NAME}"
+    headline = share_title(item, day)
+    title = f"{headline} · {PUBLIC_NAME}"
     # Its own picture when the venue gives one; else its kind's card, whose size is known.
     image = item.get("image") or f"{PUBLIC_URL}share/{PUBLIC_PAGES[item['category']][0]}.png?pin"
     size = [] if item.get("image") else ['<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">']
     tags = "\n".join([
         f'<meta property="og:{key}" content="{html.escape(value)}">' for key, value in [
-            ("type", "website"), ("site_name", PUBLIC_NAME), ("title", item["title"]), ("description", description),
+            ("type", "website"), ("site_name", PUBLIC_NAME), ("title", headline), ("description", description),
             ("url", f"{PUBLIC_URL}e/{ident}/"), ("image", image)]
     ] + size + ['<meta name="twitter:card" content="summary_large_image">'])
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
@@ -1927,6 +1928,20 @@ def render_event_page(item, day):
             f'<h1>{html.escape(item["title"])}</h1>\n<p>{html.escape(description)}</p>\n'
             f'<div class="about">{"".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in item.get("about", []))}</div>\n'
             f'<p><a href="{html.escape(target)}">See it on {html.escape(PUBLIC_NAME)}</a></p>\n</html>\n')
+
+
+def share_title(item, day):
+    """What a shared link's preview calls a listing, with what it is, where and when, since iMessage shows only
+    that and the picture: "Showtimes for Akira (4K Restoration) at Coolidge Corner · Tue, Sep 15" (a film at
+    several theaters, just "Showtimes for Hope"), "Aldous Harding at The Sinclair · Mon, Sep 14, 8pm". A venue
+    already in the name isn't said again."""
+    combined = "showings" in item
+    name, venue = item["title"], "" if combined else item["venue"]
+    at = f" at {venue}" if venue and venue.casefold() not in name.casefold() else ""
+    when = f"{day:%a, %b} {day.day}"
+    if item["category"] == "film":
+        return f"Showtimes for {name}{at} · {when}"
+    return f"{name}{at} · {when}" + (f", {clock(item['times'][0])}" if len(item["times"]) == 1 else "")
 
 
 def event_pages(sources, events):
