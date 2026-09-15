@@ -297,7 +297,8 @@ class Calendars(unittest.TestCase):
         self.assertIn('data-id="2026-09-13-akira-4k-restoration-the-sinclair" data-series="akira-4k-restoration-the-sinclair"', page)
         self.assertIn('data-id="2026-09-14-akira-4k-restoration-the-sinclair"', page)
         self.assertEqual(page.count('<dialog class="event"'), 1)
-        self.assertIn('<button class="event-share" type="button">', page)
+        self.assertIn('<button class="event-copy" type="button">', page)
+        self.assertNotIn("navigator.share", page, "a link to copy, not the share sheet")
         self.assertIn(f"SHARE_URL = {json.dumps(build.PUBLIC_URL)}", page)
         self.assertNotIn('class="share"', page, "sharing is in the view, not on each row")
 
