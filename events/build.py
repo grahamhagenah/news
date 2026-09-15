@@ -1902,7 +1902,7 @@ def listing_id(day, title, venue=""):
 # Just announced: concerts and talks first seen in the last week. Not films, whose theaters add showtimes
 # every day, which would crowd out everything else.
 NEW_KINDS = {"music", "art"}
-FRESH_SHOWN = 4  # How many the home page's strip shows, before "More just announced".
+FRESH_SHOWN = 5  # How many the home page's strip shows, before "More just announced".
 
 
 def newly_added(events, built_at):
@@ -3214,8 +3214,11 @@ CSS = """
   .fresh-more { display: inline-block; margin-top: .55rem; color: #888; font-size: .85rem; }
   .fresh-more:hover { color: #fff; }
   @media (max-width: 34rem) {
-    .fresh a { grid-template-columns: 1fr auto; gap: .5rem; }
-    .fresh .source { grid-column: 1 / -1; }
+    /* The venue over the name, as a row's is, but tighter: the strip shouldn't push today's listings off screen. */
+    .fresh { margin-bottom: 1.4rem; }
+    .fresh a { grid-template-columns: 1fr auto; gap: 0 .5rem; padding: .3rem 0; }
+    .fresh .source { grid-column: 1 / -1; font-size: .78rem; }
+    .fresh-title, .fresh-when { font-size: .95rem; }
   }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
   .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }
