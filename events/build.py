@@ -1314,7 +1314,6 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <p class="event-detail"></p>
 <p class="event-note"></p>
 <ul class="event-places"></ul>
-<p class="event-hint" hidden>Choose a time to add it to your calendar.</p>
 <div class="event-about"></div>
 <button class="event-more" type="button" hidden aria-expanded="false">Read more</button>
 <p class="event-place"></p>
@@ -2265,7 +2264,6 @@ INDEX_JS = """
       item.append(a, timeButtons(place.times));
       return item;
     }));
-    part("hint").hidden = !places.some(place => place.times.length);
     // What it's about: the row's excerpt at once, then all of it, from its own page, where there's more.
     showAbout([...li.querySelectorAll(".preview p:not(.full-title)")].map(p => p.textContent));
     aboutOf(li)?.then(full => { if (full?.length && shown === li) showAbout(full); });
@@ -2552,7 +2550,6 @@ CSS = """
                      border-top: 1px solid #1c1c1c; }
   .event-places .event-group { justify-content: flex-end; }
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
-  .event-hint { margin: -.55rem 0 1rem; color: #666; font-size: .8rem; }
   .event-places a { color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
   .event-about.clamped { max-height: 12em; overflow: hidden;
