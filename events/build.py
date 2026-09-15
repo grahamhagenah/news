@@ -2457,8 +2457,10 @@ CSS = """
   dialog.event[open] { animation: rise .18s ease-out; }
   @keyframes rise { from { opacity: 0; transform: translateY(.75rem); } }
   .event-close { position: absolute; top: .85rem; right: .85rem; display: grid; place-items: center; width: 2rem; height: 2rem;
-                 padding: 0; border: 0; border-radius: 50%; background: none; color: #888; cursor: pointer; }
-  .event-close:hover, .event-close:focus-visible { background: #1a1a1a; color: #fff; outline: none; }
+                 padding: 0; border: 0; border-radius: 50%; background: none; color: #888; cursor: pointer;
+                 transition: background-color .15s, color .15s; }
+  .event-close:hover, .event-close:focus-visible { background: #262626; color: #fff; outline: none; }
+  .event-close:focus-visible { box-shadow: 0 0 0 2px #888; }
   .close-mark { width: 14px; height: 14px; }
   /* Its picture across the top, edge to edge; a tall or square one whole, on grey. */
   .event-image { aspect-ratio: 16 / 9; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; border-radius: 13px 13px 0 0; background: #151515; }
@@ -2473,6 +2475,8 @@ CSS = """
   }
   .event-image.whole img { object-fit: contain; }
   dialog.event:has(.event-image:not([hidden])) .event-close { z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; }
+  dialog.event:has(.event-image:not([hidden])) .event-close:hover,
+  dialog.event:has(.event-image:not([hidden])) .event-close:focus-visible { background: rgba(0, 0, 0, .9); }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
   .event-facts:empty { display: none; }
   .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
