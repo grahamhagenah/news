@@ -15,7 +15,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode, urljoin, urlsplit
+from urllib.parse import unquote as urllib_unquote, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 from shared import site as shared
@@ -149,6 +149,10 @@ VENUE_ADDRESSES = {
     "Amherst Cinema": ("28 Amity St", "Amherst", "01002"),
     "Images Cinema": ("50 Spring St", "Williamstown", "01267"),
     "Triplex Cinema": ("70 Railroad St", "Great Barrington", "01230"),
+    "Iron Horse": ("18 Center St", "Northampton", "01060"),
+    "Parlor Room": ("32 Masonic St", "Northampton", "01060"),
+    "The Drake": ("44 N Pleasant St", "Amherst", "01002"),
+    "Mahaiwe": ("14 Castle St", "Great Barrington", "01230"),
 }
 
 
@@ -981,6 +985,16 @@ def read_armory(source):
     return [listing for listing in read_ics(source, ARMORY_KINDS) if not re.search(r"\[moved to", listing["title"], re.I)]
 
 
+# A show's supporting acts, after its name: "Dylan Earl w/ Olivia Ellen Lloyd", "MINI TREES - w/ Frown Line".
+SUPPORT = re.compile(r"\s+(?:[-–—|]\s+)?w/\s*(.+)$", re.I)
+
+
+def with_support(title):
+    """A show's name and its supporting acts, apart, as the rows show them: Dylan Earl, with Olivia Ellen Lloyd."""
+    found = SUPPORT.search(title)
+    return (title[:found.start()].strip(), f"with {found.group(1).strip()}") if found and found.start() else (title, "")
+
+
 # What a Squarespace venue lists that isn't a show: its yoga classes and comedy nights.
 SQUARESPACE_SKIP = {"Yoga", "Comedy"}
 
@@ -996,8 +1010,9 @@ def read_squarespace(source):
         day, start = at_boston(datetime.fromtimestamp(item["startDate"] // 1000, timezone.utc))
         described = re.sub(r"<(style|script)\b.*?</\1>", "", item.get("body") or item.get("excerpt") or "", flags=re.S)
         picture = item.get("assetUrl") or ""
-        events.append(event(source, title, day, start, link=urljoin(source["url"], item["fullUrl"]), about=about(described),
-                            image=f"{picture}?format=750w" if picture.startswith("http") else ""))
+        title, support = with_support(title)
+        events.append(event(source, title, day, start, link=urljoin(source["url"], item["fullUrl"]), detail=support,
+                            about=about(described), image=f"{picture}?format=750w" if picture.startswith("http") else ""))
     return events
 
 
@@ -1087,6 +1102,57 @@ MASS_MOCA_KINDS = {"Concert": "music", "Film": "film", "Book Talk": "art", "Arti
 def read_mass_moca(source):
     """Mass MoCA's calendar (The Events Calendar), sorted into our kinds by its own; not Kidspace's."""
     return [listing for listing in read_tribe(source, MASS_MOCA_KINDS) if not re.search(r"\bstorytime\b|\bkidspace\b", listing["title"], re.I)]
+
+
+# The Mahaiwe's kinds of event, from its calendar's categories: concerts and opera; films and its HD broadcasts
+# of plays and operas; and lectures. Not its comedy, or its dance classes.
+MAHAIWE_KINDS = {"Music": "music", "Opera & Classical": "music", "Movies": "film", "HD Broadcasts": "film", "Lectures": "art"}
+
+
+def read_mahaiwe(source):
+    """The Mahaiwe's calendar feed, by its categories. Its Indigo Room, next door, has shows of its own, which
+    are the Mahaiwe's, saying so."""
+    found = []
+    for listing in read_ics(source, MAHAIWE_KINDS):
+        room = listing["venue"]
+        found.append(dict(listing, venue=source["name"], detail=listing["detail"] or ("Indigo Room" if room.casefold().startswith("indigo") else "")))
+    return found
+
+
+# What an Elfsight calendar (the Iron Horse's) lists that isn't a show, by its event types: its kids' events,
+# its musician's workshops and its open mics.
+ELFSIGHT_SKIP = re.compile(r"\bkids?\b|workshop|open mic", re.I)
+
+
+def read_elfsight(source):
+    """Venues whose calendar is Elfsight's Event Calendar widget (the Iron Horse's), from the data the widget
+    loads, at its boot address (with the page it's on, and the widget's id). The Iron Horse's calendar has its
+    other rooms too, so each source keeps the shows in the room its name names: the Parlor Room's, THE PARLOR
+    ROOM. A show that repeats (a weekly class) isn't one."""
+    widget = next(iter(json.loads(fetch(source["url"]))["data"]["widgets"].values()))["data"]["settings"]
+    types = {kind["id"]: kind.get("name", "") for kind in widget.get("eventTypes") or []}
+    named = lambda name: re.sub(r"^the\s+", "", name or "", flags=re.I).casefold()
+    rooms = {room["id"]: named(room.get("name")) for room in widget.get("locations") or []}
+    page = dict(pair.split("=", 1) for pair in urlsplit(source["url"]).query.split("&") if "=" in pair).get("page", "")
+    events = []
+    for item in widget.get("events") or []:
+        kinds = [types.get(kind, "") for kind in item.get("eventType") or []]
+        start = item.get("start") or {}
+        if (not item.get("visible", True) or item.get("repeatPeriod", "noRepeat") != "noRepeat" or not start.get("date")
+                or named(source["name"]) not in [rooms.get(room) for room in item.get("location") or []]
+                or any(ELFSIGHT_SKIP.search(kind) for kind in kinds)):
+            continue
+        actions = item.get("actions") or []
+        tickets = next((action["link"]["value"] for action in actions if (action.get("link") or {}).get("type") == "url"), "")
+        title, support = with_support(text(item.get("name")))
+        picture = (item.get("coverImage") or {}).get("url") or next((image.get("url") for image in item.get("images") or [] if image.get("url")), "")
+        when = None if item.get("isAllDay") or not start.get("time") else datetime.strptime(start["time"], "%H:%M").time()
+        caption = item.get("actionsCaption") or ""
+        events.append(event(source, title, date.fromisoformat(start["date"]), when, link=tickets or urllib_unquote(page),
+                            detail=support, about=about(item.get("description") or ""), image=picture,
+                            price=price_from(caption) or ("Free" if "FREE EVENT" in kinds else ""),
+                            sold_out=any((action.get("text") or "").casefold() == "sold out" for action in actions)))
+    return events
 
 
 def read_amherst_cinema(source):
@@ -1400,6 +1466,8 @@ READERS = {
     "passim": read_passim,
     "tribe": read_tribe,
     "massmoca": read_mass_moca,
+    "mahaiwe": read_mahaiwe,
+    "elfsight": read_elfsight,
     "amherstcinema": read_amherst_cinema,
     "indy": read_indy,
     "hfa": read_hfa,

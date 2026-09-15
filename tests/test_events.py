@@ -56,6 +56,9 @@ ROUTES = [
     ("amherstcinema.org/calendar/month/2026-09-16", "amherst_day.html"),
     ("amherstcinema.org/calendar/month/", "empty.html"),  # Its other days: none.
     ("amherstcinema.org/films-and-events/", "amherst_film.html"),
+    ("core.service.elfsight.com", "elfsight.json"),
+    ("thedrakeamherst.org/events?format=json", "drake.json"),
+    ("mahaiwe.org/events/?ical=1", "mahaiwe.ics"),
 ]
 
 
@@ -304,9 +307,38 @@ class WesternMass(unittest.TestCase):
             found = build.read_indy(source("indy", "https://www.imagescinema.org/?site=57&circuit=49", "film", "Images Cinema"))
         self.assertTrue(found[0]["sold_out"], "no seats left")
 
+    def test_iron_horse_and_parlor_room_from_one_calendar(self):
+        url = "https://core.service.elfsight.com/p/boot/?page=https%3A%2F%2Fwww.ironhorse.org%2Fshows&w=c4b76df1-e520-4ed0-9318-f18bd056c38a"
+        horse = build.read_elfsight(source("elfsight", url, "music", "Iron Horse"))
+        parlor = build.read_elfsight(source("elfsight", url, "music", "Parlor Room"))
+        self.assertEqual([item["title"] for item in horse], ["Bettye Lavette", "Sarah Jarosz: 10 Years of Undercurrent"],
+                         "its own room's, not the kids' series or the workshop")
+        self.assertEqual((horse[0]["date"], horse[0]["times"], horse[0]["price"]), (date(2026, 9, 16), [time(19, 0)], "$50.40"))
+        self.assertTrue(horse[0]["link"].startswith("https://theparlorroom.my.salesforce-sites.com/") and horse[0]["image"])
+        self.assertTrue(horse[1]["sold_out"])
+        self.assertEqual((parlor[0]["title"], parlor[0]["detail"]), ("Trans Joy and Resilience", "with Jessye DeSilva + Hazel Basil"))
+
+    def test_the_drake_and_supporting_acts(self):
+        found = build.read_squarespace(source("squarespace", "https://www.thedrakeamherst.org/events", "music", "The Drake"))
+        self.assertEqual((found[0]["title"], found[0]["detail"]), ("MINI TREES", "with Frown Line"))
+        self.assertEqual(build.with_support("Dylan Earl w/ Olivia Ellen Lloyd"), ("Dylan Earl", "with Olivia Ellen Lloyd"))
+        self.assertEqual(build.with_support("An Evening with Bettye LaVette"), ("An Evening with Bettye LaVette", ""), "only w/")
+
+    def test_mahaiwe_by_its_categories(self):
+        found = build.read_mahaiwe(source("mahaiwe", "https://www.mahaiwe.org/events/?ical=1", "music", "Mahaiwe"))
+        kinds = {item["title"]: item["category"] for item in found}
+        self.assertFalse(any("Comedy" in title or "Salsa Class" in title for title in kinds), "not its comedy or dance classes")
+        self.assertEqual(kinds["Los Lonely Boys"], "music")
+        self.assertEqual(kinds["London’s National Theatre in HD: The Playboy of the Western World"], "film")
+        self.assertTrue(any(category == "art" for category in kinds.values()), "its lectures")
+        indigo = next(item for item in found if item["title"] == "Nine Days Acoustic")
+        self.assertEqual((indigo["venue"], indigo["detail"]), ("Mahaiwe", "Indigo Room"))
+        self.assertEqual(indigo["address"][:2], ["20 Castle Street", "Great Barrington"], "next door, at its own address")
+
     def test_every_source_readable_and_placed(self):
         sources = build.read_sources(WESTERN_MASS_SOURCES, "westernma")
-        self.assertEqual({s["name"] for s in sources}, {"Mass MoCA", "Amherst Cinema", "Images Cinema", "Triplex Cinema"})
+        self.assertEqual({s["name"] for s in sources}, {"Mass MoCA", "Amherst Cinema", "Images Cinema", "Triplex Cinema",
+                                                       "Iron Horse", "Parlor Room", "The Drake", "Mahaiwe"})
         for s in sources:
             self.assertIn(s["kind"], build.READERS)
             self.assertIn(s["name"], build.VENUE_ADDRESSES)
