@@ -335,6 +335,8 @@ class Cities(unittest.TestCase):
         self.assertIn('<span class="city">Western Mass</span>', page)
         about = build.render_about([images], datetime(2026, 9, 15, tzinfo=timezone.utc))
         self.assertNotIn("Somerville Theatre", about, "not Boston's question about its theaters")
+        self.assertIn("I grew up in Western Mass", about)
+        self.assertNotIn("I live in Somerville", about)
         self.assertIn("venues across the Pioneer Valley and the Berkshires", about)
         build.use_city(build.BOSTON_CITY)
         self.assertEqual(build.PUBLIC_URL, "https://pushpin.city/boston/")

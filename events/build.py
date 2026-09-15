@@ -1891,9 +1891,10 @@ BOSTON_CITY = City("boston", PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_D
                    PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS)
 
 
-def city_texts(slug, name, place, around, film_description):
+def city_texts(slug, name, place, around, film_description, who):
     """A city's page names and descriptions, in the words Boston's use: place in titles ("Concerts in Western
-    Mass"), around in the rest ("around the Pioneer Valley and the Berkshires")."""
+    Mass"), around in the rest ("around the Pioneer Valley and the Berkshires"); and who makes it, as its
+    About page's answer says."""
     return City(
         slug, name, f"{name} · Concerts, films and talks in {place}",
         f"Concerts, films, and talks around {around}, aggregated from select venues.",
@@ -1916,13 +1917,16 @@ def city_texts(slug, name, place, around, film_description):
                  f"Talks, readings, performances and exhibition openings around {around} for the next month, aggregated "
                  f"from select venues.",
                  f"Art and talks around {around}, aggregated from select venues.")},
-        # Boston's questions, but the one about Boston's theaters.
-        [(question, answer) for question, answer in FAQS if "Somerville Theatre" not in question])
+        # Boston's questions, with its own answer to who makes it, but not the one about Boston's theaters.
+        [(question, who if question == "Who makes this?" else answer) for question, answer in FAQS if "Somerville Theatre" not in question])
 
 
 WESTERN_MASS = city_texts("westernma", "Pushpin Western Mass", "Western Mass", "the Pioneer Valley and the Berkshires",
                           "Showtimes at Amherst Cinema, Images Cinema and the Triplex, for the next month, aggregated from "
-                          "select theaters.")
+                          "select theaters.",
+                          "I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I grew up in Western Mass, and I love "
+                          "supporting its theaters and concert venues. I wanted an easier way to track what’s coming up than "
+                          "relying on Google or visiting each venue’s website.")
 # Each city's Pushpin, at pushpin.city/<its slug>/, from sources-<its slug>.txt (Boston's, sources.txt).
 CITIES = [BOSTON_CITY, WESTERN_MASS]
 
