@@ -1302,9 +1302,9 @@ CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2
                         "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
 CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
               'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
-# A listing's own view, opened by clicking it: its picture, where and when, its price and ages, a way to its venue's page first (tickets), its
-# times to add to a calendar, what it's about, the address, its other dates, and a way to copy its link. The script
-# fills it in from the listing.
+# A listing's own view, opened by clicking it: its picture, where and when, its price and ages, each place it's
+# at, a link to its page (tickets), with its times to add to a calendar, what it's about, the address, its other
+# dates, and a way to copy its link. The script fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button>
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
@@ -1313,13 +1313,13 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <p class="event-facts"></p>
 <p class="event-detail"></p>
 <p class="event-note"></p>
-<div class="event-actions"><a class="event-tickets" href=""><span></span> ↗</a><button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button></div>
-<div class="event-times"></div>
 <ul class="event-places"></ul>
+<p class="event-hint" hidden>Choose a time to add it to your calendar.</p>
 <div class="event-about"></div>
 <button class="event-more" type="button" hidden aria-expanded="false">Read more</button>
 <p class="event-place"></p>
 <p class="event-also"></p>
+<button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button>
 </dialog>
 """
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
@@ -2172,8 +2172,8 @@ INDEX_JS = """
     note.timer = setTimeout(() => note.classList.remove("shown"), 2200);
   };
 
-  // A listing opens its own view: where and when; a way to its venue's page first, for tickets; its times,
-  // each adding that showing to a calendar; what it's about; the address and a map; its other dates; and a way
+  // A listing opens its own view: where and when; each place it's at, a link to its page, for tickets, with
+  // its times, each adding that showing to a calendar; what it's about; the address and a map; its other dates; and a way
   // to copy its link. The view has an address of its own (?event=…), so Back closes it and a shared link opens it.
   // The listing's name is still a link to the venue's page: a click with a modifier key, or a middle click,
   // goes straight there.
@@ -2250,25 +2250,22 @@ INDEX_JS = """
       Object.assign(document.createElement("span"), { className: "event-fact", textContent: fact })));
     part("detail").textContent = li.querySelector(".detail")?.textContent || "";
     part("note").textContent = note;
-    const link = li.querySelector("a.title");
-    part("tickets").hidden = combined;
-    if (!combined) {
-      part("tickets").href = link.href;
-      // "Tickets ↗", the venue being in the line above; to a screen reader, whose.
-      const label = li.dataset.category === "art" ? "Details" : "Tickets";
-      part("tickets").firstElementChild.textContent = label;
-      part("tickets").setAttribute("aria-label", label + " at " + venue);
-    }
-    const times = combined ? [] : li.querySelectorAll("time[data-time]:not(.from)");
-    part("times").replaceChildren(...(times.length ? [Object.assign(document.createElement("span"), { className: "event-label", textContent: "Add to calendar" }), timeButtons(times)] : []));
-    // A film at several theaters: each, a link to its page, with its times.
-    part("places").replaceChildren(...(combined ? [...li.querySelectorAll(".showings li")].filter(place => !place.hidden).map(place => {
+    // Where it is, the same way whether it's at one place or a film at several: each place, a link to its page
+    // (for tickets), with its times, each adding that showing to a calendar.
+    const places = combined
+      ? [...li.querySelectorAll(".showings li")].filter(place => !place.hidden)
+          .map(place => ({ name: place.querySelector("a").textContent, href: place.querySelector("a").href, source: place.dataset.source,
+                           times: place.querySelectorAll("time[data-time]") }))
+      : [{ name: venue, href: li.querySelector("a.title").href, source: li.dataset.sources, times: li.querySelectorAll("time[data-time]:not(.from)") }];
+    part("places").replaceChildren(...places.map(place => {
       const item = document.createElement("li");
-      const a = Object.assign(document.createElement("a"), { href: place.querySelector("a").href, textContent: place.querySelector("a").textContent + " ↗" });
-      a.dataset.source = place.dataset.source;
-      item.append(a, timeButtons(place.querySelectorAll("time[data-time]")));
+      const a = Object.assign(document.createElement("a"), { href: place.href, textContent: place.name + " ↗",
+        title: (li.dataset.category === "art" ? "Details at " : "Tickets at ") + place.name });
+      a.dataset.source = place.source;
+      item.append(a, timeButtons(place.times));
       return item;
-    }) : []));
+    }));
+    part("hint").hidden = !places.some(place => place.times.length);
     // What it's about: the row's excerpt at once, then all of it, from its own page, where there's more.
     showAbout([...li.querySelectorAll(".preview p:not(.full-title)")].map(p => p.textContent));
     aboutOf(li)?.then(full => { if (full?.length && shown === li) showAbout(full); });
@@ -2389,7 +2386,7 @@ INDEX_JS = """
   // A listing followed to its venue's page, counted as the venue's: from its view, or straight from its name
   // with a modifier key or a middle click.
   const followed = event => {
-    const a = event.target.closest(".event-tickets, .event-places a, .day a.title");
+    const a = event.target.closest(".event-places a, .day a.title");
     if (!a || event.button > 1 || (a.matches(".day a.title") && event.type === "click" && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey))) return;
     const venue = a.dataset.source || (a.closest(".day") ? venueOf(a) : shown.dataset.sources);
     tally("listing/" + venue, (a.closest(".day > ul > li") || shown).querySelector(".title").textContent);
@@ -2542,17 +2539,10 @@ CSS = """
   .event-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em;
                  line-height: 1.25; text-transform: none; }
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
-  .event-detail:empty, .event-note:empty, .event-place:empty, .event-also:empty, .event-times:empty, .event-places:empty { display: none; }
+  .event-detail:empty, .event-note:empty, .event-place:empty, .event-also:empty, .event-places:empty { display: none; }
   .event-note { color: #bbb; }
-  /* Its way to the venue's page, a white pill, the view's one filled button; and Copy link beside it. */
-  .event-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 1rem 0 .9rem; }
-  .event-tickets { display: inline-flex; align-items: center; gap: .3em; padding: .4rem 1rem; border: 1px solid #fff; border-radius: 999px;
-                   background: #fff; color: #000; font-size: .9rem; font-weight: 600; text-decoration: none; }
-  .event-tickets:hover { border-color: #e2e2e2; background: #e2e2e2; text-decoration: none; }
-  /* Its times to the right of what they're for ("Add to calendar", or each theater), going on to another line
+  /* Each place it's at, a link to its page (for tickets), with its times to the right, going on to another line
      there, not under it, when there are more than fit. */
-  .event-times { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .6rem; margin: 0 0 1rem; }
-  .event-label { color: #777; font-size: .8rem; }
   .event-time { padding: .3rem .7rem; border: 1px solid #333; border-radius: 999px; background: none; color: #ddd;
                 font: inherit; font-size: .85rem; cursor: pointer; }
   .event-time:hover, .event-time:focus-visible { border-color: #888; color: #fff; outline: none; }
@@ -2562,6 +2552,7 @@ CSS = """
                      border-top: 1px solid #1c1c1c; }
   .event-places .event-group { justify-content: flex-end; }
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
+  .event-hint { margin: -.55rem 0 1rem; color: #666; font-size: .8rem; }
   .event-places a { color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
   .event-about.clamped { max-height: 12em; overflow: hidden;
@@ -2572,7 +2563,7 @@ CSS = """
   .event-more:hover, .event-more:focus-visible { color: #fff; text-decoration-color: #aaa; outline: none; }
   .event-place, .event-also { margin: .9rem 0 0; color: #888; font-size: .85rem; }
   .event-place a, .event-also a { color: #ccc; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
-  .event-copy { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .9rem; border: 1px solid #333;
+  .event-copy { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1.2rem; padding: .4rem .9rem; border: 1px solid #333;
                 border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; }
   .event-copy:hover, .event-copy:focus-visible, .event-copy.copied { border-color: #888; color: #fff; outline: none; }
   .link-mark, .check-mark { width: 15px; height: 15px; }
