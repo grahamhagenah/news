@@ -2004,16 +2004,14 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         stale = [(name, fetched) for name, fetched in stale if name in shown]
     days = {}
     for item in events:
-        days.setdefault(item["added"] if added else item["date"], []).append(item)
+        days.setdefault("recent" if added else item["date"], []).append(item)
 
     sections = []
-    # Just announced goes by the day each turned up, newest first; every other page by the day it's on.
-    for day in sorted(days, reverse=added):
-        if added:  # Each row says the day it's on, which isn't its heading's; the newest of a day first.
+    # Just announced is one list, newest first; every other page goes by the day each listing is on.
+    for day in sorted(days):
+        if added:  # Each row says the day it's on, since the heading doesn't.
             rows = [dict(item, dated=True) for item in days[day]]
-            when = date.fromisoformat(day)
-            heading = (f'<section class="day" data-added="{day}">'
-                       f'<h2><span class="relative">Added</span> <span class="date">{when:%a}, {when:%b} {when.day}</span></h2>\n')
+            heading = '<section class="day" data-added><h2><span class="date">Recently added</span></h2>\n'
         else:
             # Untimed listings first, then by time, then by name.
             rows = combine_films(days[day])
@@ -2650,17 +2648,10 @@ INDEX_JS = """
   const key = d => d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const today = key(new Date());
   const tomorrow = key(new Date(Date.now() + 86400000));
-  const yesterday = key(new Date(Date.now() - 86400000));
   const days = [...document.querySelectorAll(".day")];
   const todayOnly = document.querySelector(".filter").hasAttribute("data-today"); // The tonight page.
   for (const day of days) {
-    // Just announced: its headings are the day each listing turned up, not the day it's on.
-    if (day.dataset.added) {
-      if (day.dataset.added === today || day.dataset.added === yesterday) {
-        day.querySelector(".date").textContent = day.dataset.added === today ? "today" : "yesterday";
-      }
-      continue;
-    }
+    if ("added" in day.dataset) continue;  // Just announced: one list, headed Recently added.
     if (day.dataset.date < today || (todayOnly && day.dataset.date !== today)) day.remove();
     else day.querySelector(".relative").textContent =
       day.dataset.date === today ? "Today" : day.dataset.date === tomorrow ? "Tomorrow" : "";
