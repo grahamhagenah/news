@@ -1453,7 +1453,10 @@ def render_contact():
 <label>Message <textarea name="message" rows="6" required></textarea></label>
 <button>Send</button>
 </form>
-<p class="sent" hidden>Thanks, your message is on its way. We’ll do our best to respond in a timely manner.</p>
+<div class="sent" hidden>
+<p>Thanks, your message is on its way. We’ll do our best to respond in a timely manner.</p>
+<a class="home" href="{PUBLIC_ROOT}">Back to home</a>
+</div>
 </div>
 <script>
   // Back from sending: only the thanks.
@@ -1737,11 +1740,14 @@ PUBLIC_CSS = """
   .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
                                       color: #fff; font: inherit; font-size: .95rem; }
   .contact input:focus, .contact textarea:focus { border-color: #777; outline: none; }
-  .contact button { justify-self: start; padding: .45rem 1.2rem; border: 1px solid #555; border-radius: 999px;
+  /* The form's button, and after sending, the way home, which looks the same. */
+  .contact button, .sent .home { justify-self: start; padding: .45rem 1.2rem; border: 1px solid #555; border-radius: 999px;
                     background: none; color: #ddd; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
                     transition: border-color .15s, color .15s, background-color .15s; }
-  .contact button:hover, .contact button:focus-visible { border-color: #ccc; background: #151515; color: #fff; outline: none; }
-  .contact button:active { background: #222; }
+  .contact button:hover, .contact button:focus-visible, .sent .home:hover, .sent .home:focus-visible {
+    border-color: #ccc; background: #151515; color: #fff; text-decoration: none; outline: none; }
+  .contact button:active, .sent .home:active { background: #222; }
+  .sent .home { display: inline-block; margin-top: .6rem; text-decoration: none; }
   .contact .honey { display: none; }
   /* The footer, set off from the page by a faint line. */
   footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
