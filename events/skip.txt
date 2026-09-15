@@ -15,3 +15,5 @@ queeraoke
 open mic
 lilypad variety show
 trivia
+drag show
+(drag)
