@@ -1563,6 +1563,10 @@ def render_redirect(address, paths=False):
     target = json.dumps(address)
     if paths:
         target += f' + (location.pathname.startsWith({json.dumps(PUBLIC_ROOT)}) ? "" : location.pathname.slice(1))'
+        # A listing's page that's gone (it's passed): its view, which opens the next of its series instead.
+        listing = json.dumps(PUBLIC_ROOT + "e/")
+        target = (f'(location.pathname.startsWith({listing}) ? {json.dumps(address)} + "?event=" + '
+                  f'location.pathname.slice({len(PUBLIC_ROOT) + 2}).split("/")[0] : {target})')
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<title>{html.escape(PUBLIC_NAME)}</title>\n'
             f'<meta http-equiv="refresh" content="0; url={link}">\n<link rel="canonical" href="{link}">\n'
             f'<meta name="color-scheme" content="dark">\n<style>html {{ background: #000; }}</style>\n'
@@ -1642,6 +1646,55 @@ def calendar_feeds(sources, events, built_at):
             f"{PUBLIC_NAME} · {name}", f"What’s coming up at {name}, from {PUBLIC_NAME}.",
             [item for item in events if item["source"] == name], built_at)
     return feeds
+
+
+def render_event_page(item, day):
+    """A listing's own small page (/boston/e/<its id>/), for the preview a shared link shows: its name, when and
+    where, and its kind's card. A link's preview comes from the page it points to, and the apps that show one
+    don't run the page's script, so the home page's ?event= address would show only the home page's. Someone
+    who opens it goes straight on to the listing's view there."""
+    combined = "showings" in item
+    ident = listing_id(day, item["title"], "" if combined else item["venue"])[0]
+    target = f"{PUBLIC_URL}?{urlencode({'event': ident})}"
+    if combined:
+        places = sorted({showing["venue"] for showing in item["showings"]})
+        where = f"{len(places)} theaters ({', '.join(places)})"
+        when = f"from {clock(item['times'][0])}" if item["times"] else ""
+    else:
+        where, when = item["venue"], ", ".join(clock(moment) for moment in item["times"])
+    description = " · ".join(filter(None, [where, f"{day:%a, %b} {day.day}", when]))
+    title = f"{item['title']} · {PUBLIC_NAME}"
+    card = PUBLIC_PAGES[item["category"]][0]
+    tags = "\n".join([
+        f'<meta property="og:{key}" content="{html.escape(value)}">' for key, value in [
+            ("type", "website"), ("site_name", PUBLIC_NAME), ("title", item["title"]), ("description", description),
+            ("url", f"{PUBLIC_URL}e/{ident}/"), ("image", f"{PUBLIC_URL}share/{card}.png?pin")]
+    ] + ['<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">',
+         '<meta name="twitter:card" content="summary_large_image">'])
+    return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>{html.escape(title)}</title>\n<meta name="description" content="{html.escape(description)}">\n'
+            f'<meta name="robots" content="noindex">\n{tags}\n<meta name="color-scheme" content="dark">\n'
+            f'<style>html {{ background: #000; color: #ddd; font: 17px/1.45 -apple-system, BlinkMacSystemFont, sans-serif; }} '
+            f'body {{ margin: 2rem 1.25rem; }} a {{ color: #fff; }}</style>\n'
+            f"<script>location.replace({json.dumps(target)});</script>\n"
+            f'<h1>{html.escape(item["title"])}</h1>\n<p>{html.escape(description)}</p>\n'
+            f'<p><a href="{html.escape(target)}">See it on {html.escape(PUBLIC_NAME)}</a></p>\n</html>\n')
+
+
+def event_pages(sources, events):
+    """Each listing's page (render_event_page), by its path under the city's folder, for the public site's
+    listings, as its pages show them: a film at several theaters as one."""
+    public = {source["name"] for source in sources if source.get("public", True)}
+    days = {}
+    for item in events:
+        if item["source"] in public:
+            days.setdefault(item["date"], []).append(item)
+    pages = {}
+    for day, items in days.items():
+        for item in combine_films(items):
+            ident = listing_id(day, item["title"], "" if "showings" in item else item["venue"])[0]
+            pages[f"e/{ident}/index.html"] = render_event_page(item, day)
+    return pages
 
 
 def render_sitemap(built_at):
@@ -1962,6 +2015,7 @@ INDEX_JS = """
     return url.pathname + url.search;
   };
   let shown = null, pushed = false;
+  for (const opener of document.querySelectorAll(".day a.title, .combined summary")) opener.setAttribute("aria-haspopup", "dialog");
   // Its times, as buttons that add a showing to a calendar (the listing's own time, which knows where and when).
   const timeButtons = times => [...times].map(t => {
     const b = Object.assign(document.createElement("button"), { type: "button", className: "event-time", textContent: t.textContent });
@@ -1985,7 +2039,7 @@ INDEX_JS = """
     part("tickets").hidden = combined;
     if (!combined) {
       part("tickets").href = link.href;
-      part("tickets").firstElementChild.textContent = "Tickets and details at " + venue;
+      part("tickets").firstElementChild.textContent = (li.dataset.category === "art" ? "Details at " : "Tickets at ") + venue;
     }
     const times = combined ? [] : li.querySelectorAll("time[data-time]:not(.from)");
     part("times").replaceChildren(...(times.length ? [Object.assign(document.createElement("span"), { className: "event-label", textContent: "Add to calendar" }), ...timeButtons(times)] : []));
@@ -2073,7 +2127,7 @@ INDEX_JS = """
       .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }))
       + (time ? (time.classList.contains("from") ? ", from " : ", ") + time.textContent : "");
     const text = [title, li.querySelector(".source > span").textContent, when].join(" · ");
-    const url = SHARE_URL + "?" + new URLSearchParams({ event: li.dataset.id });
+    const url = SHARE_URL + "e/" + li.dataset.id + "/"; // Its own page, which gives a link to it its preview.
     tally("share/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), title);
     if (navigator.share) {
       try { await navigator.share({ title, text, url }); } catch (error) {} // Closed without sharing.
@@ -2415,6 +2469,10 @@ def main():
         (CITY_DIR / path).mkdir(parents=True, exist_ok=True)
         (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
     (CITY_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
+    # Each listing's own page, for the preview a shared link to it shows.
+    for path, page in event_pages(sources, events).items():
+        (CITY_DIR / path).parent.mkdir(parents=True, exist_ok=True)
+        (CITY_DIR / path).write_text(page)
     (CITY_DIR / "calendar").mkdir(exist_ok=True)
     for path, feed in calendar_feeds(sources, events, built_at).items():
         (CITY_DIR / path).write_bytes(feed.encode())  # As written: its lines end \r\n, as the format asks.

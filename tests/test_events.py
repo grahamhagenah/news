@@ -296,6 +296,32 @@ class Calendars(unittest.TestCase):
         self.assertNotIn('class="share"', page, "sharing is in the view, not on each row")
 
 
+class SharedLinks(unittest.TestCase):
+    def test_each_listing_has_a_page_with_its_own_preview(self):
+        coolidge = dict(source("coolidge", "x", "film", "Coolidge Corner"), public=True)
+        alamo = dict(source("alamo", "y", "film", "Alamo Drafthouse"), public=True)
+        hidden = dict(source("ics", "z", "music", "Not Ours"), public=False)
+        day = date(2026, 9, 15)
+        items = [build.event(coolidge, "Akira (4K Restoration)", day, time(15, 30)),
+                 build.event(coolidge, "Hope", day, time(12, 45)), build.event(alamo, "Hope", day, time(14, 15)),
+                 build.event(hidden, "Theirs", day)]
+        items[0]["times"] += [time(18, 45)]
+        pages = build.event_pages([coolidge, alamo, hidden], items)
+        self.assertEqual(set(pages), {"e/2026-09-15-akira-4k-restoration-coolidge-corner/index.html", "e/2026-09-15-hope/index.html"})
+        akira = pages["e/2026-09-15-akira-4k-restoration-coolidge-corner/index.html"]
+        self.assertIn('<meta property="og:title" content="Akira (4K Restoration)">', akira)
+        self.assertIn('<meta property="og:description" content="Coolidge Corner · Tue, Sep 15 · 3:30pm, 6:45pm">', akira)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png?pin">', akira)
+        self.assertIn(f'location.replace("{build.PUBLIC_URL}?event=2026-09-15-akira-4k-restoration-coolidge-corner")', akira)
+        self.assertIn('<meta name="robots" content="noindex">', akira)
+        self.assertIn("2 theaters (Alamo Drafthouse, Coolidge Corner) · Tue, Sep 15 · from 12:45pm", pages["e/2026-09-15-hope/index.html"])
+
+    def test_a_passed_listings_page_goes_to_its_view(self):
+        missing = build.render_redirect(build.PUBLIC_URL, paths=True)
+        self.assertIn(f'location.pathname.startsWith("{build.PUBLIC_ROOT}e/")', missing)
+        self.assertIn('"?event=" + location.pathname', missing)
+
+
 class Moving(unittest.TestCase):
     def test_redirects_keep_the_page_and_its_filters(self):
         page = build.render_redirect(build.PUBLIC_URL + "music/")
