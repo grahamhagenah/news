@@ -287,7 +287,8 @@ class Calendars(unittest.TestCase):
         sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
         page = build.render_index([build.event(sinclair, "A", date(2026, 9, 13), time(20, 0))], [sinclair], [], [],
                                   datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
-        self.assertEqual(page.count('<button class="share" type="button" aria-label="Share">'), 1)
+        self.assertEqual(page.count('<button class="share" type="button">'), 1)
+        self.assertIn("<span>Share</span></button>", page)
         self.assertIn(f"SHARE_URL = {json.dumps(build.PUBLIC_URL)}", page)
 
 

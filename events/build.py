@@ -1132,7 +1132,7 @@ SHARE_MARK = tabler(["M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-
                      "M9 6l3 -3l3 3"], "share-mark")
 CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5", "M16 3v4", "M8 3v4",
                         "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
-SHARE_BUTTON = f'<button class="share" type="button" aria-label="Share">{SHARE_MARK}</button>'
+SHARE_BUTTON = f'<button class="share" type="button">{SHARE_MARK}<span>Share</span></button>'
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
 # same as the favicon's (events/pushpin).
 PIN_MARK = ('<svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" '
@@ -1933,6 +1933,7 @@ INDEX_JS = """
   document.addEventListener("click", async event => {
     const button = event.target.closest(".share");
     if (!button) return;
+    button.classList.add("sharing"); // Stays in sight while it's being used, hovered or not.
     const li = button.closest("li.row");
     const title = li.querySelector(".title").textContent;
     const venue = li.classList.contains("combined") ? "" : li.dataset.sources;
@@ -1945,6 +1946,7 @@ INDEX_JS = """
     tally("share/" + (venue || "several theaters"), title);
     if (navigator.share) {
       try { await navigator.share({ title, text, url }); } catch (error) {} // Closed without sharing.
+      button.classList.remove("sharing");
       return;
     }
     try {
@@ -1953,6 +1955,7 @@ INDEX_JS = """
     } catch (error) {
       toast("Couldn’t copy it");
     }
+    setTimeout(() => button.classList.remove("sharing"), 2200); // As long as the note that says so.
   });
 
   // A listing followed to its venue's page, counted as the venue's (by a click, or a middle click for a new tab).
@@ -2074,15 +2077,25 @@ CSS = """
   .times time[data-time]:not(.from) { cursor: pointer; }
   .times time[data-time]:not(.from):hover, .times time[data-time]:not(.from):focus-visible { color: #ddd; outline: none; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  /* A listing's share button, at the right end of its row: on a screen with a pointer, only while the row is
-     hovered (or the button has the keyboard); on a phone, always there, faintly. The row keeps room for it. */
-  .row { padding-right: 1.75rem; }
-  .share { position: absolute; top: calc(.4rem + (1.45em - 1.1rem) / 2); right: 0; display: grid; place-items: center;
-           width: 1.1rem; height: 1.1rem; padding: 0; border: 0; background: none; color: #555; cursor: pointer; }
-  .share:hover, .share:focus-visible { color: #ddd; outline: none; }
-  .share-mark { width: 15px; height: 15px; }
-  @media (hover: hover) { .share { opacity: 0; transition: opacity .1s; } .row:hover .share, .share:focus-visible { opacity: 1; } }
-  @media (max-width: 34rem) { .share { top: calc(.4rem + (1.45 * .8em - 1.1rem) / 2); } }
+  /* A listing's share button, "Share" with its icon, at the right end of its row: on a screen with a pointer,
+     only while the row is hovered, the button has the keyboard, or it's sharing (.sharing, from when it's
+     clicked until its share sheet closes); on a phone, always there, faintly, on the venue's line. The row, or
+     on a phone that line, keeps room for it. Its top centers it on the row's first line. */
+  .row { padding-right: 4.5rem; }
+  .share { position: absolute; top: calc(.4rem + 4.8px); right: 0; display: flex; align-items: center; gap: .3rem;
+           height: 15px; padding: 0; border: 0; background: none; color: #555; font: inherit; font-size: .75rem;
+           line-height: 1; cursor: pointer; }
+  .share:hover, .share:focus-visible, .share.sharing { color: #ddd; outline: none; }
+  .share-mark { flex: none; width: 15px; height: 15px; }
+  @media (hover: hover) {
+    .share { opacity: 0; transition: opacity .1s, color .1s; }
+    .row:hover .share, .share:focus-visible, .share.sharing { opacity: 1; }
+  }
+  @media (max-width: 34rem) {
+    .row { padding-right: 0; }
+    .row .source { padding-right: 4.5rem; }
+    .share { top: calc(.4rem + 2.35px); }
+  }
   /* What sharing did, where there's no share sheet: a note at the foot of the window for a moment. */
   .toast { position: fixed; z-index: 3; left: 50%; bottom: 1.5rem; margin: 0; padding: .5rem .9rem; transform: translate(-50%, .5rem);
            border: 1px solid #333; border-radius: 999px; background: #111; color: #ddd; font-size: .85rem;
