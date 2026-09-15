@@ -1132,7 +1132,26 @@ SHARE_MARK = tabler(["M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-
                      "M9 6l3 -3l3 3"], "share-mark")
 CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5", "M16 3v4", "M8 3v4",
                         "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
-SHARE_BUTTON = f'<button class="share" type="button">{SHARE_MARK}<span>Share</span></button>'
+CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
+              'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
+# A listing's own view, opened by clicking it: where and when, a way to its venue's page first (tickets), its
+# times to add to a calendar, what it's about, the address, its other dates, and a way to share it. The script
+# fills it in from the listing.
+EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
+<button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button>
+<p class="event-where"><span class="event-icon"></span><span class="event-venue"></span><span class="event-day"></span></p>
+<h2 class="event-title" id="event-title"></h2>
+<p class="event-detail"></p>
+<p class="event-note"></p>
+<a class="event-tickets" href=""><span></span> ↗</a>
+<div class="event-times"></div>
+<ul class="event-places"></ul>
+<div class="event-about"></div>
+<p class="event-place"></p>
+<p class="event-also"></p>
+<button class="event-share" type="button">{SHARE_MARK}<span>Share</span></button>
+</dialog>
+"""
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
 # same as the favicon's (events/pushpin).
 PIN_MARK = ('<svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" '
@@ -1164,18 +1183,27 @@ def address_attribute(item):
     return f' data-address="{html.escape(written(item["address"]))}"' if item.get("address") else ""
 
 
+def listing_id(day, title, venue=""):
+    """A listing's own address on the page (?event=…), the same from build to build: its date, then its series
+    (its name, and its venue's, which the same show on other days shares): 2026-09-15-akira-4k-restoration-
+    coolidge-corner. A film at several theaters has no venue in it."""
+    series = "-".join(filter(None, [calendar_slug(title)[:60].strip("-"), calendar_slug(venue)]))
+    return f"{day.isoformat()}-{series}", series
+
+
 def render_row(item):
     """Laid out like the newsfeed: the venue on the left, then the name with that day's times after it."""
     if "showings" in item:
         return render_combined(item)
     detail = f'<span class="detail">{html.escape(item["detail"])}</span>' if item["detail"] else ""
+    ident, series = listing_id(item["date"], item["title"], item["venue"])
     return (
-        f'<li class="row" data-category="{item["category"]}" data-sources="{html.escape(item["source"])}"{address_attribute(item)}>'
+        f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
+        f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}>'
         f'<span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div>'
-        f'{SHARE_BUTTON}</li>'
+        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div></li>'
     )
 
 
@@ -1191,13 +1219,15 @@ def render_combined(item):
         f'{render_times(showing["times"])}</li>'
         for showing in item["showings"]
     )
+    ident, series = listing_id(item["showings"][0]["date"], item["title"])
     return (
-        f'<li class="row combined" data-category="{item["category"]}" data-sources="{html.escape(sources)}"><details><summary>'
+        f'<li class="row combined" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
+        f'data-sources="{html.escape(sources)}"><details><summary>'
         f'<span class="source">{icon(item["category"])}<span>{places} theaters</span></span>'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
         f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
         f'{shared.preview(item["title"], item["about"])}</div></summary>'
-        f'<ul class="showings">{showings}</ul></details>{SHARE_BUTTON}</li>'
+        f'<ul class="showings">{showings}</ul></details></li>'
     )
 
 
@@ -1288,6 +1318,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
+        + EVENT_VIEW
         + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)}, SHARE_URL = {json.dumps(PUBLIC_URL)};</script>\n"
         + f"<script>{INDEX_JS}</script>"
     )
@@ -1489,8 +1520,8 @@ those days.</li>
 it with friends.</li>
 <li>Search matches names, venues, and descriptions: a band, a director, “35mm”. On a keyboard, press slash to jump
 to it.</li>
-<li>Share a listing with the icon beside it, and subscribe to a calendar (below) to have new listings show up on
-their own.</li>
+<li>Tap a listing for more: what it’s about, all its times, the address, its other dates, and a link to share it.
+Subscribe to a calendar (below) to have new listings show up on their own.</li>
 </ul>
 <h2 id="calendars">Calendars</h2>
 <p>Subscribe in your calendar app, and new listings appear there on their own, updated every few hours.</p>
@@ -1905,24 +1936,7 @@ INDEX_JS = """
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   }
-  const addable = "time[data-time]:not(.from)";
-  for (const t of document.querySelectorAll(addable)) {
-    t.tabIndex = 0;
-    t.setAttribute("role", "button");
-    t.title = "Add to calendar";
-  }
-  document.addEventListener("click", event => {
-    const t = event.target.closest(addable);
-    if (t) addToCalendar(t);
-  });
-  document.addEventListener("keydown", event => {
-    const t = event.target.closest && event.target.closest(addable);
-    if (t && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); addToCalendar(t); }
-  });
-
-  // Share a listing: the device's own share sheet, where there is one, with what it is ("Aldous Harding · The
-  // Sinclair · Mon, Sep 14, 8pm") and a link to just it on Pushpin Boston (its venue and name); elsewhere, the
-  // same copied, to paste.
+  // A note at the foot of the window, for a moment: what sharing did, where there's no share sheet.
   const toast = message => {
     const note = document.querySelector(".toast") || document.body.appendChild(Object.assign(document.createElement("p"), { className: "toast" }));
     note.textContent = message;
@@ -1930,39 +1944,153 @@ INDEX_JS = """
     clearTimeout(note.timer);
     note.timer = setTimeout(() => note.classList.remove("shown"), 2200);
   };
-  document.addEventListener("click", async event => {
-    const button = event.target.closest(".share");
-    if (!button) return;
-    button.classList.add("sharing"); // Stays in sight while it's being used, hovered or not.
-    const li = button.closest("li.row");
-    const title = li.querySelector(".title").textContent;
-    const venue = li.classList.contains("combined") ? "" : li.dataset.sources;
-    const day = new Date(li.closest(".day").dataset.date + "T12:00:00Z")
-      .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+
+  // A listing opens its own view: where and when; a way to its venue's page first, for tickets; its times,
+  // each adding that showing to a calendar; what it's about; the address and a map; its other dates; and a way
+  // to share it. The view has an address of its own (?event=…), so Back closes it and a shared link opens it.
+  // The listing's name is still a link to the venue's page: a click with a modifier key, or a middle click,
+  // goes straight there.
+  const view = document.querySelector("dialog.event");
+  const part = name => view.querySelector(".event-" + name);
+  const rowWith = id => [...document.querySelectorAll(".day > ul > li[data-id]")].find(li => li.dataset.id === id);
+  const dayName = date => date === today ? "Today" : date === tomorrow ? "Tomorrow"
+    : new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const eventInAddress = () => new URLSearchParams(location.search).get("event");
+  const withEvent = id => {
+    const url = new URL(location.href);
+    if (id) url.searchParams.set("event", id); else url.searchParams.delete("event");
+    return url.pathname + url.search;
+  };
+  let shown = null, pushed = false;
+  // Its times, as buttons that add a showing to a calendar (the listing's own time, which knows where and when).
+  const timeButtons = times => [...times].map(t => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "event-time", textContent: t.textContent });
+    b.title = "Add to calendar";
+    b.addEventListener("click", () => addToCalendar(t));
+    return b;
+  });
+  function fill(li, note = "") {
+    shown = li;
+    const combined = li.classList.contains("combined");
+    const title = li.querySelector(".title").textContent.trim();
+    const venue = li.querySelector(".source > span").textContent;
+    view.dataset.category = li.dataset.category;
+    part("icon").replaceChildren(li.querySelector(".source .icon").cloneNode(true));
+    part("venue").textContent = venue;
+    part("day").textContent = dayName(li.closest(".day").dataset.date);
+    part("title").textContent = title;
+    part("detail").textContent = li.querySelector(".detail")?.textContent || "";
+    part("note").textContent = note;
+    const link = li.querySelector("a.title");
+    part("tickets").hidden = combined;
+    if (!combined) {
+      part("tickets").href = link.href;
+      part("tickets").firstElementChild.textContent = "Tickets and details at " + venue;
+    }
+    const times = combined ? [] : li.querySelectorAll("time[data-time]:not(.from)");
+    part("times").replaceChildren(...(times.length ? [Object.assign(document.createElement("span"), { className: "event-label", textContent: "Add to calendar" }), ...timeButtons(times)] : []));
+    // A film at several theaters: each, a link to its page, with its times.
+    part("places").replaceChildren(...(combined ? [...li.querySelectorAll(".showings li")].filter(place => !place.hidden).map(place => {
+      const item = document.createElement("li");
+      const a = Object.assign(document.createElement("a"), { href: place.querySelector("a").href, textContent: place.querySelector("a").textContent + " ↗" });
+      a.dataset.source = place.dataset.source;
+      item.append(a, ...timeButtons(place.querySelectorAll("time[data-time]")));
+      return item;
+    }) : []));
+    part("about").replaceChildren(...[...li.querySelectorAll(".preview p:not(.full-title)")].map(p => Object.assign(document.createElement("p"), { textContent: p.textContent })));
+    const address = combined ? "" : li.dataset.address || PLACES[venue] || "";
+    part("place").replaceChildren(...(address ? [address, " · ", Object.assign(document.createElement("a"), {
+      href: "https://www.google.com/maps/search/?" + new URLSearchParams({ api: 1, query: venue + ", " + address }), textContent: "Map ↗" })] : []));
+    // The same show (or film, anywhere) on its other days.
+    const others = [...document.querySelectorAll(".day > ul > li[data-series]")].filter(other => other.dataset.series === li.dataset.series && other !== li);
+    part("also").replaceChildren(...(others.length ? ["Also ", ...others.slice(0, 8).flatMap((other, i) => [i ? " · " : "",
+      Object.assign(document.createElement("a"), { href: withEvent(other.dataset.id), textContent: dayName(other.closest(".day").dataset.date) })])] : []));
+    for (const [i, a] of part("also").querySelectorAll("a").entries()) a.addEventListener("click", event => {
+      event.preventDefault();
+      history.replaceState(null, "", withEvent(others[i].dataset.id));
+      fill(others[i]);
+    });
+    part("share").classList.remove("sharing");
+    view.scrollTop = 0;
+  }
+  function openEvent(li, push, note) {
+    fill(li, note);
+    if (push) { history.pushState(null, "", withEvent(li.dataset.id)); pushed = true; }
+    if (!view.open) view.showModal();
+    tally("open/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), shown.querySelector(".title").textContent);
+  }
+  // Closing it takes its address away: Back, where opening it added one; otherwise in place. Its own ways of
+  // closing (×, Esc, a click outside it) do so at once; the close event, which comes a moment later, for any
+  // other.
+  let closing = false;
+  const restore = () => {
+    if (!eventInAddress()) return;
+    if (pushed) { pushed = false; history.back(); } else history.replaceState(null, "", withEvent(null));
+  };
+  function closeEvent() {
+    if (!view.open) return;
+    closing = true;
+    view.close();
+    restore();
+  }
+  view.addEventListener("close", () => { if (closing) closing = false; else restore(); });
+  view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
+  part("close").addEventListener("click", closeEvent);
+  view.addEventListener("click", event => { if (event.target === view) closeEvent(); }); // Outside it, on the backdrop.
+  document.addEventListener("click", event => {
+    const li = event.target.closest(".day > ul > li.row");
+    if (!li) return;
+    const a = event.target.closest("a");
+    if (a && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return; // Straight to the venue.
+    event.preventDefault(); // Also keeps a film at several theaters from opening in place.
+    openEvent(li, true);
+  });
+  addEventListener("popstate", () => {
+    const id = eventInAddress();
+    const li = id && rowWith(id);
+    if (li) { pushed = false; openEvent(li, false); }
+    else if (view.open) { pushed = false; closing = true; view.close(); } // Back, with it open: its address is gone already.
+  });
+  // Opened from its address, as a shared link: that listing; if it's gone (it's over), the next of its series.
+  {
+    const id = eventInAddress();
+    if (id) {
+      const li = rowWith(id);
+      const next = li || [...document.querySelectorAll(".day > ul > li[data-series]")].find(other => id.endsWith("-" + other.dataset.series) && id.slice(0, 10) <= other.closest(".day").dataset.date);
+      if (next) openEvent(next, false, li ? "" : "The showing you were sent has passed; this is the next one.");
+      else { history.replaceState(null, "", withEvent(null)); toast("That listing has passed"); }
+    }
+  }
+
+  // Share the listing in view: the device's own share sheet, where there is one, with what it is ("Aldous
+  // Harding · The Sinclair · Mon, Sep 14, 8pm") and its own link; elsewhere, the same copied, to paste.
+  part("share").addEventListener("click", async () => {
+    const li = shown, button = part("share");
+    button.classList.add("sharing");
+    const title = li.querySelector(".title").textContent.trim();
     const time = li.querySelector("time");
-    const when = day + (time ? (time.classList.contains("from") ? ", from " : ", ") + time.textContent : "");
+    const when = dayName(li.closest(".day").dataset.date).replace(/^Today$|^Tomorrow$/, () => new Date(li.closest(".day").dataset.date + "T12:00:00Z")
+      .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }))
+      + (time ? (time.classList.contains("from") ? ", from " : ", ") + time.textContent : "");
     const text = [title, li.querySelector(".source > span").textContent, when].join(" · ");
-    const url = SHARE_URL + "?" + new URLSearchParams(venue ? { venue, q: title } : { q: title });
-    tally("share/" + (venue || "several theaters"), title);
+    const url = SHARE_URL + "?" + new URLSearchParams({ event: li.dataset.id });
+    tally("share/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), title);
     if (navigator.share) {
       try { await navigator.share({ title, text, url }); } catch (error) {} // Closed without sharing.
-      button.classList.remove("sharing");
-      return;
+    } else {
+      try { await navigator.clipboard.writeText(text + "\\n" + url); toast("Copied, ready to paste"); }
+      catch (error) { toast("Couldn’t copy it"); }
     }
-    try {
-      await navigator.clipboard.writeText(text + "\\n" + url);
-      toast("Copied, ready to paste");
-    } catch (error) {
-      toast("Couldn’t copy it");
-    }
-    setTimeout(() => button.classList.remove("sharing"), 2200); // As long as the note that says so.
+    button.classList.remove("sharing");
   });
 
-  // A listing followed to its venue's page, counted as the venue's (by a click, or a middle click for a new tab).
+  // A listing followed to its venue's page, counted as the venue's: from its view, or straight from its name
+  // with a modifier key or a middle click.
   const followed = event => {
-    const a = event.target.closest(".day a.title, .showings a");
-    const row = a && (a.closest(".combined") || a.closest(".headline")); // A film at several theaters: its name.
-    if (a && event.button < 2) tally("listing/" + venueOf(a), row?.querySelector(".title")?.textContent || a.textContent);
+    const a = event.target.closest(".event-tickets, .event-places a, .day a.title");
+    if (!a || event.button > 1 || (a.matches(".day a.title") && event.type === "click" && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey))) return;
+    const venue = a.dataset.source || (a.closest(".day") ? venueOf(a) : shown.dataset.sources);
+    tally("listing/" + venue, (a.closest(".day > ul > li") || shown).querySelector(".title").textContent);
   };
   document.addEventListener("click", followed);
   document.addEventListener("auxclick", followed);
@@ -2073,28 +2201,54 @@ CSS = """
   .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
-  /* A showtime adds that showing to a calendar: a pointer and a lighter shade on hover say so, nothing else. */
-  .times time[data-time]:not(.from) { cursor: pointer; }
-  .times time[data-time]:not(.from):hover, .times time[data-time]:not(.from):focus-visible { color: #ddd; outline: none; }
+  /* A listing opens its own view (below) wherever it's clicked. */
+  .day > ul > li.row { cursor: pointer; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  /* A listing's share button, "Share" with its icon, at the right end of its row: on a screen with a pointer,
-     only while the row is hovered, the button has the keyboard, or it's sharing (.sharing, from when it's
-     clicked until its share sheet closes); on a phone, always there, faintly, on the venue's line. The row, or
-     on a phone that line, keeps room for it. Its top centers it on the row's first line. */
-  .row { padding-right: 4.5rem; }
-  .share { position: absolute; top: calc(.4rem + 4.8px); right: 0; display: flex; align-items: center; gap: .3rem;
-           height: 15px; padding: 0; border: 0; background: none; color: #555; font: inherit; font-size: .75rem;
-           line-height: 1; cursor: pointer; }
-  .share:hover, .share:focus-visible, .share.sharing { color: #ddd; outline: none; }
-  .share-mark { flex: none; width: 15px; height: 15px; }
-  @media (hover: hover) {
-    .share { opacity: 0; transition: opacity .1s, color .1s; }
-    .row:hover .share, .share:focus-visible, .share.sharing { opacity: 1; }
-  }
+  /* A listing's own view: over the list on a wide screen, a sheet up from the bottom on a phone. Its way to the
+     venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
+  body:has(dialog.event[open]) { overflow: hidden; }
+  dialog.event { width: min(34rem, calc(100% - 2rem)); max-height: min(85vh, 46rem); box-sizing: border-box; overflow: auto;
+                 padding: 1.4rem 1.5rem 1.5rem; border: 1px solid #262626; border-radius: 14px; background: #0b0b0b; color: #ddd;
+                 font-size: .95rem; line-height: 1.5; }
+  dialog.event::backdrop { background: rgba(0, 0, 0, .72); }
+  dialog.event[open] { animation: rise .18s ease-out; }
+  @keyframes rise { from { opacity: 0; transform: translateY(.75rem); } }
+  .event-close { position: absolute; top: .85rem; right: .85rem; display: grid; place-items: center; width: 2rem; height: 2rem;
+                 padding: 0; border: 0; border-radius: 50%; background: none; color: #888; cursor: pointer; }
+  .event-close:hover, .event-close:focus-visible { background: #1a1a1a; color: #fff; outline: none; }
+  .close-mark { width: 14px; height: 14px; }
+  .event-where { display: flex; align-items: center; gap: .45em; margin: 0 2.5rem .5rem 0; color: #888; font-size: .8rem; }
+  .event-where .icon { width: 12px; height: 12px; }
+  .event-day::before { content: "·"; margin-right: .45em; }
+  .event-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em;
+                 line-height: 1.25; text-transform: none; }
+  .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
+  .event-detail:empty, .event-note:empty, .event-place:empty, .event-also:empty, .event-times:empty, .event-places:empty { display: none; }
+  .event-note { color: #bbb; }
+  .event-tickets { display: flex; justify-content: center; gap: .3em; margin: 1.1rem 0 .9rem; padding: .7rem 1rem; border-radius: 10px;
+                   background: #fff; color: #000; font-weight: 600; text-decoration: none; }
+  .event-tickets:hover { background: #e2e2e2; text-decoration: none; }
+  .event-times { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: 0 0 1rem; }
+  .event-label { margin-right: .2rem; color: #777; font-size: .8rem; }
+  .event-time { padding: .3rem .7rem; border: 1px solid #333; border-radius: 999px; background: none; color: #ddd;
+                font: inherit; font-size: .85rem; cursor: pointer; }
+  .event-time:hover, .event-time:focus-visible { border-color: #888; color: #fff; outline: none; }
+  .event-places { margin: 1.1rem 0 1rem; }
+  .event-places li { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; padding: .55rem 0; border-top: 1px solid #1c1c1c; }
+  .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
+  .event-places a { margin-right: auto; color: #fff; font-weight: 600; }
+  .event-about p { margin: 0 0 .8em; color: #bbb; }
+  .event-place, .event-also { margin: .9rem 0 0; color: #888; font-size: .85rem; }
+  .event-place a, .event-also a { color: #ccc; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
+  .event-share { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1.2rem; padding: .4rem .9rem;
+                 border: 1px solid #333; border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .85rem; cursor: pointer; }
+  .event-share:hover, .event-share:focus-visible, .event-share.sharing { border-color: #888; color: #fff; outline: none; }
+  .share-mark { width: 15px; height: 15px; }
   @media (max-width: 34rem) {
-    .row { padding-right: 0; }
-    .row .source { padding-right: 4.5rem; }
-    .share { top: calc(.4rem + 2.35px); }
+    dialog.event { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 1.25rem 1.25rem 1.5rem;
+                   border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
+    dialog.event[open] { animation: sheet .22s ease-out; }
+    @keyframes sheet { from { transform: translateY(100%); } }
   }
   /* What sharing did, where there's no share sheet: a note at the foot of the window for a moment. */
   .toast { position: fixed; z-index: 3; left: 50%; bottom: 1.5rem; margin: 0; padding: .5rem .9rem; transform: translate(-50%, .5rem);

@@ -283,13 +283,17 @@ class Calendars(unittest.TestCase):
         self.assertEqual(build.calendar_address("calendar/music.ics"), "webcal://pushpin.city/boston/calendar/music.ics")
         self.assertIn("calendar.google.com", build.calendar_address("calendar/music.ics", google=True))
 
-    def test_each_listing_can_be_shared(self):
+    def test_each_listing_opens_its_own_view(self):
         sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
-        page = build.render_index([build.event(sinclair, "A", date(2026, 9, 13), time(20, 0))], [sinclair], [], [],
-                                  datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
-        self.assertEqual(page.count('<button class="share" type="button">'), 1)
-        self.assertIn("<span>Share</span></button>", page)
+        items = [build.event(sinclair, "Akira (4K Restoration)", day, time(20, 0)) for day in (date(2026, 9, 13), date(2026, 9, 14))]
+        page = build.render_index(items, [sinclair], [], [], datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
+        # Each its own address, which the same show on other days shares the rest of.
+        self.assertIn('data-id="2026-09-13-akira-4k-restoration-the-sinclair" data-series="akira-4k-restoration-the-sinclair"', page)
+        self.assertIn('data-id="2026-09-14-akira-4k-restoration-the-sinclair"', page)
+        self.assertEqual(page.count('<dialog class="event"'), 1)
+        self.assertIn('<button class="event-share" type="button">', page)
         self.assertIn(f"SHARE_URL = {json.dumps(build.PUBLIC_URL)}", page)
+        self.assertNotIn('class="share"', page, "sharing is in the view, not on each row")
 
 
 class Moving(unittest.TestCase):
@@ -540,7 +544,7 @@ class Page(unittest.TestCase):
         with mock.patch.object(build, "fetch", sample):
             found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json"))
         page = build.render_index(found, [source("aeg", "x", name="Roadrunner")], [], [], datetime.now(timezone.utc))
-        self.assertEqual(page.count('<li class="row" data-category="music" data-sources="Somewhere">'), len(found))
+        self.assertEqual(len(re.findall(r'<li class="row" data-id="[^"]+" data-series="[^"]+" data-category="music" data-sources="Somewhere">', page)), len(found))
         self.assertEqual(page.count('<div class="preview">'), sum(bool(item["about"]) for item in found))
         for key in build.CATEGORIES:
             self.assertIn(f'data-show="{key}"', page)
