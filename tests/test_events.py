@@ -250,6 +250,17 @@ class Skipping(unittest.TestCase):
             self.assertIsNone(build.skipping())
 
 
+class Moving(unittest.TestCase):
+    def test_redirects_keep_the_page_and_its_filters(self):
+        page = build.render_redirect(build.PUBLIC_URL + "music/")
+        self.assertIn(f'<meta http-equiv="refresh" content="0; url={build.PUBLIC_URL}music/">', page)
+        self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}music/">', page)
+        self.assertIn("location.search + location.hash", page, "?venue= and ?q= come along")
+        missing = build.render_redirect(build.PUBLIC_URL, paths=True)
+        self.assertIn("location.pathname.slice(1)", missing, "an old /music/ goes to /boston/music/")
+        self.assertIn(f'location.pathname.startsWith("{build.PUBLIC_ROOT}")', missing, "and never /boston/boston/")
+
+
 class Window(unittest.TestCase):
     def test_concerts_two_months_ahead_the_rest_one(self):
         with mock.patch.object(build, "today", lambda: date(2026, 9, 1)):
@@ -479,6 +490,9 @@ class Fallback(unittest.TestCase):
         self.assertEqual(failing["Paradise"]["since"], self.built.isoformat())
 
 
+R = build.PUBLIC_ROOT  # The public site's root, which its links start from.
+
+
 class Page(unittest.TestCase):
     def test_renders_rows_and_filters(self):
         with mock.patch.object(build, "fetch", sample):
@@ -501,12 +515,12 @@ class Page(unittest.TestCase):
         mine = build.render_index(found + kept, sources, [], [], built)
         self.assertNotIn("Newsfeed", public)
         footer = public.split("<footer>")[1]
-        for label, href in [("All events", "/"), ("Music", "/music/"), ("Film", "/film/"), ("Art &amp; talks", "/talks/"),
-                            ("This weekend", "/weekend/"), ("Next weekend", "/weekend/next/"), ("About", "/about.html"), ("Contact", "/contact.html")]:
+        for label, href in [("All events", R), ("Music", R + "music/"), ("Film", R + "film/"), ("Art &amp; talks", R + "talks/"),
+                            ("This weekend", R + "weekend/"), ("Next weekend", R + "weekend/next/"), ("About", R + "about.html"), ("Contact", R + "contact.html")]:
             self.assertIn(f'<a href="{href}"', footer, label)
-        self.assertIn('<a href="/" aria-current="page">All events</a>', footer, "this page marked")
+        self.assertIn(f'<a href="{R}" aria-current="page">All events</a>', footer, "this page marked")
         self.assertIn("Listings from Roadrunner, aggregated", footer)
-        self.assertNotIn('href="/about.html"', public.split("<footer>")[0], "not in the header")
+        self.assertNotIn(f'href="{R}about.html"', public.split("<footer>")[0], "not in the header")
         self.assertNotIn("Add a source", public)
         self.assertIn('content="index, follow"', public)
         self.assertIn('content="noindex, nofollow"', mine)
@@ -518,7 +532,7 @@ class Page(unittest.TestCase):
         self.assertIn("Roadrunner", about)
         self.assertNotIn("Private Theater", about)
         self.assertIn("https://formsubmit.co/", build.render_contact())
-        self.assertIn('<a href="/contact.html">Contact</a>', about.split("<footer>")[1])
+        self.assertIn(f'<a href="{R}contact.html">Contact</a>', about.split("<footer>")[1])
 
     def test_public_page_tells_search_engines_what_it_is(self):
         with mock.patch.object(build, "fetch", sample):
@@ -548,8 +562,8 @@ class Page(unittest.TestCase):
         mine = build.render_index(music + films, sources, [], [], built)
         # The home page's filter links to each kind's page, and marks All; the film page marks Film.
         self.assertIn('data-pages data-current="all"', home)
-        self.assertIn('<a data-show="film" href="/film/">', home)
-        self.assertIn('<a data-show="all" href="/" aria-current="page">All</a>', home)
+        self.assertIn(f'<a data-show="film" href="{R}film/">', home)
+        self.assertIn(f'<a data-show="all" href="{R}" aria-current="page">All</a>', home)
         self.assertIn('data-current="film"', film)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}film/">', film)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png">', film)
@@ -589,14 +603,14 @@ class Page(unittest.TestCase):
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
         self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><button', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', page)
-        self.assertIn('<a href="/about.html" aria-current="page">About</a>', build.render_about([venue], built))
-        self.assertIn('<a href="/weekend/" aria-current="page">This weekend</a>', page)
+        self.assertIn(f'<a href="{R}about.html" aria-current="page">About</a>', build.render_about([venue], built))
+        self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', page)
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/</loc>", build.render_sitemap(built))
-        self.assertIn('<a href="/weekend/next/">Next weekend, Sep 25–27 →</a>', page)
+        self.assertIn(f'<a href="{R}weekend/next/">Next weekend, Sep 25–27 →</a>', page)
         following = build.render_index(events, [venue], [], [], built, public=True, weekend=1)
         self.assertNotIn("On the 18th", following)
         self.assertIn("Next weekend around Boston, Cambridge, and Somerville: Friday, September 25", following)
-        self.assertIn('<a href="/weekend/">← This weekend, Sep 18–20</a>', following)
+        self.assertIn(f'<a href="{R}weekend/">← This weekend, Sep 18–20</a>', following)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/next/">', following)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', following)
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/next/</loc>", build.render_sitemap(built))
@@ -615,7 +629,7 @@ class Page(unittest.TestCase):
         self.assertIn(f"<title>{build.PUBLIC_TONIGHT[1]}</title>", page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}tonight/">', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/tonight.png">', page)
-        self.assertIn('<a href="/tonight/" aria-current="page">Tonight</a>', page)
+        self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', page)
         self.assertIn(f"<loc>{build.PUBLIC_URL}tonight/</loc>", build.render_sitemap(built))
 
     def test_event_data_uses_an_events_own_address(self):

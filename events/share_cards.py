@@ -1,4 +1,4 @@
-"""The images a link to Boston, Daily shows when it's shared (1200×630): one for the home page, one for each
+"""The images a link to Pushpin Boston shows when it's shared (1200×630): one for the home page, one for each
 kind's page. They don't change with the listings, so they're made by hand, not by each build, with Chrome
 installed: python3 -m events.share_cards. Run it again after renaming the site or rewording a page; it writes
 events/share/*.png, which the build copies to the public site."""

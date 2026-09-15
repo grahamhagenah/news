@@ -34,12 +34,16 @@ CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
 # The same listings, for anyone: its own name, About and Contact pages, shorter previews, and only the
 # sources fine to republish (a line in sources.txt ending in public=no stays on this page only).
-PUBLIC_NAME = "Boston, Daily"
+PUBLIC_NAME = "Pushpin Boston"
+# Pushpin's site, at pushpin.city, with each city's listings at a path of their own: Boston's at /boston/.
+# PUBLIC_DIR is the whole site, as published; the city's pages are in its boston/ folder.
+PUBLIC_SITE = "https://pushpin.city/"
+PUBLIC_URL = PUBLIC_SITE + "boston/"
 PUBLIC_DIR = ROOT.parent / "dist" / "public"
-PUBLIC_URL = "https://boston.grahamhagenah.com/"
 # Its pages link to each other from the site's root, since the home page puts a kind's page's address in the
 # address bar without loading it, and a relative link would then go astray.
 PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
+CITY_DIR = PUBLIC_DIR / PUBLIC_ROOT.strip("/")
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
@@ -1393,6 +1397,22 @@ words, in short.</p>
                        description=f"What {PUBLIC_NAME} is, and the Boston, Cambridge and Somerville venues it lists.")
 
 
+def render_redirect(address, paths=False):
+    """A page that sends its visitor on to address at once, keeping any ?venue= or ?q= and #, and tells search
+    engines that's where it lives: the site's root (Boston's, until there's another city), and the pages left
+    at the site's first address. With paths (a page not found), the rest of the address it was asked for comes
+    along: /music/ goes to /boston/music/; one already under /boston/ that isn't there, to Boston's home page."""
+    link = html.escape(address)
+    target = json.dumps(address)
+    if paths:
+        target += f' + (location.pathname.startsWith({json.dumps(PUBLIC_ROOT)}) ? "" : location.pathname.slice(1))'
+    return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<title>{html.escape(PUBLIC_NAME)}</title>\n'
+            f'<meta http-equiv="refresh" content="0; url={link}">\n<link rel="canonical" href="{link}">\n'
+            f'<meta name="color-scheme" content="dark">\n<style>html {{ background: #000; }}</style>\n'
+            f"<script>location.replace({target} + location.search + location.hash);</script>\n"
+            f'<p><a href="{link}">{html.escape(PUBLIC_NAME)}</a></p>\n</html>\n')
+
+
 def render_sitemap(built_at):
     """The public site's pages for search engines: the listings, changing every few hours, and the others."""
     pages = ([("", "hourly", "1.0"), (PUBLIC_TONIGHT[0], "hourly", "0.9")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
@@ -1890,24 +1910,28 @@ def main():
     print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html with {len(events)} listings, and listings.json")
 
     # The public site, from the same listings.
-    PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(ROOT / "static", PUBLIC_DIR, dirs_exist_ok=True)
-    shutil.copytree(ROOT / "share", PUBLIC_DIR / "share", dirs_exist_ok=True)
-    (PUBLIC_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
-    (PUBLIC_DIR / "about.html").write_text(render_about(sources, built_at))
-    (PUBLIC_DIR / "contact.html").write_text(render_contact())
+    CITY_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ROOT / "static", CITY_DIR, dirs_exist_ok=True)
+    shutil.copytree(ROOT / "share", CITY_DIR / "share", dirs_exist_ok=True)
+    (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
+    (CITY_DIR / "about.html").write_text(render_about(sources, built_at))
+    (CITY_DIR / "contact.html").write_text(render_contact())
     for category, (slug, *_) in PUBLIC_PAGES.items():
-        (PUBLIC_DIR / slug).mkdir(exist_ok=True)
-        (PUBLIC_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
-    (PUBLIC_DIR / PUBLIC_TONIGHT[0]).mkdir(parents=True, exist_ok=True)
-    (PUBLIC_DIR / PUBLIC_TONIGHT[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, tonight=True))
+        (CITY_DIR / slug).mkdir(exist_ok=True)
+        (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
+    (CITY_DIR / PUBLIC_TONIGHT[0]).mkdir(parents=True, exist_ok=True)
+    (CITY_DIR / PUBLIC_TONIGHT[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, tonight=True))
     for ahead, (path, *_) in enumerate(PUBLIC_WEEKENDS):
-        (PUBLIC_DIR / path).mkdir(parents=True, exist_ok=True)
-        (PUBLIC_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
-    (PUBLIC_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
+        (CITY_DIR / path).mkdir(parents=True, exist_ok=True)
+        (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
+    (CITY_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
+    # The site's root: straight to Boston, the only city so far, and robots.txt, which only works there.
+    shutil.copytree(ROOT / "static", PUBLIC_DIR, dirs_exist_ok=True)
+    (PUBLIC_DIR / "index.html").write_text(render_redirect(PUBLIC_URL))
+    (PUBLIC_DIR / "404.html").write_text(render_redirect(PUBLIC_URL, paths=True))
     (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, weekend/, weekend/next/, "
-          "about.html, contact.html, sitemap.xml and robots.txt")
+    print(f"Wrote {CITY_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, weekend/, weekend/next/, "
+          "about.html, contact.html and sitemap.xml; and at the site's root, the way to it and robots.txt")
 
 
 if __name__ == "__main__":

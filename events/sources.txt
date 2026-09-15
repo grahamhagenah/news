@@ -1,5 +1,5 @@
 # One source per line: how to read it, its URL, a category (music, film or art), and a name. public=no at the
-# end keeps a source off the public page (Boston, Daily), for one that isn't ours to republish. Some readers
+# end keeps a source off the public page (Pushpin Boston), for one that isn't ours to republish. Some readers
 # sort a source's listings into other categories themselves, like the MFA's films.
 # How to read it:
 #   aeg        an AEG Presents venue's events.json (Roadrunner)
