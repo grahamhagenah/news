@@ -2198,8 +2198,7 @@ INDEX_JS = """
     b.addEventListener("click", () => addToCalendar(t));
     return b;
   }));
-  // Together, so they move to a line of their own rather than break after the first few; only when there are
-  // more than a line holds do they go on to another.
+  // Together, on a line under what they're for, going on to another only when there are more than a line holds.
   const group = buttons => {
     const times = Object.assign(document.createElement("span"), { className: "event-group" });
     times.append(...buttons);
@@ -2546,16 +2545,17 @@ CSS = """
   .event-tickets { display: flex; justify-content: center; gap: .3em; margin: 1.1rem 0 .9rem; padding: .7rem 1rem; border-radius: 10px;
                    background: #fff; color: #000; font-weight: 600; text-decoration: none; }
   .event-tickets:hover { background: #e2e2e2; text-decoration: none; }
-  .event-times { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: 0 0 1rem; }
-  .event-label { margin-right: .2rem; color: #777; font-size: .8rem; }
+  /* Its times under what they're for ("Add to calendar", or each theater), however many there are. */
+  .event-times { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; margin: 0 0 1rem; }
+  .event-label { color: #777; font-size: .8rem; }
   .event-time { padding: .3rem .7rem; border: 1px solid #333; border-radius: 999px; background: none; color: #ddd;
                 font: inherit; font-size: .85rem; cursor: pointer; }
   .event-time:hover, .event-time:focus-visible { border-color: #888; color: #fff; outline: none; }
   .event-places { margin: 1.1rem 0 1rem; }
   .event-group { display: flex; flex-wrap: wrap; gap: .45rem; }
-  .event-places li { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; padding: .55rem 0; border-top: 1px solid #1c1c1c; }
+  .event-places li { display: flex; flex-direction: column; align-items: flex-start; gap: .45rem; padding: .65rem 0; border-top: 1px solid #1c1c1c; }
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
-  .event-places a { margin-right: auto; color: #fff; font-weight: 600; }
+  .event-places a { color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
   .event-about.clamped { max-height: 12em; overflow: hidden;
                          -webkit-mask-image: linear-gradient(#000 calc(100% - 3.5em), transparent);
