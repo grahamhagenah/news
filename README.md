@@ -40,12 +40,25 @@ The events build also writes the same listings for anyone, as **Pushpin Boston**
 - Each kind has its own page, `/boston/music/`, `/boston/film/` and `/boston/talks/`, with only its events and its own title, description and tagline (`PUBLIC_PAGES` in `events/build.py`). The filter's choices link to them; on the home page, which has every event, the filter shows a kind in place and puts its page's address in the address bar. The pages link to each other from the city's root (`/boston/about/`), since a relative link would go astray after that.
 - `/boston/tonight/` lists what's still to come today, on one page (`PUBLIC_TONIGHT`). It holds tomorrow's listings too and shows only the day it is where it's read, so it rolls over at midnight rather than waiting up to three hours for the next build.
 - `/boston/weekend/` lists Friday to Sunday: the weekend it is, or from Monday to Thursday the one coming (`weekend_days`), and `/boston/weekend/next/` the weekend after; each shows the whole weekend on one page and links to the other where the pager would be (`PUBLIC_WEEKENDS`). Their filter shows a kind in place. Every public page's footer links to this weekend's.
-- Its visits are counted with [GoatCounter](https://www.goatcounter.com) (`GOATCOUNTER` in `events/build.py`), which uses no cookies and keeps nothing personal, at hagenah.goatcounter.com. So are listings followed to their venue (`listing/<venue>`), showtimes added to a calendar (`calendar/<venue>`), venues chosen from the menu (`venue/<venue>`), and a kind's page shown in place on the home page. The personal events page isn't counted. GoatCounter ignores localhost, so a local build's visits aren't counted.
+- Its visits are counted with GoatCounter; see [Visitor counts](#visitor-counts-goatcounter).
 - Its icon is a pushpin, [Tabler Icons](https://tabler.io/icons)' "pin" (outline, MIT license), in `events/pushpin/`: `favicon.svg`, white in a browser in dark mode and black in light, with no background; and `apple-touch-icon.png`, white on black for a phone's home screen, made by `share_cards.py`. In the header, the same pin, in white like the name, comes before it, and the city's name is lighter than Pushpin's.
 - Shared links show a card (1200×630) in the site's style: the home page's, and one for each kind's page, in `events/share/`. They don't change with the listings, so they're made by hand with Chrome: `python3 -m events.share_cards`, again after renaming the site or rewording a page.
 - A source ending in `public=no` in `events/sources.txt` stays off it, for one that isn't ours to republish.
 - The Contact page's form sends through [FormSubmit](https://formsubmit.co) to the address in `PUBLIC_CONTACT`; its first message asks that address to confirm, and FormSubmit then offers a random alias to use there instead of the address.
 - The deploy pushes it with a deploy key that can write to that repo only, kept as the `PUBLIC_DEPLOY_KEY` secret. To move it to another domain: point the domain at GitHub Pages, set it in that repo's Pages settings, change the `CNAME` the deploy writes, and change `PUBLIC_URL`.
+
+## Visitor counts (GoatCounter)
+
+Pushpin Boston's visits are counted with [GoatCounter](https://www.goatcounter.com), free for a personal, non-commercial site. It uses no cookies and keeps nothing personal, so no cookie notice is needed; the About page's "Does it track me?" answer says so. Only Pushpin Boston is counted, not the newsfeed or the personal events page.
+
+- **Where:** https://hagenah.goatcounter.com, signed in with the GoatCounter account. Each public page's head loads `https://gc.zgo.at/count.js` pointed at `GOATCOUNTER` in `events/build.py` (`https://hagenah.goatcounter.com/count`); to move to another GoatCounter site, change that.
+- **What's counted:** a visit to each page by its own address (`/boston/`, `/boston/film/`, `/boston/weekend/`; a `?venue=` or `?q=` doesn't make another), with where it came from, country, and device. Switching to Music, Film or Art & talks on the home page counts as a visit to that page. And, as events, which appear in the same list marked as events:
+  - `listing/<venue>`: a listing followed to its venue's page, with the event's name as its title. Which venues send people out.
+  - `calendar/<venue>`: a showtime added to a calendar.
+  - `venue/<venue>`: a venue chosen from the menu.
+- **Leaving out your own visits:** open https://pushpin.city/boston/#toggle-goatcounter once in each browser (Mac and phone). An alert says counting is now disabled there; opening it again turns it back on. It's kept in that browser's storage, so clearing the site's data undoes it.
+- **Checking it works:** on the live site, the browser's Network tab shows a request to `hagenah.goatcounter.com/count` for each page (none in a browser that's toggled off). In the console, `goatcounter.filter()` gives `false` when it's counting, or the reason it isn't. It never counts localhost, so a local build isn't counted.
+- **More:** GoatCounter's settings can make the dashboard public, and export everything as CSV. For how people find the site through Google, [Search Console](https://search.google.com/search-console) is worth adding too (verify pushpin.city with a TXT record at Hover, then submit `https://pushpin.city/boston/sitemap.xml`).
 
 ## When a source fails
 
@@ -69,3 +82,11 @@ GitHub's own `schedule` trigger skips most runs, so a [cron-job.org](https://cro
 - **The token:** a fine-grained token on the grahamhagenah account, limited to this repo with **Actions: Read and write** only. It can start and cancel builds but can't read or change code. It expires; renew it at github.com/settings/personal-access-tokens and paste the new one into the job's Authorization header.
 - **If the pages go stale:** check cron-job.org's history or failure emails. A 401 means the token expired or was revoked, and a 403 means a missing permission or header.
 - **Keep-alive:** GitHub disables a workflow after 60 days without a commit, which would also block the job. So on scheduled and dispatched runs, the `keepalive` job makes an empty commit if the repo has been quiet for 50 days.
+
+Looking after it:
+
+- **Is it running?** `gh run list -R grahamhagenah/news --workflow deploy.yml --event workflow_dispatch -L 5` should show a run every 15 minutes, as should the Actions tab filtered by event. A cancelled one now and then is a run a push replaced. The newsfeed's "Updated" time in its header says when it last built.
+- **Renewing the token,** before it expires (GitHub emails a week ahead; a calendar reminder helps too): at github.com/settings/personal-access-tokens, open the token cron-job.org uses and choose Regenerate token, which keeps its repo and permission. Copy it once, and in cron-job.org open the job, then Advanced → Headers, and replace the Authorization header with `Bearer <new token>`; save. The job's "Test run" should answer 204, and a new dispatched run should appear within a minute. Never paste the token anywhere else.
+- **Failure emails:** in the job's settings, turn on notifications on failure, so an expired token (a 401) is noticed the same day rather than when the pages go stale.
+- **If GitHub disabled the workflow** (after 60 quiet days, if the keep-alive ever missed): `gh workflow enable deploy.yml -R grahamhagenah/news`, or Actions → Build and deploy → Enable workflow.
+- **Without the job,** the pages still rebuild from `deploy.yml`'s own schedule, just less often: GitHub drops many of its scheduled runs.
