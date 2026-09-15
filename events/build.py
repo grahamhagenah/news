@@ -2183,12 +2183,19 @@ INDEX_JS = """
   let shown = null, pushed = false;
   for (const opener of document.querySelectorAll(".day a.title, .combined summary")) opener.setAttribute("aria-haspopup", "dialog");
   // Its times, as buttons that add a showing to a calendar (the listing's own time, which knows where and when).
-  const timeButtons = times => [...times].map(t => {
+  const timeButtons = times => group([...times].map(t => {
     const b = Object.assign(document.createElement("button"), { type: "button", className: "event-time", textContent: t.textContent });
     b.title = "Add to calendar";
     b.addEventListener("click", () => addToCalendar(t));
     return b;
-  });
+  }));
+  // Together, so they move to a line of their own rather than break after the first few; only when there are
+  // more than a line holds do they go on to another.
+  const group = buttons => {
+    const times = Object.assign(document.createElement("span"), { className: "event-group" });
+    times.append(...buttons);
+    return times;
+  };
   function fill(li, note = "") {
     shown = li;
     const combined = li.classList.contains("combined");
@@ -2217,13 +2224,13 @@ INDEX_JS = """
       part("tickets").firstElementChild.textContent = (li.dataset.category === "art" ? "Details at " : "Tickets at ") + venue;
     }
     const times = combined ? [] : li.querySelectorAll("time[data-time]:not(.from)");
-    part("times").replaceChildren(...(times.length ? [Object.assign(document.createElement("span"), { className: "event-label", textContent: "Add to calendar" }), ...timeButtons(times)] : []));
+    part("times").replaceChildren(...(times.length ? [Object.assign(document.createElement("span"), { className: "event-label", textContent: "Add to calendar" }), timeButtons(times)] : []));
     // A film at several theaters: each, a link to its page, with its times.
     part("places").replaceChildren(...(combined ? [...li.querySelectorAll(".showings li")].filter(place => !place.hidden).map(place => {
       const item = document.createElement("li");
       const a = Object.assign(document.createElement("a"), { href: place.querySelector("a").href, textContent: place.querySelector("a").textContent + " ↗" });
       a.dataset.source = place.dataset.source;
-      item.append(a, ...timeButtons(place.querySelectorAll("time[data-time]")));
+      item.append(a, timeButtons(place.querySelectorAll("time[data-time]")));
       return item;
     }) : []));
     part("about").replaceChildren(...[...li.querySelectorAll(".preview p:not(.full-title)")].map(p => Object.assign(document.createElement("p"), { textContent: p.textContent })));
@@ -2501,6 +2508,7 @@ CSS = """
                 font: inherit; font-size: .85rem; cursor: pointer; }
   .event-time:hover, .event-time:focus-visible { border-color: #888; color: #fff; outline: none; }
   .event-places { margin: 1.1rem 0 1rem; }
+  .event-group { display: flex; flex-wrap: wrap; gap: .45rem; }
   .event-places li { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; padding: .55rem 0; border-top: 1px solid #1c1c1c; }
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
   .event-places a { margin-right: auto; color: #fff; font-weight: 600; }
