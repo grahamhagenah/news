@@ -625,13 +625,13 @@ class JustAnnounced(unittest.TestCase):
         found = build.newly_added([older, fresh, film, soonest], self.built)
         self.assertEqual([item["title"] for item in found], ["Sooner", "A show"], "this week's, soonest first; films stay out")
 
-    def test_the_strip_and_the_page(self):
-        events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(6)]
-        strip = build.fresh_strip(events, self.built)
-        self.assertEqual(strip.count("<li>"), build.FRESH_SHOWN)
-        self.assertIn(f'href="{R}?event=2026-09-20-show-0-the-sinclair"', strip)
-        self.assertIn(f'<a class="fresh-more" href="{R}new/">More just announced →</a>', strip)
-        self.assertEqual(build.fresh_strip([dict(self.listing(20), added="2026-09-01")], self.built), "", "nothing new, no strip")
+    def test_the_banner_and_the_page(self):
+        events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
+        banner, fresh = build.fresh_banner(events, self.built)
+        self.assertIn(f'<a class="fresh-one" href="{R}?event=2026-09-20-show-0-the-sinclair"><b>Show 0</b> at The Sinclair · Sep 20</a>', banner)
+        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a>', banner)
+        self.assertEqual(len(json.loads(fresh)), build.FRESH_SHOWN, "the few its script picks from")
+        self.assertEqual(build.fresh_banner([dict(self.listing(20), added="2026-09-01")], self.built), ("", "[]"), "nothing new, no banner")
         page = build.render_index(events, [self.venue], [], [], self.built, public=True, added=True)
         self.assertIn('<section class="day" data-added><h2><span class="date">Recently added</span></h2>', page)
         self.assertEqual(page.count('<section class="day"'), 1, "one list, newest first")
@@ -639,8 +639,10 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn("<title>Just announced in Boston · Pushpin Boston</title>", page)
         self.assertIn("Nothing announced in the last week.", page)
         home = build.render_index(events, [self.venue], [], [], self.built, public=True)
-        self.assertIn('<section class="fresh">', home)
-        self.assertNotIn('<section class="fresh">', page, "not on the page itself")
+        self.assertIn('<p class="fresh">', home)
+        self.assertIn("const FRESH = [{", home)
+        self.assertNotIn('<p class="fresh">', page, "not on the page itself")
+        self.assertIn("const FRESH = [],", page)
         self.assertIn(f'<li><a href="{R}new/">Just announced</a></li>', build.public_footer(""))
         self.assertIn(f"<loc>{build.PUBLIC_URL}new/</loc>", build.render_sitemap(self.built))
 

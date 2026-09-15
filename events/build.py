@@ -1902,7 +1902,7 @@ def listing_id(day, title, venue=""):
 # Just announced: concerts and talks first seen in the last week. Not films, whose theaters add showtimes
 # every day, which would crowd out everything else.
 NEW_KINDS = {"music", "art"}
-FRESH_SHOWN = 5  # How many the home page's strip shows, before "More just announced".
+FRESH_SHOWN = 8  # How many the home page's banner picks its one from, a different one each visit.
 
 
 def newly_added(events, built_at):
@@ -1912,20 +1912,21 @@ def newly_added(events, built_at):
     return sorted(fresh, key=lambda item: (item["added"], [-part for part in item["date"].timetuple()[:3]]), reverse=True)
 
 
-def fresh_strip(events, built_at):
-    """The home page's Just announced strip: the newest few, each a way into its view, and the page with the
-    rest. Nothing, when nothing's turned up this week."""
-    fresh = newly_added(events, built_at)[:FRESH_SHOWN]
+def fresh_banner(events, built_at):
+    """The home page's Just announced line: one of the newest few, and the way to the rest. The page's script
+    picks which, so a different one shows each visit; without it, the first. Nothing, when nothing's turned up
+    this week."""
+    fresh = [{"id": listing_id(item["date"], item["title"], item["venue"])[0], "title": item["title"],
+              "venue": item["venue"], "when": f"{item['date']:%b} {item['date'].day}"}
+             for item in newly_added(events, built_at)[:FRESH_SHOWN]]
     if not fresh:
-        return ""
-    rows = "".join(
-        f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}">'
-        f'<span class="source">{icon(item["category"])}<span>{html.escape(item["venue"])}</span></span>'
-        f'<span class="fresh-title">{html.escape(item["title"])}</span>'
-        f'<span class="fresh-when">{item["date"]:%a, %b} {item["date"].day}</span></a></li>'
-        for item in fresh)
-    return (f'<section class="fresh"><h2>Just announced</h2>\n<ul>{rows}</ul>\n'
-            f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">More just announced →</a></section>\n')
+        return "", "[]"
+    first = fresh[0]
+    banner = (f'<p class="fresh"><span class="fresh-tag">Just announced</span>'
+              f'<a class="fresh-one" href="{PUBLIC_ROOT}?{urlencode({"event": first["id"]})}">'
+              f'<b>{html.escape(first["title"])}</b> at {html.escape(first["venue"])} · {html.escape(first["when"])}</a>'
+              f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></p>\n')
+    return banner, json.dumps(fresh, ensure_ascii=False)
 
 
 def render_row(item):
@@ -2047,6 +2048,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         for name, fetched in stale
     )
     places = {item["venue"]: written(VENUE_ADDRESSES[item["venue"]]) for item in events if item["venue"] in VENUE_ADDRESSES}
+    # Just announced, a line over the home page's listings: one of the week's newest, which its script picks.
+    home = public and not (category or tonight or added or weekend is not None)
+    banner, fresh = fresh_banner(events, built_at) if home else ("", "[]")
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
     path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else PUBLIC_TONIGHT[0] if tonight else
             PUBLIC_NEW[0] if added else f"{PUBLIC_PAGES[category][0]}/" if category else "")
@@ -2067,7 +2071,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         + '\n<p class="empty" hidden>{"Nothing announced in the last week." if added else "Nothing coming up."}</p>\n<nav class="pager"></nav>\n' + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
-        + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)}, SHARE_URL = {json.dumps(PUBLIC_URL)};</script>\n"
+        + f"<script>const FRESH = {fresh}, PLACES = {json.dumps(places, ensure_ascii=False)}, "
+          f"SHARE_URL = {json.dumps(PUBLIC_URL)};</script>\n"
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
@@ -2080,8 +2085,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             _, title, description, tagline = PUBLIC_TONIGHT
         if added:
             _, title, description, tagline = PUBLIC_NEW
-        strip = fresh_strip(events, built_at) if not (category or tonight or added or weekend is not None) else ""
-        return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + strip + body, built_at, description=description,
+        return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + banner + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
 
@@ -3016,7 +3020,17 @@ INDEX_JS = """
   });
   part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
   view.addEventListener("click", event => { if (event.target === view) closeEvent(); }); // Outside it, on the backdrop.
-  // Just announced, at the top of the home page: each opens its view here, rather than loading the page again.
+  // Just announced, at the top of the home page: one of the week's newest, a different one each visit, opening
+  // its view here rather than loading the page again.
+  {
+    const banner = document.querySelector(".fresh-one");
+    if (banner && FRESH.length > 1) {
+      const pick = FRESH[Math.floor(Math.random() * FRESH.length)];
+      banner.href = new URL(SHARE_URL).pathname + "?event=" + encodeURIComponent(pick.id);
+      banner.innerHTML = "";
+      banner.append(Object.assign(document.createElement("b"), { textContent: pick.title }), ` at ${pick.venue} · ${pick.when}`);
+    }
+  }
   document.addEventListener("click", event => {
     const link = event.target.closest(".fresh a[href*='?event=']");
     if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -3201,24 +3215,20 @@ CSS = """
   .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .sold-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
-  /* Just announced, above the list on the home page: the newest few, and the way to the rest. */
-  .fresh { margin: 0 0 1.75rem; }
-  .fresh h2 { margin: 0 0 .35rem; color: #777; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-  .fresh li { border-top: 1px solid #1c1c1c; }
-  .fresh li:last-of-type { border-bottom: 1px solid #1c1c1c; }
-  .fresh a { display: grid; grid-template-columns: 10rem 1fr auto; gap: 1.25rem; align-items: baseline; padding: .4rem 0; color: inherit; }
-  .fresh a:hover { text-decoration: none; }
-  .fresh a:hover .fresh-title { text-decoration: underline; }
-  .fresh-title { color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fresh-when { color: #888; font-size: .9em; white-space: nowrap; }
-  .fresh-more { display: inline-block; margin-top: .55rem; color: #888; font-size: .85rem; }
-  .fresh-more:hover { color: #fff; }
+  /* Just announced, a line above the list on the home page: one of the newest, and the way to the rest. */
+  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: -.75rem 0 1.5rem; padding: .45rem 0; font-size: .85rem;
+           border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
+  .fresh-tag { flex: none; color: #777; font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+  .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
+  .fresh-one b { color: #fff; font-weight: 500; }
+  .fresh-more { flex: none; margin-left: auto; color: #888; }
+  .fresh-more:hover, .fresh-one:hover { color: #fff; text-decoration: none; }
+  .fresh-one:hover b { text-decoration: underline; }
   @media (max-width: 34rem) {
-    /* The venue over the name, as a row's is, but tighter: the strip shouldn't push today's listings off screen. */
-    .fresh { margin-bottom: 1.4rem; }
-    .fresh a { grid-template-columns: 1fr auto; gap: 0 .5rem; padding: .3rem 0; }
-    .fresh .source { grid-column: 1 / -1; font-size: .78rem; }
-    .fresh-title, .fresh-when { font-size: .95rem; }
+    /* The words over the listing and the way to the rest, which share the line under them. */
+    .fresh { display: grid; grid-template-columns: 1fr auto; gap: .1rem .6rem; }
+    .fresh-tag { grid-column: 1 / -1; }
+    .fresh-more { margin-left: 0; }
   }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
   .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }
