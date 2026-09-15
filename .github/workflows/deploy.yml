@@ -79,7 +79,7 @@ jobs:
             git push -qf git@github.com:grahamhagenah/events.git gh-pages
 
       # The same listings for anyone, as Pushpin Boston, pushed to the grahamhagenah/pushpin repo's gh-pages
-      # branch, which publishes it to pushpin.city (Boston's at /boston/).
+      # branch, which publishes it to pushpin.city (each city's at its own path: /boston/, /westernma/).
       - name: Publish the public events page
         if: hashFiles('dist/public/index.html') != ''
         env:

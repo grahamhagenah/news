@@ -1,0 +1,7 @@
+# Pushpin Western Mass (pushpin.city/westernma/): the Pioneer Valley and the Berkshires. The same format as
+# sources.txt, Boston's: how to read each source, its address, its kind, and its name. Add a venue's street
+# address to VENUE_ADDRESSES in build.py too.
+massmoca       https://massmoca.org/wp-json/tribe/events/v1/events   art    Mass MoCA
+amherstcinema  https://amherstcinema.org/                            film   Amherst Cinema
+indy           https://www.imagescinema.org/?site=57&circuit=49      film   Images Cinema
+indy           https://www.thetriplex.org/?site=115&circuit=76       film   Triplex Cinema

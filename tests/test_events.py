@@ -52,6 +52,10 @@ ROUTES = [
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
+    ("massmoca.org/wp-json", "massmoca.json"),
+    ("amherstcinema.org/calendar/month/2026-09-16", "amherst_day.html"),
+    ("amherstcinema.org/calendar/month/", "empty.html"),  # Its other days: none.
+    ("amherstcinema.org/films-and-events/", "amherst_film.html"),
 ]
 
 
@@ -242,6 +246,114 @@ class Readers(unittest.TestCase):
         self.assertIn("The Gravel Project/Lara Cwass", titles)
         self.assertFalse(any("No Event" in title or "Poetry Jam" in title for title in titles))
         self.assertTrue(all(item["times"] for item in found))
+
+
+class WesternMass(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(build, "fetch", sample)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_mass_moca_by_its_categories(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 15)):
+            found = build.read_mass_moca(source("massmoca", "https://massmoca.org/wp-json/tribe/events/v1/events", "art", "Mass MoCA"))
+        by_title = {item["title"]: item for item in found}
+        self.assertEqual(by_title["Madison Cunningham"]["category"], "music")
+        self.assertEqual(by_title["Madison Cunningham"]["detail"], "Ace Tour", "its subtitle, out of its name")
+        self.assertEqual(by_title["Lucinda Williams and her band"]["detail"], "FreshGrass Presents")
+        self.assertEqual((by_title["The Emilys & Daytime Moon"]["category"], by_title["The Emilys & Daytime Moon"]["detail"]),
+                         ("art", "Heather Abel & Kerri Schlottman"), "a subtitle span left open")
+        self.assertFalse(any("Storytime" in title for title in by_title), "not its events for kids")
+        self.assertEqual((by_title["Laurent Grasso"]["date"], by_title["Laurent Grasso"]["detail"]), (date(2026, 11, 7), "Metaphysical Maze"),
+                         "an exhibition, on the day it opens")
+        self.assertFalse(any("Kubisch" in title for title in by_title), "not one that opened years ago, and runs for years")
+        self.assertTrue(by_title["Madison Cunningham"]["price"] and by_title["Madison Cunningham"]["image"])
+
+    def test_tribe_titles(self):
+        self.assertEqual(build.tribe_title('Yana &#8211; SOLD OUT!'), ("Yana – SOLD OUT!", ""))
+        self.assertEqual(build.tribe_title('Uncomputable Thread <br> <span class="title-light">A Lecture Performance'),
+                         ("Uncomputable Thread", "A Lecture Performance"))
+
+    def test_amherst_cinema(self):
+        with mock.patch.object(build, "today", lambda: date(2026, 9, 16)):
+            found = build.read_amherst_cinema(source("amherstcinema", "https://amherstcinema.org/", "film", "Amherst Cinema"))
+        self.assertEqual([item["title"] for item in found], ["Finding Emily", "James McNeill Whistler", "Teenage Sex and Death at Camp Miasma"])
+        self.assertEqual(found[0]["times"], [time(16, 40)])
+        self.assertEqual(found[1]["detail"], "Exhibition On Screen", "its series")
+        self.assertTrue(all(item["link"].startswith("https://amherstcinema.org/films-and-events/") for item in found))
+        self.assertTrue(found[0]["image"].startswith("https://amherstcinema.org/sites/default/files/"))
+        self.assertTrue(found[0]["about"][0].startswith("When a lovesick musician"), "not its notes for particular days")
+
+    def test_indy_cinemas(self):
+        answers = json.loads((FIXTURES / "indy.json").read_text())
+        asked = []
+
+        def post(url, body, headers):
+            asked.append((url, headers))
+            return answers["dates"] if "datesWithShowing" in body["query"] else answers["showings"]
+        with mock.patch.object(build, "post_json", post), mock.patch.object(build, "today", lambda: date(2026, 9, 15)):
+            found = build.read_indy(source("indy", "https://www.imagescinema.org/?site=57&circuit=49", "film", "Images Cinema"))
+        self.assertEqual(asked[0], ("https://www.imagescinema.org/graphql", {"client-type": "consumer", "site-id": "57", "circuit-id": "49"}))
+        spider = [item for item in found if item["title"] == "Spider-Man: Brand New Day"]
+        self.assertEqual((spider[0]["date"], spider[0]["times"]), (date(2026, 9, 16), [time(15, 30)]), "UTC, as Boston's time")
+        self.assertEqual(spider[0]["link"], "https://www.imagescinema.org/movie/spider-man-brand-new-day")
+        self.assertTrue(spider[0]["image"].startswith("https://indy-systems.imgix.net/") and spider[0]["about"])
+        self.assertFalse(any(item["sold_out"] for item in found))
+        answers["showings"]["data"]["showingsForDate"]["data"][0]["seatsRemaining"] = 0
+        with mock.patch.object(build, "post_json", post), mock.patch.object(build, "today", lambda: date(2026, 9, 15)):
+            found = build.read_indy(source("indy", "https://www.imagescinema.org/?site=57&circuit=49", "film", "Images Cinema"))
+        self.assertTrue(found[0]["sold_out"], "no seats left")
+
+    def test_every_source_readable_and_placed(self):
+        sources = build.read_sources(WESTERN_MASS_SOURCES, "westernma")
+        self.assertEqual({s["name"] for s in sources}, {"Mass MoCA", "Amherst Cinema", "Images Cinema", "Triplex Cinema"})
+        for s in sources:
+            self.assertIn(s["kind"], build.READERS)
+            self.assertIn(s["name"], build.VENUE_ADDRESSES)
+            self.assertEqual(s["city"], "westernma")
+
+
+WESTERN_MASS_SOURCES = build.ROOT / "sources-westernma.txt"
+
+
+class Cities(unittest.TestCase):
+    def tearDown(self):
+        build.use_city(build.BOSTON_CITY)
+
+    def test_each_city_its_own_site(self):
+        self.assertEqual([city.slug for city in build.CITIES], ["boston", "westernma"])
+        self.assertEqual(build.BOSTON_CITY.sources, build.SOURCES_FILE)
+        build.use_city(build.WESTERN_MASS)
+        self.assertEqual((build.PUBLIC_URL, build.PUBLIC_ROOT, build.PUBLIC_NAME), ("https://pushpin.city/westernma/", "/westernma/", "Pushpin Western Mass"))
+        images = dict(source("indy", "x", "film", "Images Cinema"), public=True)
+        page = build.render_index([build.event(images, "Tony", date(2026, 9, 15), time(19, 0))], [images], [], [],
+                                  datetime(2026, 9, 15, tzinfo=timezone.utc), public=True)
+        self.assertIn("<title>Pushpin Western Mass · Concerts, films and talks in Western Mass</title>", page)
+        self.assertIn("the Pioneer Valley and the Berkshires", page)
+        self.assertIn('href="/westernma/film/"', page)
+        self.assertIn('<a href="/">All cities</a>', page)
+        self.assertIn('<span class="city">Western Mass</span>', page)
+        about = build.render_about([images], datetime(2026, 9, 15, tzinfo=timezone.utc))
+        self.assertNotIn("Somerville Theatre", about, "not Boston's question about its theaters")
+        self.assertIn("venues across the Pioneer Valley and the Berkshires", about)
+        build.use_city(build.BOSTON_CITY)
+        self.assertEqual(build.PUBLIC_URL, "https://pushpin.city/boston/")
+
+    def test_sources_by_city(self):
+        sinclair, images = source("axs", "x", "music", "The Sinclair"), source("indy", "y", "film", "Images Cinema")
+        sinclair["city"], images["city"] = "boston", "westernma"
+        items = [build.event(sinclair, "A", date(2026, 9, 15)), build.event(images, "B", date(2026, 9, 15))]
+        events, sources, failed, stale = build.by_city(build.WESTERN_MASS, items, [sinclair, images], ["The Sinclair", "Images Cinema"], [])
+        self.assertEqual(([item["title"] for item in events], [s["name"] for s in sources], failed), (["B"], ["Images Cinema"], ["Images Cinema"]))
+
+    def test_the_sites_own_pages(self):
+        home = build.render_cities(build.CITIES)
+        self.assertIn('<a href="/boston/">Boston</a>', home)
+        self.assertIn('<a href="/westernma/">Western Mass</a>', home)
+        self.assertIn("share/home.png", home)
+        missing = build.render_not_found(build.CITIES)
+        self.assertIn('["boston", "westernma"]', missing)
+        self.assertIn('"/boston/" + path.slice(1)', missing, "addresses from before there were cities, Boston's")
 
 
 class Skipping(unittest.TestCase):
@@ -770,8 +882,10 @@ class Page(unittest.TestCase):
         self.assertIn('<span class="here" hidden></span></nav>', home, "none on the home page, until a kind is shown")
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png?pin">', film)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/home.png?pin">', home)
-        for card in ("home", "music", "film", "talks"):
-            self.assertTrue((build.ROOT / "share" / f"{card}.png").exists(), f"share/{card}.png")
+        for city in build.CITIES:
+            for card in ("home", "music", "film", "talks", "tonight", "weekend"):
+                self.assertTrue((build.ROOT / "share" / city.slug / f"{card}.png").exists(), f"share/{city.slug}/{card}.png")
+        self.assertTrue((build.ROOT / "share" / "site" / "home.png").exists(), "pushpin.city's own")
         self.assertIn(f"<title>{build.PUBLIC_PAGES['film'][1]}</title>", film)
         # The film page has only films, and says which sources they're from.
         self.assertEqual(film.count('class="row" data-category="music"'), 0)

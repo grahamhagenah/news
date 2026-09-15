@@ -12,6 +12,7 @@ import sys
 import threading
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urljoin, urlsplit
@@ -20,7 +21,7 @@ from zoneinfo import ZoneInfo
 from shared import site as shared
 
 ROOT = Path(__file__).parent
-SOURCES_FILE = ROOT / "sources.txt"
+SOURCES_FILE = ROOT / "sources.txt"  # Boston's; each city has its own (CITIES).
 SKIP_FILE = ROOT / "skip.txt"
 OUT_DIR = ROOT.parent / "dist" / "events"
 REPO_URL = "https://github.com/grahamhagenah/news"
@@ -35,7 +36,9 @@ USER_AGENT = "Mozilla/5.0 (compatible; events-feed/1.0)"
 CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
 # The same listings, for anyone: its own name, About and Contact pages, shorter previews, and only the
-# sources fine to republish (a line in sources.txt ending in public=no stays on this page only).
+# sources fine to republish (a line in sources.txt ending in public=no stays on this page only). Pushpin has
+# a site for each city (CITIES); these are Boston's, and use_city() points them at another's while its pages
+# are written.
 PUBLIC_NAME = "Pushpin Boston"
 # Pushpin's site, at pushpin.city, with each city's listings at a path of their own: Boston's at /boston/.
 # PUBLIC_DIR is the whole site, as published; the city's pages are in its boston/ folder.
@@ -53,6 +56,7 @@ PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, 
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
 PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from select venues."
+PUBLIC_AROUND = "Boston, Cambridge, and Somerville"  # Where it covers, as its pages say: "… around Boston, Cambridge, and Somerville".
 # The public site's tonight page: what's still to come today. It holds tomorrow's too, and shows only the day it
 # is where it's read, so it rolls over at midnight, before the next build.
 PUBLIC_TONIGHT = ("tonight/", f"Things to do in Boston tonight · {PUBLIC_NAME}",
@@ -140,6 +144,11 @@ VENUE_ADDRESSES = {
     "West Newton Cinema": ("1296 Washington St", "Newton", "02465"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
     "Alamo Drafthouse": ("60 Seaport Blvd", "Boston", "02210"),
+    # Western Mass.
+    "Mass MoCA": ("1040 Mass MoCA Way", "North Adams", "01247"),
+    "Amherst Cinema": ("28 Amity St", "Amherst", "01002"),
+    "Images Cinema": ("50 Spring St", "Williamstown", "01267"),
+    "Triplex Cinema": ("70 Railroad St", "Great Barrington", "01230"),
 }
 
 
@@ -149,16 +158,16 @@ def postal(line):
     return (found.group(1).strip(), found.group(2).strip().title(), found.group(3) or "") if found else None
 
 
-def read_sources():
-    """sources.txt lines: how to read the source, its URL, a category, a name, and public=no for a source kept
-    off the public page."""
+def read_sources(path=None, city="boston"):
+    """A city's sources file's lines (sources.txt, Boston's): how to read the source, its URL, a category, a
+    name, and public=no for a source kept off the public page."""
     sources = []
-    for line in SOURCES_FILE.read_text().splitlines():
+    for line in (path or SOURCES_FILE).read_text().splitlines():
         if line.strip() and not line.lstrip().startswith("#"):
             kind, url, category, *words = line.split()
             name = [word for word in words if word != "public=no"]
             sources.append({"kind": kind, "url": url, "category": category, "name": " ".join(name),
-                            "public": len(name) == len(words)})
+                            "public": len(name) == len(words), "city": city})
     return sources
 
 
@@ -1021,29 +1030,163 @@ def read_passim(source):
 NOT_SHOWS = re.compile(r"^No Event Tonight|Poetry Jam", re.I)
 
 
-def read_tribe(source):
+def tribe_title(markup):
+    """An Events Calendar event's name, and any subtitle its site sets in a lighter span after it (Mass MoCA's
+    "Madison Cunningham <span class="title-light">Ace Tour</span>"), or before it ("FreshGrass Presents |"),
+    as its detail. The span is sometimes left open at the end."""
+    light = r'<span class="title-light[^"]*">(.*?)(?:</span>|$)'
+    subtitle = " · ".join(filter(None, (text(part).strip(" |") for part in re.findall(light, markup, re.S))))
+    return text(re.sub(light, " ", markup, flags=re.S)), subtitle
+
+
+def read_tribe(source, kinds=None):
     """WordPress sites using The Events Calendar (Lizard Lounge, The Rockwell), through its REST API. The URL
-    can pick a category, like ?categories=music for The Rockwell's music among its comedy and theater."""
+    can pick a category, like ?categories=music for The Rockwell's music among its comedy and theater. With
+    kinds, a map from the site's categories to ours, each event goes in the first of its categories there, and
+    one in none of them is left out; and one spanning days, an exhibition, is listed on the day it opens."""
     today = datetime.now(BOSTON).date()
-    end = today + timedelta(days=days_ahead(source["category"]))
+    end = today + timedelta(days=days_ahead("music" if kinds else source["category"]))
     window = {"start_date": today.isoformat(), "end_date": f"{end} 23:59:59", "per_page": 50}
     url = source["url"] + ("&" if "?" in source["url"] else "?") + urlencode(window)
     events = []
     while url:
         data = json.loads(fetch(url))
         for item in data.get("events", []):
-            title = html.unescape(item["title"])
+            title, subtitle = tribe_title(item["title"])
             if item.get("hide_from_listings") or NOT_SHOWS.search(title):
+                continue
+            tags = [html.unescape(tag.get("name", "")) for tag in item.get("categories") or []]
+            category = next((kinds[tag] for tag in tags if tag in kinds), None) if kinds else source["category"]
+            if not category:
                 continue
             # The venue's own local time, which for these is Boston's.
             moment = datetime.strptime(item["start_date"], "%Y-%m-%d %H:%M:%S")
+            last = datetime.strptime(item["end_date"], "%Y-%m-%d %H:%M:%S").date() if item.get("end_date") else moment.date()
             picture = item.get("image") if isinstance(item.get("image"), dict) else {}
-            events.append(event(source, title, moment.date(), None if item.get("all_day") else moment.time(),
-                                link=item.get("url", ""), about=about(item.get("description") or item.get("excerpt")),
-                                image=next((size["url"] for name in ("medium_large", "large") for size in [(picture.get("sizes") or {}).get(name) or {}]
-                                            if size.get("url")), picture.get("url") or ""),
-                                price=price_from(html.unescape(str(item.get("cost") or "")))))
+            described = about(item.get("description") or item.get("excerpt"))
+            image = next((size["url"] for name in ("medium_large", "large") for size in [(picture.get("sizes") or {}).get(name) or {}]
+                          if size.get("url")), picture.get("url") or "")
+            if kinds and last - moment.date() > timedelta(days=1):
+                found = opening(source, title, moment.date(), last, item.get("url", ""), about=described, image=image)
+            else:
+                found = [event(source, title, moment.date(), None if item.get("all_day") else moment.time(),
+                               link=item.get("url", ""), detail=subtitle, about=described, image=image,
+                               price=price_from(text(str(item.get("cost") or ""))))]
+            events += [dict(listing, category=category) for listing in found]
         url = data.get("next_rest_url")  # 50 to a page.
+    return events
+
+
+# Mass MoCA's kinds of event, from its calendar's categories, and where each goes: its concerts, and its talks,
+# readings, performances and exhibition openings; not its events for kids, or its long-running exhibitions,
+# which opened years ago.
+MASS_MOCA_KINDS = {"Concert": "music", "Film": "film", "Book Talk": "art", "Artist Talk": "art", "Dance": "art",
+                   "Theater": "art", "Performing Arts": "art", "Performance": "art", "Exhibition": "art", "Public Program": "art"}
+
+
+def read_mass_moca(source):
+    """Mass MoCA's calendar (The Events Calendar), sorted into our kinds by its own; not Kidspace's."""
+    return [listing for listing in read_tribe(source, MASS_MOCA_KINDS) if not re.search(r"\bstorytime\b|\bkidspace\b", listing["title"], re.I)]
+
+
+def read_amherst_cinema(source):
+    """Amherst Cinema's calendar, a page for each day (/calendar/month/2026-09-16, despite its name), each
+    film with its series and its times; and each film's own page, for its picture and what it's about."""
+    days = [today() + timedelta(days=n) for n in range(DAYS_AHEAD + 1)]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        pages = list(pool.map(lambda day: amherst_day(source["url"], day), days))
+    events = []
+    for day, page in zip(days, pages):
+        for row in page.split('<div class="views-row">')[1:]:
+            film = re.search(r'<div class="title"><a href="([^"]+)">(.*?)</a>', row, re.S)
+            if not film:
+                continue
+            series = re.search(r'<div class="series"><a[^>]*>(.*?)</a>', row, re.S)
+            times = [datetime.strptime(clock_text.strip().upper(), "%I:%M %p").time()
+                     for clock_text in re.findall(r'class="date-display-single">([^<]+)<', row)]
+            listing = event(source, text(film.group(2)), day, link=urljoin(source["url"], html.unescape(film.group(1))),
+                            detail=text(series.group(1)) if series else "")
+            listing["times"] = times
+            events.append(listing)
+    films = sorted({listing["link"] for listing in events})
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        details = dict(zip(films, pool.map(amherst_film, films)))
+    return [dict(listing, **details.get(listing["link"], {})) for listing in events]
+
+
+def amherst_day(url, day):
+    """One day's page of Amherst Cinema's calendar; nothing, if it doesn't load, not the rest of its days."""
+    try:
+        return fetch(urljoin(url, f"/calendar/month/{day.isoformat()}"), attempts=2, timeout=15)
+    except Exception:
+        return ""
+
+
+def amherst_film(link):
+    """A film's picture and what it's about (who directed it, its rating), from its own page at Amherst Cinema."""
+    try:
+        page = fetch(link, attempts=1, timeout=15)
+    except Exception:
+        return {}
+    picture = re.search(r'<img[^>]+src="([^"]*/styles/field_image_front/[^"]+)"', page)
+
+    def field(name):
+        found = re.search(rf'field-name-field-{name}\b[^>]*>(.*?)</div>\s*</div>', page, re.S)
+        return text(found.group(1)) if found else ""
+    body = re.search(r'field-name-body\b[^>]*>(.*?)</div>\s*</div>\s*</div>', page, re.S)
+    facts = " · ".join(filter(None, [field("director").replace("\xa0", " "), field("rating")]))
+    # Not its notes for particular days ("On Tuesday 9/15, the 2:10 showtime is presented with Open Captions",
+    # "Last day Thursday 9/17"), which read wrong on the rest.
+    described = [line for line in about(body.group(1) if body else "") if not re.match(r"(On \w+ \d{1,2}/\d{1,2}|Last day)\b", line)]
+    return {"image": html.unescape(picture.group(1)) if picture else "", "about": described + ([facts] if facts else [])}
+
+
+def post_json(url, body, headers=None):
+    """What a JSON API answers a POST with (a GraphQL query), as data."""
+    import urllib.request
+    request = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers={
+        "Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT, **(headers or {})})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.loads(response.read())
+
+
+INDY_SHOWINGS = """query ($date: String, $siteIds: [ID]) { showingsForDate(date: $date, siteIds: $siteIds) {
+  data { time published private seatsRemaining movie { name urlSlug bannerImage posterImage synopsis directedBy duration rating } } } }"""
+INDY_DATES = "query ($siteIds: [ID]) { datesWithShowing(siteIds: $siteIds) { value } }"
+
+
+def read_indy(source):
+    """Cinemas whose sites run on Indy Systems (Images Cinema, the Triplex), through the API their pages use,
+    which answers only for the theater its site and circuit say (in the URL: ?site=57&circuit=49). Each day
+    with showings ahead, each with its film, its picture and what it's about; a showing with no seats left is
+    sold out."""
+    address = urlsplit(source["url"])
+    ids = dict(pair.split("=", 1) for pair in address.query.split("&") if "=" in pair)
+    api = f"{address.scheme}://{address.netloc}/graphql"
+    headers = {"client-type": "consumer", "site-id": ids["site"], "circuit-id": ids["circuit"]}
+    dates = json.loads(post_json(api, {"query": INDY_DATES, "variables": {"siteIds": [ids["site"]]}}, headers)
+                       ["data"]["datesWithShowing"]["value"])
+    days = [day for day in map(date.fromisoformat, dates) if today() <= day <= window_end("film")]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        answers = list(pool.map(lambda day: post_json(api, {"query": INDY_SHOWINGS, "variables": {
+            "date": day.isoformat(), "siteIds": [ids["site"]]}}, headers), days))
+    events = []
+    for answer in answers:
+        for showing in (answer.get("data") or {}).get("showingsForDate", {}).get("data") or []:
+            film = showing.get("movie") or {}
+            if not showing.get("published") or showing.get("private") or not film.get("name"):
+                continue
+            day, start = at_boston(datetime.fromisoformat(showing["time"].replace("Z", "+00:00")))
+            minutes = film.get("duration") or 0
+            facts = " · ".join(filter(None, [f"Directed by {film['directedBy']}" if film.get("directedBy") else "",
+                                             f"{minutes // 60}h {minutes % 60}m" if minutes else "", film.get("rating") or ""]))
+            # Its wide picture at 800 by 450, or else its poster, whole.
+            picture = (f"https://indy-systems.imgix.net/{film['bannerImage']}?w=800&h=450&fit=crop&auto=format,compress" if film.get("bannerImage")
+                       else f"https://indy-systems.imgix.net/{film['posterImage']}?w=600&auto=format,compress" if film.get("posterImage") else "")
+            listing = event(source, film["name"], day, start, link=f"{address.scheme}://{address.netloc}/movie/{film.get('urlSlug', '')}",
+                            about=about(film.get("synopsis") or "") + ([facts] if facts else []), image=picture,
+                            sold_out=showing.get("seatsRemaining") == 0)
+            events.append(listing)
     return events
 
 
@@ -1256,6 +1399,9 @@ READERS = {
     "squarespace": read_squarespace,
     "passim": read_passim,
     "tribe": read_tribe,
+    "massmoca": read_mass_moca,
+    "amherstcinema": read_amherst_cinema,
+    "indy": read_indy,
     "hfa": read_hfa,
     "frenchlibrary": read_french_library,
     "ica": read_ica,
@@ -1576,7 +1722,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         title, description, tagline = PUBLIC_PAGES[category][1:] if category else (PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
         if weekend is not None:
             _, name, title, description = PUBLIC_WEEKENDS[weekend]
-            tagline = (f"{name} around Boston, Cambridge, and Somerville: {friday:%A, %B} {friday.day} to "
+            tagline = (f"{name} around {PUBLIC_AROUND}: {friday:%A, %B} {friday.day} to "
                        f"{sunday:%A, %B} {sunday.day}.")
         if tonight:
             _, title, description, tagline = PUBLIC_TONIGHT
@@ -1629,12 +1775,14 @@ def public_footer(path, notes="", names=""):
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]),
         ("When", [("Tonight", PUBLIC_TONIGHT[0])] + [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
-        (PUBLIC_NAME, [("About", "about/"), ("Calendars", "about/#calendars"), ("Contact", "contact/")]),
+        (PUBLIC_NAME, [("About", "about/"), ("Calendars", "about/#calendars"), ("Contact", "contact/")]
+         + [("All cities", "/")] * (len(CITIES) > 1)),  # pushpin.city itself, which lists them.
     ]
     marked = ' aria-current="page"'
     lists = "".join(
         f'<div><h2>{html.escape(heading)}</h2><ul>' + "".join(
-            f'<li><a href="{root}{href}"{marked if href == path else ""}>{html.escape(label)}</a></li>' for label, href in links)
+            f'<li><a href="{href if href.startswith("/") else root + href}"{marked if href == path else ""}>{html.escape(label)}</a></li>'
+            for label, href in links)
         + "</ul></div>"
         for heading, links in groups
     )
@@ -1649,11 +1797,12 @@ PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, (slug, *_) in PUBLIC_PAGES.i
 SHARE_CARDS = {slug for slug, *_ in PUBLIC_PAGES.values()} | {"tonight", "weekend"}
 
 
-def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
+def public_page(path, title, body, built_at=None, description=None, data=None):
     """A page of the public site, at path ("", "about/", "film/"): its name, the way home, in the header,
     About and Contact in the footer; search engines welcome, told what the page is, where it lives, and (the
     listings) its events."""
     root = PUBLIC_ROOT
+    description = description or PUBLIC_DESCRIPTION
     links = [(PUBLIC_NAME, root, path == "")]
     card = path.split("/")[0]
     if "<footer>" not in body:
@@ -1718,6 +1867,79 @@ FAQS = [
 ]
 
 
+@dataclass
+class City:
+    """A city's Pushpin: its folder on pushpin.city and its sources file (both named for it), what it's called,
+    and what its pages say (as the PUBLIC_ names above say them for Boston)."""
+    slug: str
+    name: str
+    title: str
+    tagline: str
+    description: str
+    around: str
+    tonight: tuple
+    weekends: list
+    pages: dict
+    faqs: list
+
+    @property
+    def sources(self):
+        return SOURCES_FILE if self.slug == "boston" else ROOT / f"sources-{self.slug}.txt"
+
+
+BOSTON_CITY = City("boston", PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_TONIGHT,
+                   PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS)
+
+
+def city_texts(slug, name, place, around, film_description):
+    """A city's page names and descriptions, in the words Boston's use: place in titles ("Concerts in Western
+    Mass"), around in the rest ("around the Pioneer Valley and the Berkshires")."""
+    return City(
+        slug, name, f"{name} · Concerts, films and talks in {place}",
+        f"Concerts, films, and talks around {around}, aggregated from select venues.",
+        f"Concerts for the next two months, and film screenings and art talks for the next month, around {around}, "
+        f"on one page, from select venues.",
+        around,
+        ("tonight/", f"Things to do in {place} tonight · {name}",
+         f"Concerts, films and talks still to come today around {around}, aggregated from select venues.",
+         f"Tonight around {around}: everything still to come today, aggregated from select venues."),
+        [("weekend/", "This weekend", f"Things to do in {place} this weekend · {name}",
+          f"Concerts, films and talks around {around} this weekend, Friday to Sunday, aggregated from select venues."),
+         ("weekend/next/", "Next weekend", f"Things to do in {place} next weekend · {name}",
+          f"Concerts, films and talks around {around} next weekend, Friday to Sunday, aggregated from select venues.")],
+        {"music": ("music", f"Concerts in {place} · {name}",
+                   f"Concerts around {around} for the next two months, aggregated from select venues.",
+                   f"Concerts around {around}, aggregated from select venues."),
+         "film": ("film", f"Movie showtimes in {place} · {name}", film_description,
+                  f"Films around {around}, aggregated from select theaters."),
+         "art": ("talks", f"Art, exhibitions and talks in {place} · {name}",
+                 f"Talks, readings, performances and exhibition openings around {around} for the next month, aggregated "
+                 f"from select venues.",
+                 f"Art and talks around {around}, aggregated from select venues.")},
+        # Boston's questions, but the one about Boston's theaters.
+        [(question, answer) for question, answer in FAQS if "Somerville Theatre" not in question])
+
+
+WESTERN_MASS = city_texts("westernma", "Pushpin Western Mass", "Western Mass", "the Pioneer Valley and the Berkshires",
+                          "Showtimes at Amherst Cinema, Images Cinema and the Triplex, for the next month, aggregated from "
+                          "select theaters.")
+# Each city's Pushpin, at pushpin.city/<its slug>/, from sources-<its slug>.txt (Boston's, sources.txt).
+CITIES = [BOSTON_CITY, WESTERN_MASS]
+
+
+def use_city(city):
+    """Point the public site's names (PUBLIC_NAME, PUBLIC_URL, and the rest) at a city's: its pages are written
+    one city at a time, and read these as they go."""
+    global PUBLIC_NAME, PUBLIC_URL, PUBLIC_ROOT, CITY_DIR, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND
+    global PUBLIC_TONIGHT, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS
+    PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND = (
+        city.name, city.title, city.tagline, city.description, city.around)
+    PUBLIC_TONIGHT, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS = city.tonight, city.weekends, city.pages, city.faqs
+    PUBLIC_URL = f"{PUBLIC_SITE}{city.slug}/"
+    PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
+    CITY_DIR = PUBLIC_DIR / city.slug
+
+
 def render_about(sources, built_at, events=()):
     """What the public site is, how to use it, and every venue it reads, by kind: each a link to its events,
     with how many it has coming up. A venue is under each kind it has events of (the MFA's concerts and films
@@ -1748,7 +1970,7 @@ def render_about(sources, built_at, events=()):
     faq = "\n".join(f"<details><summary>{html.escape(question)}</summary><p>{answer.replace('{root}', root)}</p></details>"
                     for question, answer in FAQS)
     body = f"""<div class="prose">
-<p>{PUBLIC_NAME} puts concerts, films, and talks from venues across Boston, Cambridge, and Somerville on one page,
+<p>{PUBLIC_NAME} puts concerts, films, and talks from venues across {PUBLIC_AROUND} on one page,
 day by day: concerts two months ahead, films and talks one month.</p>
 <p>This is a curated feed, with an emphasis on independent venues.</p>
 <p>Event info is gathered from select venues every few hours. Times and details can change, so check with the
@@ -1789,8 +2011,8 @@ to it.</li>
          "acceptedAnswer": {"@type": "Answer", "text": html.unescape(re.sub(r"<[^>]+>", "", answer))}}  # Links' words kept.
         for question, answer in answers]}
     return public_page("about/", f"About · {PUBLIC_NAME}", body,
-                       description=f"What {PUBLIC_NAME} is, how to use it, the Boston, Cambridge and Somerville venues it "
-                                   f"lists, and questions about it.", data=data)
+                       description=f"What {PUBLIC_NAME} is, how to use it, the venues it lists around "
+                                   f"{PUBLIC_AROUND.replace(', and', ' and')}, and questions about it.", data=data)
 
 
 def render_redirect(address, paths=False):
@@ -1811,6 +2033,58 @@ def render_redirect(address, paths=False):
             f'<meta name="color-scheme" content="dark">\n<style>html {{ background: #000; }}</style>\n'
             f"<script>location.replace({target} + location.search + location.hash);</script>\n"
             f'<p><a href="{link}">{html.escape(PUBLIC_NAME)}</a></p>\n</html>\n')
+
+
+def render_cities(cities):
+    """pushpin.city itself: each city's Pushpin, a link to it with what it covers."""
+    links = "".join(
+        f'<li><a href="/{city.slug}/">{html.escape(city.name.partition(" ")[2])}</a><p>{html.escape(city.tagline)}</p></li>\n'
+        for city in cities)
+    description = f"Concerts, films, and talks, aggregated from select venues: {', '.join(city.name.partition(' ')[2] for city in cities)}."
+    return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>Pushpin</title>\n<meta name="description" content="{html.escape(description)}">\n'
+            f'<link rel="canonical" href="{PUBLIC_SITE}">\n<link rel="icon" href="/favicon.svg?pin3" type="image/svg+xml">\n'
+            f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?pin3">\n'
+            f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Pushpin">\n'
+            f'<meta property="og:title" content="Pushpin">\n<meta property="og:description" content="{html.escape(description)}">\n'
+            f'<meta property="og:url" content="{PUBLIC_SITE}">\n<meta property="og:image" content="{PUBLIC_SITE}share/home.png?pin">\n'
+            f'<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n'
+            f'<meta name="twitter:card" content="summary_large_image">\n<meta name="color-scheme" content="dark">\n'
+            f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>\n'
+            '<style>\n'
+            '  html { background: #000; color: #fff; font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }\n'
+            '  body { max-width: 34rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }\n'
+            '  h1 { display: flex; align-items: center; gap: .45rem; margin: 0 0 .5rem; font-size: 1.35rem; letter-spacing: -.01em; }\n'
+            '  h1 .pin { width: 1.1rem; height: 1.1rem; }\n'
+            '  .intro { margin: 0 0 2.5rem; color: #8c8c8c; }\n'
+            '  ul { margin: 0; padding: 0; list-style: none; }\n'
+            '  li { padding: 1.1rem 0; border-top: 1px solid #1c1c1c; }\n'
+            '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
+            '  li a { color: #fff; font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
+            '  li a::after { content: " →"; color: #555; font-weight: 400; }\n'
+            '  li a:hover { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
+            '  li p { margin: .3rem 0 0; color: #8c8c8c; }\n'
+            '</style>\n'
+            f'<h1>{PIN_MARK}Pushpin</h1>\n<p class="intro">Concerts, films, and talks, aggregated from select venues. No algorithms, no ads, no accounts.</p>\n'
+            f'<ul>\n{links}</ul>\n</html>\n')
+
+
+def render_not_found(cities):
+    """pushpin.city's page for an address it doesn't have. One under a city's folder goes to that city's home
+    page, or a listing's page that's gone (it's passed), to its view, which opens the next of its series; any
+    other, from before there were cities (/music/, /about.html), to the same under Boston's."""
+    slugs = json.dumps([city.slug for city in cities])
+    return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<title>Pushpin</title>\n'
+            f'<meta name="color-scheme" content="dark">\n<style>html {{ background: #000; }}</style>\n'
+            '<script>\n'
+            '  const path = location.pathname;\n'
+            f'  const city = {slugs}.find(slug => path.startsWith("/" + slug + "/"));\n'
+            '  const rest = city ? path.slice(city.length + 2) : "";\n'
+            '  location.replace(!city ? "/boston/" + path.slice(1) + location.search + location.hash\n'
+            '    : rest.startsWith("e/") ? "/" + city + "/?event=" + rest.slice(2).split("/")[0]\n'
+            '    : "/" + city + "/" + location.search + location.hash);\n'
+            '</script>\n'
+            f'<p><a href="/" style="color: #fff">Pushpin</a></p>\n</html>\n')
 
 
 # Calendar feeds to subscribe to: one for each kind, and one for each venue, under the city's calendar/ folder.
@@ -1850,7 +2124,7 @@ def render_calendar(name, description, items, built_at):
     times in its notes, or all day when it has none. Its id stays the same from build to build, so an app
     updates it rather than adding it again."""
     stamp = f"{built_at.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}"
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Pushpin//Pushpin Boston//EN", "CALSCALE:GREGORIAN",
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//Pushpin//{PUBLIC_NAME}//EN", "CALSCALE:GREGORIAN",
              "METHOD:PUBLISH", f"X-WR-CALNAME:{ics_text(name)}", f"X-WR-CALDESC:{ics_text(description)}",
              "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
     for item in sorted(items, key=lambda item: (item["date"], item["times"][:1], item["title"].casefold())):
@@ -1877,7 +2151,7 @@ def calendar_feeds(sources, events, built_at):
     public = {source["name"] for source in sources if source.get("public", True)}
     events = [item for item in events if item["source"] in public]
     feeds = {f"calendar/{slug}.ics": render_calendar(f"{PUBLIC_NAME} · {CATEGORIES[key]}",
-                                                     f"{CATEGORIES[key]} around Boston, Cambridge, and Somerville, from {PUBLIC_NAME}.",
+                                                     f"{CATEGORIES[key]} around {PUBLIC_AROUND}, from {PUBLIC_NAME}.",
                                                      [item for item in events if item["category"] == key], built_at)
              for key, (slug, *_) in PUBLIC_PAGES.items()}
     for name in sorted({item["source"] for item in events}):
@@ -2757,7 +3031,7 @@ def main():
         print(f"Built at {previous['built']}; not due yet, so not rebuilding.")
         return
 
-    sources = read_sources()
+    sources = [source for city in CITIES for source in read_sources(city.sources, city.slug)]
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(load, sources))
 
@@ -2771,22 +3045,47 @@ def main():
     events = merge_showings([item for item in events if not (skip and item["category"] != "film" and skip.search(item["title"]))])
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
-    (OUT_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at))
+    # The personal events page: Boston's. Its listings.json keeps every city's, for falling back on.
+    personal = by_city(BOSTON_CITY, events, sources, failed, stale)
+    (OUT_DIR / "index.html").write_text(render_index(*personal, built_at))
     record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at)}
     (OUT_DIR / "listings.json").write_text(json.dumps(record, ensure_ascii=False))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html with {len(events)} listings, and listings.json")
+    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html with {len(personal[0])} listings, and listings.json")
 
-    # The public site, from the same listings.
+    # Each city's public site, from the same listings; then the site's own root.
+    for city in CITIES:
+        use_city(city)
+        write_city(city, *by_city(city, events, sources, failed, stale), built_at)
+    use_city(BOSTON_CITY)
+    shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
+    shutil.copytree(ROOT / "share" / "site", PUBLIC_DIR / "share", dirs_exist_ok=True)
+    (PUBLIC_DIR / "index.html").write_text(render_cities(CITIES))
+    (PUBLIC_DIR / "404.html").write_text(render_not_found(CITIES))
+    # robots.txt, which only works at the site's root: each city's sitemap.
+    (PUBLIC_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n\n" + "".join(
+        f"Sitemap: {PUBLIC_SITE}{city.slug}/sitemap.xml\n" for city in CITIES))
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: the cities, robots.txt and 404.html")
+
+
+def by_city(city, events, sources, failed, stale):
+    """A city's share of the build: its events and sources, and which of them failed or are from before."""
+    names = {source["name"] for source in sources if source["city"] == city.slug}
+    return ([item for item in events if item["source"] in names], [source for source in sources if source["name"] in names],
+            [name for name in failed if name in names], [(name, fetched) for name, fetched in stale if name in names])
+
+
+def write_city(city, events, sources, failed, stale, built_at):
+    """A city's public site, in its folder (CITY_DIR), with use_city() pointing the PUBLIC_ names at it."""
     CITY_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", CITY_DIR, dirs_exist_ok=True)
     shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
-    shutil.copytree(ROOT / "share", CITY_DIR / "share", dirs_exist_ok=True)
+    shutil.copytree(ROOT / "share" / city.slug, CITY_DIR / "share", dirs_exist_ok=True)
     (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
     for page, render in (("about", lambda: render_about(sources, built_at, events)), ("contact", render_contact)):
         (CITY_DIR / page).mkdir(exist_ok=True)
         (CITY_DIR / page / "index.html").write_text(render())
-        # Where they were first, as about.html and contact.html, on to where they are.
-        (CITY_DIR / f"{page}.html").write_text(render_redirect(f"{PUBLIC_URL}{page}/"))
+        if city is BOSTON_CITY:  # Where they were first, as about.html and contact.html, on to where they are.
+            (CITY_DIR / f"{page}.html").write_text(render_redirect(f"{PUBLIC_URL}{page}/"))
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (CITY_DIR / slug).mkdir(exist_ok=True)
         (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
@@ -2803,13 +3102,8 @@ def main():
     (CITY_DIR / "calendar").mkdir(exist_ok=True)
     for path, feed in calendar_feeds(sources, events, built_at).items():
         (CITY_DIR / path).write_bytes(feed.encode())  # As written: its lines end \r\n, as the format asks.
-    # The site's root: straight to Boston, the only city so far, and robots.txt, which only works there.
-    shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
-    (PUBLIC_DIR / "index.html").write_text(render_redirect(PUBLIC_URL))
-    (PUBLIC_DIR / "404.html").write_text(render_redirect(PUBLIC_URL, paths=True))
-    (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
     print(f"Wrote {CITY_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, weekend/, weekend/next/, "
-          "about/, contact/ and sitemap.xml; and at the site's root, the way to it and robots.txt")
+          f"about/, contact/ and sitemap.xml, with {len(events)} listings")
 
 
 if __name__ == "__main__":
