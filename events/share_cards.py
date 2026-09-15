@@ -56,12 +56,12 @@ def card(heading, line, kinds, path):
 
 
 def touch_icon():
-    """The icon an iPhone puts on its home screen (180×180), which it won't take as SVG: the favicon's red pin,
-    on black to the edges, since the phone rounds the corners itself."""
-    pin = re.search(r'<svg x=.*?</svg>', (PUSHPIN / "favicon.svg").read_text()).group()
-    pin = re.sub(r'x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*"', 'x="34" y="34" width="112" height="112"', pin)
+    """The icon an iPhone puts on its home screen (180×180), which it won't take as SVG: the favicon's pin in
+    white, on black to the edges (the phone rounds the corners itself, and fills any transparency with black)."""
+    pin = re.search(r"<g .*?</g>", (PUSHPIN / "favicon.svg").read_text()).group().replace("<g ", '<g stroke="#fff" ', 1)
     return (f'<!doctype html><style>html, body {{ margin: 0; width: 180px; height: 180px; background: #000; }}</style>'
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">{pin}</svg>')
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">'
+            f'<svg x="30" y="30" width="120" height="120" viewBox="0 0 24 24">{pin}</svg></svg>')
 
 
 def shoot(html_page, size, destination, scratch):

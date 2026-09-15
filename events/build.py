@@ -1358,9 +1358,9 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
     head = "\n".join([
-        # The pin (events/pushpin). ?pin2, since browsers keep a site's old icon long after it changes.
-        f'<link rel="icon" href="{root}favicon.svg?pin2" type="image/svg+xml">',
-        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?pin2">',
+        # The pin (events/pushpin). ?pin3, since browsers keep a site's old icon long after it changes.
+        f'<link rel="icon" href="{root}favicon.svg?pin3" type="image/svg+xml">',
+        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?pin3">',
         f'<link rel="canonical" href="{address}">',
         f'<meta name="description" content="{html.escape(description)}">',
         # What a link to it shows when shared.
