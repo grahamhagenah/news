@@ -2198,7 +2198,7 @@ INDEX_JS = """
     b.addEventListener("click", () => addToCalendar(t));
     return b;
   }));
-  // Together, on a line under what they're for, going on to another only when there are more than a line holds.
+  // Together, to the right of what they're for, going on to another line there when there are more than fit.
   const group = buttons => {
     const times = Object.assign(document.createElement("span"), { className: "event-group" });
     times.append(...buttons);
@@ -2223,7 +2223,7 @@ INDEX_JS = """
     box.classList.add("clamped");
     more.hidden = true;
     requestAnimationFrame(() => { // Once the view's open, to measure it.
-      const long = box.scrollHeight > box.clientHeight + 8;
+      const long = box.scrollHeight > box.clientHeight + 40; // Not to hide just a line or two.
       box.classList.toggle("clamped", long);
       more.hidden = !long;
       more.textContent = "Read more";
@@ -2545,15 +2545,18 @@ CSS = """
   .event-tickets { display: flex; justify-content: center; gap: .3em; margin: 1.1rem 0 .9rem; padding: .7rem 1rem; border-radius: 10px;
                    background: #fff; color: #000; font-weight: 600; text-decoration: none; }
   .event-tickets:hover { background: #e2e2e2; text-decoration: none; }
-  /* Its times under what they're for ("Add to calendar", or each theater), however many there are. */
-  .event-times { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; margin: 0 0 1rem; }
+  /* Its times to the right of what they're for ("Add to calendar", or each theater), going on to another line
+     there, not under it, when there are more than fit. */
+  .event-times { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .6rem; margin: 0 0 1rem; }
   .event-label { color: #777; font-size: .8rem; }
   .event-time { padding: .3rem .7rem; border: 1px solid #333; border-radius: 999px; background: none; color: #ddd;
                 font: inherit; font-size: .85rem; cursor: pointer; }
   .event-time:hover, .event-time:focus-visible { border-color: #888; color: #fff; outline: none; }
   .event-places { margin: 1.1rem 0 1rem; }
   .event-group { display: flex; flex-wrap: wrap; gap: .45rem; }
-  .event-places li { display: flex; flex-direction: column; align-items: flex-start; gap: .45rem; padding: .65rem 0; border-top: 1px solid #1c1c1c; }
+  .event-places li { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .75rem; padding: .55rem 0;
+                     border-top: 1px solid #1c1c1c; }
+  .event-places .event-group { justify-content: flex-end; }
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
   .event-places a { color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
