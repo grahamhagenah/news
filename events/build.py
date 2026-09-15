@@ -1335,7 +1335,7 @@ def public_footer(path, notes="", names=""):
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]),
         ("When", [("Tonight", PUBLIC_TONIGHT[0])] + [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
-        (PUBLIC_NAME, [("About", "about.html"), ("Contact", "contact.html")]),
+        (PUBLIC_NAME, [("About", "about/"), ("Contact", "contact/")]),
     ]
     marked = ' aria-current="page"'
     lists = "".join(
@@ -1348,12 +1348,17 @@ def public_footer(path, notes="", names=""):
     return f'<footer>\n<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n{where}{notes}</footer>\n'
 
 
+# The pages with a share card of their own (events/share); the rest show the home page's.
+SHARE_CARDS = {slug for slug, *_ in PUBLIC_PAGES.values()} | {"tonight", "weekend"}
+
+
 def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION, data=None):
-    """A page of the public site, at path ("", "about.html", "film/"): its name, the way home, in the header,
+    """A page of the public site, at path ("", "about/", "film/"): its name, the way home, in the header,
     About and Contact in the footer; search engines welcome, told what the page is, where it lives, and (the
     listings) its events."""
     root = PUBLIC_ROOT
     links = [(PUBLIC_NAME, root, path == "")]
+    card = path.split("/")[0]
     if "<footer>" not in body:
         body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
@@ -1371,7 +1376,7 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         f'<meta property="og:url" content="{address}">',
         # Its card (events/share, made by share_cards.py): a kind's page its own, the rest the site's.
         # ?pin: apps keep a card they've seen, however long it's been replaced, until its address changes.
-        f'<meta property="og:image" content="{PUBLIC_URL}share/{path.split("/")[0] if path.endswith("/") else "home"}.png?pin">',
+        f'<meta property="og:image" content="{PUBLIC_URL}share/{card if card in SHARE_CARDS else "home"}.png?pin">',
         '<meta property="og:image:width" content="1200">',
         '<meta property="og:image:height" content="630">',
         f'<meta property="og:image:alt" content="{html.escape(PUBLIC_NAME)}: {html.escape(PUBLIC_TAGLINE)}">',
@@ -1401,9 +1406,9 @@ with the venue before you go: every listing links to its page there. The descrip
 words, in short.</p>
 <p>No ads, no accounts, nothing to sign up for.</p>
 {groups}
-<p>Know a venue that should be here, or spotted a mistake? <a href="contact.html">Get in touch</a>.</p>
+<p>Know a venue that should be here, or spotted a mistake? <a href="{PUBLIC_ROOT}contact/">Get in touch</a>.</p>
 </div>"""
-    return public_page("about.html", f"About · {PUBLIC_NAME}", body,
+    return public_page("about/", f"About · {PUBLIC_NAME}", body,
                        description=f"What {PUBLIC_NAME} is, and the Boston, Cambridge and Somerville venues it lists.")
 
 
@@ -1426,7 +1431,7 @@ def render_redirect(address, paths=False):
 def render_sitemap(built_at):
     """The public site's pages for search engines: the listings, changing every few hours, and the others."""
     pages = ([("", "hourly", "1.0"), (PUBLIC_TONIGHT[0], "hourly", "0.9")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
-             + [("about.html", "monthly", "0.5"), ("contact.html", "yearly", "0.3")])
+             + [("about/", "monthly", "0.5"), ("contact/", "yearly", "0.3")])
     urls = "".join(
         f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
         f"<changefreq>{often}</changefreq><priority>{priority}</priority></url>\n"
@@ -1441,7 +1446,7 @@ def render_contact():
 <p class="intro">A venue to add, a listing that’s wrong, or anything else: send a note.</p>
 <form class="contact" action="https://formsubmit.co/{PUBLIC_CONTACT}" method="POST">
 <input type="hidden" name="_subject" value="{PUBLIC_NAME}: a message">
-<input type="hidden" name="_next" value="{PUBLIC_URL}contact.html?sent">
+<input type="hidden" name="_next" value="{PUBLIC_URL}contact/?sent">
 <input type="hidden" name="_template" value="box">
 <input type="text" name="_honey" class="honey" tabindex="-1" autocomplete="off" aria-hidden="true">
 <label>Your email, for a reply <input type="email" name="email" required></label>
@@ -1458,7 +1463,7 @@ def render_contact():
     document.querySelector(".sent").hidden = false;
   }}
 </script>"""
-    return public_page("contact.html", f"Contact · {PUBLIC_NAME}", body,
+    return public_page("contact/", f"Contact · {PUBLIC_NAME}", body,
                        description=f"Suggest a venue for {PUBLIC_NAME}, or tell us about a listing that’s wrong.")
 
 
@@ -1929,8 +1934,11 @@ def main():
     shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
     shutil.copytree(ROOT / "share", CITY_DIR / "share", dirs_exist_ok=True)
     (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
-    (CITY_DIR / "about.html").write_text(render_about(sources, built_at))
-    (CITY_DIR / "contact.html").write_text(render_contact())
+    for page, render in (("about", lambda: render_about(sources, built_at)), ("contact", render_contact)):
+        (CITY_DIR / page).mkdir(exist_ok=True)
+        (CITY_DIR / page / "index.html").write_text(render())
+        # Where they were first, as about.html and contact.html, on to where they are.
+        (CITY_DIR / f"{page}.html").write_text(render_redirect(f"{PUBLIC_URL}{page}/"))
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (CITY_DIR / slug).mkdir(exist_ok=True)
         (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
@@ -1946,7 +1954,7 @@ def main():
     (PUBLIC_DIR / "404.html").write_text(render_redirect(PUBLIC_URL, paths=True))
     (PUBLIC_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {PUBLIC_URL}sitemap.xml\n")
     print(f"Wrote {CITY_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, weekend/, weekend/next/, "
-          "about.html, contact.html and sitemap.xml; and at the site's root, the way to it and robots.txt")
+          "about/, contact/ and sitemap.xml; and at the site's root, the way to it and robots.txt")
 
 
 if __name__ == "__main__":

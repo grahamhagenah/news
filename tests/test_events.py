@@ -516,11 +516,11 @@ class Page(unittest.TestCase):
         self.assertNotIn("Newsfeed", public)
         footer = public.split("<footer>")[1]
         for label, href in [("All events", R), ("Music", R + "music/"), ("Film", R + "film/"), ("Art &amp; talks", R + "talks/"),
-                            ("This weekend", R + "weekend/"), ("Next weekend", R + "weekend/next/"), ("About", R + "about.html"), ("Contact", R + "contact.html")]:
+                            ("This weekend", R + "weekend/"), ("Next weekend", R + "weekend/next/"), ("About", R + "about/"), ("Contact", R + "contact/")]:
             self.assertIn(f'<a href="{href}"', footer, label)
         self.assertIn(f'<a href="{R}" aria-current="page">All events</a>', footer, "this page marked")
         self.assertIn("Listings from Roadrunner, aggregated", footer)
-        self.assertNotIn(f'href="{R}about.html"', public.split("<footer>")[0], "not in the header")
+        self.assertNotIn(f'href="{R}about/"', public.split("<footer>")[0], "not in the header")
         self.assertNotIn("Add a source", public)
         self.assertIn('content="index, follow"', public)
         self.assertIn('content="noindex, nofollow"', mine)
@@ -532,7 +532,9 @@ class Page(unittest.TestCase):
         self.assertIn("Roadrunner", about)
         self.assertNotIn("Private Theater", about)
         self.assertIn("https://formsubmit.co/", build.render_contact())
-        self.assertIn(f'<a href="{R}contact.html">Contact</a>', about.split("<footer>")[1])
+        self.assertIn(f'<a href="{R}contact/">Contact</a>', about.split("<footer>")[1])
+        self.assertIn(f'<a href="{R}contact/">Get in touch</a>', about, "from the About page's folder too")
+        self.assertIn(f'content="{build.PUBLIC_URL}share/home.png?pin"', about, "the home page's card: About has none")
 
     def test_public_page_tells_search_engines_what_it_is(self):
         with mock.patch.object(build, "fetch", sample):
@@ -603,7 +605,7 @@ class Page(unittest.TestCase):
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
         self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><button', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png?pin">', page)
-        self.assertIn(f'<a href="{R}about.html" aria-current="page">About</a>', build.render_about([venue], built))
+        self.assertIn(f'<a href="{R}about/" aria-current="page">About</a>', build.render_about([venue], built))
         self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', page)
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/</loc>", build.render_sitemap(built))
         self.assertIn(f'<a href="{R}weekend/next/">Next weekend, Sep 25–27 →</a>', page)
@@ -647,7 +649,7 @@ class Page(unittest.TestCase):
 
     def test_sitemap(self):
         sitemap = build.render_sitemap(datetime(2026, 9, 13, tzinfo=timezone.utc))
-        for path in ("", "about.html", "contact.html"):
+        for path in ("", "about/", "contact/"):
             self.assertIn(f"<loc>{build.PUBLIC_URL}{path}</loc>", sitemap)
 
     def test_notices_come_last_with_their_mark(self):

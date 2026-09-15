@@ -18,7 +18,8 @@ def main():
     for path in PAGES:
         page = OUT / (path + "index.html" if path == "" or path.endswith("/") else path)
         page.parent.mkdir(parents=True, exist_ok=True)
-        page.write_text(build.render_redirect(build.PUBLIC_URL + path))
+        # About and Contact are folders now, about/ and contact/.
+        page.write_text(build.render_redirect(build.PUBLIC_URL + path.replace(".html", "/")))
     (OUT / "404.html").write_text(build.render_redirect(build.PUBLIC_URL, paths=True))
     (OUT / "robots.txt").write_text("User-agent: *\nAllow: /\n")
     (OUT / "CNAME").write_text(OLD_DOMAIN + "\n")
