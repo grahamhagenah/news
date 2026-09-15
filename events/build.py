@@ -2342,6 +2342,14 @@ INDEX_JS = """
 
 # The public site's About and Contact pages: plain text, and a form as quiet as the search.
 PUBLIC_CSS = """
+  /* No preview on hover: a click opens the listing's view, which has it all. Rows keep theirs, unseen, for the
+     view to show at once and for the search; and no dotted underline promising one. */
+  .day .preview { display: none; }
+  @media (hover: hover) and (min-width: 34.01rem) {
+    .headline:has(> .preview:not(.title-only)) > .title { text-decoration: none; }
+    .headline:has(> .preview:not(.title-only)) > .title:hover,
+    .combined summary:hover .headline:has(> .preview:not(.title-only)) > .title { text-decoration: underline; }
+  }
   /* Its name in the header: Pushpin as the site's, the city after it lighter. */
   .sites .city { font-weight: 400; }
   /* The page it is, after the name: "/ Film", in white. */
