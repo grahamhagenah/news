@@ -568,6 +568,8 @@ class Page(unittest.TestCase):
         self.assertIn(f'<a data-show="all" href="{R}" aria-current="page">All</a>', home)
         self.assertIn('data-current="film"', film)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}film/">', film)
+        self.assertIn('<span class="here">Film</span></nav>', film, "the page's name after the site's, in the header")
+        self.assertIn('<span class="here" hidden></span></nav>', home, "none on the home page, until a kind is shown")
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png?pin">', film)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/home.png?pin">', home)
         for card in ("home", "music", "film", "talks"):

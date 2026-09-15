@@ -1348,6 +1348,9 @@ def public_footer(path, notes="", names=""):
     return f'<footer>\n<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n{where}{notes}</footer>\n'
 
 
+# Each page's name, after the site's in the header ("Pushpin Boston / Film"); the home page has none.
+PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, (slug, *_) in PUBLIC_PAGES.items()} | {PUBLIC_TONIGHT[0]: "Tonight"}
+              | {path: name for path, name, *_ in PUBLIC_WEEKENDS} | {"about/": "About", "contact/": "Contact"})
 # The pages with a share card of their own (events/share); the rest show the home page's.
 SHARE_CARDS = {slug for slug, *_ in PUBLIC_PAGES.values()} | {"tonight", "weekend"}
 
@@ -1385,7 +1388,8 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
     brand, _, city = PUBLIC_NAME.partition(" ")
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
                        updated=built_at, links=links, indexable=True,
-                       marked={PUBLIC_NAME: f'{PIN_MARK}{html.escape(brand)} <span class="city">{html.escape(city)}</span>'})
+                       marked={PUBLIC_NAME: f'{PIN_MARK}{html.escape(brand)} <span class="city">{html.escape(city)}</span>'},
+                       here=PAGE_NAMES.get(path, ""))
 
 
 def render_about(sources, built_at):
@@ -1617,6 +1621,15 @@ INDEX_JS = """
     }
     document.querySelector("main").classList.add("paged");
     markPinned();
+    // The home page, showing a kind in place, names it in the header, as that kind's own page does.
+    const here = document.querySelector(".sites .here");
+    if (here && kindPages && everything) {
+      here.textContent = show === "all" ? "" : filter.querySelector(`a[data-show="${show}"]`).textContent;
+      here.hidden = show === "all";
+      const name = document.querySelector(".sites a");
+      if (show === "all") name.setAttribute("aria-current", "page");
+      else name.removeAttribute("aria-current");
+    }
   }
   showEvents();
   filter.addEventListener("click", event => {
@@ -1723,6 +1736,14 @@ INDEX_JS = """
 PUBLIC_CSS = """
   /* Its name in the header: Pushpin as the site's, the city after it lighter. */
   .sites .city { font-weight: 400; }
+  /* The page it is, after the name: "/ Film", in white. */
+  .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
+  .sites .here::before { content: "/"; margin-right: .5em; color: #444; font-weight: 400; }
+  /* Each whole, never broken over a line: on the narrowest phones the page's name goes under the site's. On a
+     phone, a page with its name there leaves out when it was updated, which the home page still says. */
+  .sites { flex-wrap: wrap; gap: .15rem .55rem; }
+  .sites a, .sites .here { white-space: nowrap; }
+  @media (max-width: 34rem) { header:has(.here:not([hidden])) .header-note { display: none; } }
   .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
   .sites a[aria-current] .city { color: #8c8c8c; }
   /* What the site is, in a line under its name, as quiet as the rest. */

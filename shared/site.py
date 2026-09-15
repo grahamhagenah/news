@@ -293,11 +293,12 @@ SEARCH_KEYS = """
 </script>"""
 
 
-def page(site, title, body, css="", head="", symbols="", updated=None, links=None, indexable=False, marked=None):
+def page(site, title, body, css="", head="", symbols="", updated=None, links=None, indexable=False, marked=None, here=None):
     """A whole page: the shared head, header and styles, then this site's styles, icons and body. Its header
     links are the two sites, unless it gives its own as (label, address, whether it's this page); marked gives
-    a label's own markup, for one set in two weights ("Pushpin <span>Boston</span>"). Only a page meant for
-    anyone (the public events page) lets search engines list it."""
+    a label's own markup, for one set in two weights ("Pushpin <span>Boston</span>"). here names the page
+    after them ("Film"); an empty one is there for a script to fill in. Only a page meant for anyone (the
+    public events page) lets search engines list it."""
     marked = marked or {}
     name = SITES[site][0] if links is None else links[0][0]
     if links is None:
@@ -307,6 +308,7 @@ def page(site, title, body, css="", head="", symbols="", updated=None, links=Non
         f'<a href="{html.escape(url)}"{current_page if current else ""}>{marked.get(label, html.escape(label))}</a>'
         for label, url, current in links
     )
+    here_label = "" if here is None else f'<span class="here"{"" if here else " hidden"}>{html.escape(here)}</span>'
     note = (
         f'<span class="header-note">Updated <time class="updated" datetime="{updated.isoformat()}">'
         f'{updated.strftime("%b")} {updated.day}</time></span>' if updated else ""
@@ -330,7 +332,7 @@ def page(site, title, body, css="", head="", symbols="", updated=None, links=Non
 <body>
 {symbols}
 <main>
-<header><nav class="sites" aria-label="Sites">{links}</nav>{note}</header>
+<header><nav class="sites" aria-label="Sites">{links}{here_label}</nav>{note}</header>
 {body}
 </main>{TO_TOP}{AGES}{PREVIEWS}{SEARCH_KEYS}
 </body>
