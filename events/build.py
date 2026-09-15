@@ -1714,7 +1714,7 @@ INDEX_JS = """
 PUBLIC_CSS = """
   /* Its name in the header: Pushpin as the site's, the city after it lighter. */
   .sites .city { font-weight: 400; }
-  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; color: #f87171; }
+  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
   .sites a[aria-current] .city { color: #8c8c8c; }
   /* What the site is, in a line under its name, as quiet as the rest. */
   .tagline { margin: -1rem 0 2.25rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
