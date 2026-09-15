@@ -139,7 +139,9 @@ BASE_CSS = """
   .sites a, .sites a:visited { color: #555; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }
   .sites a:hover { color: #999; }
   .sites a[aria-current], .sites a[aria-current]:hover { color: #fff; }
-  .filter { display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; margin: -.75rem 0 1.75rem; }
+  /* Its choices at the top of the row, as a link sits, so a page whose choices are buttons (which center
+     their text in the row's height, set by the menu and search) puts them at the same height as one of links. */
+  .filter { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .4rem 1.1rem; margin: -.75rem 0 1.75rem; }
   .filter button, .filter a { padding: 0; border: 0; background: none; color: #666; font: inherit; font-size: .8rem;
                               text-decoration: none; cursor: pointer; }
   .filter button:hover, .filter a:hover { color: #999; text-decoration: none; }
