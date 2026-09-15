@@ -2612,9 +2612,9 @@ CSS = """
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
   .event-places a { color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
-  .event-about.clamped { max-height: 12em; overflow: hidden;
-                         -webkit-mask-image: linear-gradient(#000 calc(100% - 3.5em), transparent);
-                         mask-image: linear-gradient(#000 calc(100% - 3.5em), transparent); }
+  .event-about.clamped { max-height: 7.5em; overflow: hidden; /* About five lines. */
+                         -webkit-mask-image: linear-gradient(#000 calc(100% - 3em), transparent);
+                         mask-image: linear-gradient(#000 calc(100% - 3em), transparent); }
   .event-more { display: block; margin: -.1rem 0 .2rem; padding: 0; border: 0; background: none; color: #ccc; font: inherit;
                 font-size: .85rem; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; cursor: pointer; }
   .event-more:hover, .event-more:focus-visible { color: #fff; text-decoration-color: #aaa; outline: none; }
