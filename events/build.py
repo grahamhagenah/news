@@ -1370,7 +1370,8 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         f'<meta property="og:description" content="{html.escape(description)}">',
         f'<meta property="og:url" content="{address}">',
         # Its card (events/share, made by share_cards.py): a kind's page its own, the rest the site's.
-        f'<meta property="og:image" content="{PUBLIC_URL}share/{path.split("/")[0] if path.endswith("/") else "home"}.png">',
+        # ?pin: apps keep a card they've seen, however long it's been replaced, until its address changes.
+        f'<meta property="og:image" content="{PUBLIC_URL}share/{path.split("/")[0] if path.endswith("/") else "home"}.png?pin">',
         '<meta property="og:image:width" content="1200">',
         '<meta property="og:image:height" content="630">',
         f'<meta property="og:image:alt" content="{html.escape(PUBLIC_NAME)}: {html.escape(PUBLIC_TAGLINE)}">',

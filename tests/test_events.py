@@ -566,8 +566,8 @@ class Page(unittest.TestCase):
         self.assertIn(f'<a data-show="all" href="{R}" aria-current="page">All</a>', home)
         self.assertIn('data-current="film"', film)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}film/">', film)
-        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png">', film)
-        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/home.png">', home)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/film.png?pin">', film)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/home.png?pin">', home)
         for card in ("home", "music", "film", "talks"):
             self.assertTrue((build.ROOT / "share" / f"{card}.png").exists(), f"share/{card}.png")
         self.assertIn(f"<title>{build.PUBLIC_PAGES['film'][1]}</title>", film)
@@ -602,7 +602,7 @@ class Page(unittest.TestCase):
         self.assertIn("Friday, September 18 to Sunday, September 20", page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
         self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><button', page)
-        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', page)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png?pin">', page)
         self.assertIn(f'<a href="{R}about.html" aria-current="page">About</a>', build.render_about([venue], built))
         self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', page)
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/</loc>", build.render_sitemap(built))
@@ -612,7 +612,7 @@ class Page(unittest.TestCase):
         self.assertIn("Next weekend around Boston, Cambridge, and Somerville: Friday, September 25", following)
         self.assertIn(f'<a href="{R}weekend/">← This weekend, Sep 18–20</a>', following)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/next/">', following)
-        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png">', following)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png?pin">', following)
         self.assertIn(f"<loc>{build.PUBLIC_URL}weekend/next/</loc>", build.render_sitemap(built))
 
     def test_tonight_page(self):
@@ -628,7 +628,7 @@ class Page(unittest.TestCase):
         self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page data-today><button', page)
         self.assertIn(f"<title>{build.PUBLIC_TONIGHT[1]}</title>", page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}tonight/">', page)
-        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/tonight.png">', page)
+        self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/tonight.png?pin">', page)
         self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', page)
         self.assertIn(f"<loc>{build.PUBLIC_URL}tonight/</loc>", build.render_sitemap(built))
 

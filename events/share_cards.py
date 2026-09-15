@@ -35,7 +35,10 @@ def card(heading, line, kinds, path):
         for kind in kinds
     )
     size = 92 if len(heading) <= 22 else 80  # A longer heading a little smaller, to keep it on one line.
-    site = "" if heading == build.PUBLIC_NAME else f"<span>{html.escape(build.PUBLIC_NAME)}</span> · "
+    # The site's name with its pin before it, as in the header: the home card's heading, the others' last line.
+    home = heading == build.PUBLIC_NAME
+    title = f"{build.PIN_MARK}{html.escape(heading)}" if home else html.escape(heading)
+    site = "" if home else f"<span>{build.PIN_MARK}{html.escape(build.PUBLIC_NAME)}</span> · "
     address = build.PUBLIC_URL.removeprefix("https://").rstrip("/") + ("/" + path.rstrip("/") if path else "")
     return f"""<!doctype html><meta charset="utf-8"><style>
   html, body {{ margin: 0; width: 1200px; height: 630px; background: #000; }}
@@ -47,9 +50,11 @@ def card(heading, line, kinds, path):
   p {{ margin: 30px 0 0; max-width: 940px; color: #8c8c8c; font-size: 38px; line-height: 1.35; text-wrap: balance; }}
   footer {{ margin-top: auto; color: #5c5c5c; font-size: 28px; }}
   footer span {{ color: #8c8c8c; }}
+  .pin {{ width: .9em; height: .9em; margin-right: .2em; vertical-align: -.1em; color: #fff; }}
+  footer .pin {{ width: 1em; height: 1em; margin-right: .3em; vertical-align: -.15em; }}
 </style>
 <div class="icons">{icons}</div>
-<h1>{html.escape(heading)}</h1>
+<h1>{title}</h1>
 <p>{html.escape(line)}</p>
 <footer>{site}{html.escape(address)}</footer>
 """
