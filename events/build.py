@@ -1418,21 +1418,23 @@ def render_about(sources, built_at, events=()):
     body = f"""<div class="prose">
 <p>{PUBLIC_NAME} puts concerts, films, and talks from venues across Boston, Cambridge, and Somerville on one page,
 day by day: concerts two months ahead, films and talks one month.</p>
-<p>It’s gathered from select venues every few hours. Times and details can change, so check
-with the venue before you go: every listing links to its page there. The descriptions are the venues’ own
-words, in short.</p>
-<p>No ads, no accounts, nothing to sign up for.</p>
+<p>This is a curated feed, with an emphasis on independent venues.</p>
+<p>Event info is gathered from select venues every few hours. Times and details can change, so check with the
+venue before you go: every listing links back to the original source where you can confirm times or buy
+tickets.</p>
+<p>No algorithms, no ads, no accounts.</p>
 <h2>How to use it</h2>
 <ul class="tips">
-<li>Click a showtime (tap it, on a phone) to add it to your calendar.</li>
-<li><a href="{root}tonight/">Tonight</a> and <a href="{root}weekend/">This weekend</a> show just what’s on then.</li>
-<li>Pick a venue from the menu beside the search to see only its events. The page’s address keeps your choice,
-so you can share it.</li>
-<li>Search matches names, venues, and descriptions: a band, a director, “35mm”. On a keyboard, press / to
-jump to it.</li>
+<li>Tap a showtime to add it to your calendar.</li>
+<li><a href="{root}tonight/">Tonight</a> and <a href="{root}weekend/">This weekend</a> filter the list down to just
+those days.</li>
+<li>Pick a venue from the menu to show only its events. The browser’s address keeps your choice, so you can share
+it with friends.</li>
+<li>Search matches names, venues, and descriptions: a band, a director, “35mm”. On a keyboard, press slash to jump
+to it.</li>
 </ul>
 <h2>Venues</h2>
-<p>Every venue it reads, with how many listings each has coming up. Choose one to see just its events.</p>
+<p>Every venue in the feed, with how many listings each one has coming up.</p>
 {groups}
 <p>Know a venue that should be here, or spotted a mistake? <a href="{root}contact/">Get in touch</a>.</p>
 </div>"""
