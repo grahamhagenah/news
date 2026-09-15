@@ -1482,9 +1482,9 @@ INDEX_JS = """
   // talks/) its links go to; its home page, which has every event, shows one in place instead, and puts its
   // page's address in the address bar. Here, the choice is remembered in this browser. The search keeps the events
   // with every word typed somewhere in their name, place or description (accents aside), and is kept in the
-  // address (?q=). Fifty of what's shown are on a page, however many days that takes; ?page=2 shows the next
-  // fifty. A day split between two pages has its heading on both. A weekend's page shows all of it.
-  const EVENTS_PER_PAGE = document.querySelector(".filter").hasAttribute("data-one-page") ? 100000 : 50; // A weekend, whole.
+  // address (?q=). A hundred of what's shown are on a page, however many days that takes; ?page=2 shows the
+  // next hundred. A day split between two pages has its heading on both. A weekend's page shows all of it.
+  const EVENTS_PER_PAGE = document.querySelector(".filter").hasAttribute("data-one-page") ? 100000 : 100; // A weekend, whole.
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
   const pager = document.querySelector(".pager");
