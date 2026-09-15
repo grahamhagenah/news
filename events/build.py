@@ -1114,7 +1114,7 @@ ICON_DRAWINGS = {
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
-# favicon's pin (events/pushpin) as a line drawing.
+# same as the favicon's (events/pushpin).
 PIN_MARK = ('<svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" '
             'stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4"/>'
             '<path d="M9 15l-4.5 4.5"/><path d="M14.5 4l5.5 5.5"/></g></svg>')
@@ -1358,9 +1358,9 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
         body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
     head = "\n".join([
-        # The pin (events/pushpin). ?pin, since browsers keep a site's old icon long after it changes.
-        f'<link rel="icon" href="{root}favicon.svg?pin" type="image/svg+xml">',
-        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?pin">',
+        # The pin (events/pushpin). ?pin2, since browsers keep a site's old icon long after it changes.
+        f'<link rel="icon" href="{root}favicon.svg?pin2" type="image/svg+xml">',
+        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?pin2">',
         f'<link rel="canonical" href="{address}">',
         f'<meta name="description" content="{html.escape(description)}">',
         # What a link to it shows when shared.
