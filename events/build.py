@@ -2342,14 +2342,6 @@ INDEX_JS = """
 
 # The public site's About and Contact pages: plain text, and a form as quiet as the search.
 PUBLIC_CSS = """
-  /* No preview on hover: a click opens the listing's view, which has it all. Rows keep theirs, unseen, for the
-     view to show at once and for the search; and no dotted underline promising one. */
-  .day .preview { display: none; }
-  @media (hover: hover) and (min-width: 34.01rem) {
-    .headline:has(> .preview:not(.title-only)) > .title { text-decoration: none; }
-    .headline:has(> .preview:not(.title-only)) > .title:hover,
-    .combined summary:hover .headline:has(> .preview:not(.title-only)) > .title { text-decoration: underline; }
-  }
   /* Its name in the header: Pushpin as the site's, the city after it lighter. */
   .sites .city { font-weight: 400; }
   /* The page it is, after the name: "/ Film", in white. */
@@ -2535,14 +2527,9 @@ CSS = """
                       list-style: none; cursor: pointer; }
   .combined summary::-webkit-details-marker { display: none; }
   .combined summary:hover .title { text-decoration: underline; }
-  /* A faint dotted underline on a name with a description to preview, turning solid on hover; not on phones,
-     which have no previews. */
-  @media (hover: hover) and (min-width: 34.01rem) {
-    .headline:has(> .preview:not(.title-only)) > .title {
-      text-decoration: underline dotted #3a3a3a; text-decoration-thickness: 1px; text-underline-offset: .32em; }
-    .headline:has(> .preview:not(.title-only)) > .title:hover,
-    .combined summary:hover .headline:has(> .preview:not(.title-only)) > .title { text-decoration: underline; }
-  }
+  /* No preview on hover: a click opens the listing's view, which has it all. Rows keep theirs, unseen, for the
+     view to show at once and for the search. */
+  .day .preview { display: none; }
   /* The first time and the ›, together, so a narrow screen never leaves the › alone on a line. */
   .tail, .tail .times { flex: none; white-space: nowrap; }
   .more { display: inline-block; margin-left: .5em; color: #666; font-size: .8em; transition: transform .15s; }
