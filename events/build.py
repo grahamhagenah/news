@@ -1700,8 +1700,8 @@ FAQS = [
      "It may not publish its calendar in a way that can be read automatically, or I may not have found it yet. "
      "<a href=\"{root}contact/\">Tell me about it</a> and I’ll take a look."),
     ("Will you make this for my city?",
-     "I’d rather keep it to places I know well. I add every venue one by one, and choosing them for a city I "
-     "don’t know would be hard to do well. But if there’s enough interest in another city or area, I’ll look into "
+     "I’d rather keep it to places I know well. I add every venue one by one, and curating a list of cool spots "
+     "would be challenging if I’m not a local. But if there’s enough interest in another city or area, I’ll look into "
      "starting one there, and it would go much faster with help from someone who knows its venues. If that’s you, "
      "<a href=\"{root}contact/\">get in touch</a>."),
     ("How often is it updated?",
