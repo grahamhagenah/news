@@ -1364,13 +1364,11 @@ def tabler(paths, css_class):
             f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{drawn}</g></svg>')
 
 
-# A listing's copy-link button's icon (Tabler's "link"), and a calendar to subscribe to (its "calendar-plus").
+# A listing's copy-link button's icon (Tabler's "link").
 LINK_MARK = tabler(["M9 15l6 -6", "M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464",
                     "M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"], "link-mark")
 # And its "check", which takes the link icon's place once the link is copied.
 CHECK_MARK = tabler(["M5 12l5 5l10 -10"], "check-mark")
-CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5", "M16 3v4", "M8 3v4",
-                        "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
 CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
               'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
 # A listing's own view, opened by clicking it: its picture, when, its price and ages, each place it's at, a
@@ -1730,11 +1728,8 @@ def render_about(sources, built_at, events=()):
 
     def venue(name, key):
         count = counts.get((name, key))
-        subscribe = (f' <a class="subscribe" href="{calendar_address(f"calendar/{calendar_slug(name)}.ics")}" '
-                     f'title="Subscribe to {html.escape(name)} in your calendar" aria-label="Subscribe to {html.escape(name)}">'
-                     f'{CALENDAR_MARK}</a>') if any(n == name for n, _ in counts) else ""
         return (f'<li><a href="{root}?{urlencode({"venue": name})}">{html.escape(name)}</a>'
-                + (f' <span class="count">{count}</span>' if count else "") + subscribe + "</li>")
+                + (f' <span class="count">{count}</span>' if count else "") + "</li>")
 
     kind_feeds = "".join(
         f'<li>{html.escape(CATEGORIES[key])}: <a class="subscribe-kind" href="{calendar_address(f"calendar/{slug}.ics")}">Apple Calendar</a>'
@@ -1757,21 +1752,21 @@ tickets.</p>
 <p>No algorithms, no ads, no accounts.</p>
 <h2>How to use it</h2>
 <ul class="tips">
-<li>Tap a showtime to add it to your calendar.</li>
+<li>Tap a listing for more: a picture, the price and ages, every showtime, what it’s about, the address, its other
+dates, and a link to copy and send.</li>
 <li><a href="{root}tonight/">Tonight</a> and <a href="{root}weekend/">This weekend</a> filter the list down to just
 those days.</li>
 <li>Pick a venue from the menu to show only its events. The browser’s address keeps your choice, so you can share
 it with friends.</li>
 <li>Search matches names, venues, and descriptions: a band, a director, “35mm”. On a keyboard, press slash to jump
 to it.</li>
-<li>Tap a listing for more: what it’s about, all its times, the address, its other dates, and its link to copy and send.
-Subscribe to a calendar (below) to have new listings show up on their own.</li>
+<li>A showtime struck through is sold out, and a listing with nothing left says so.</li>
+<li>Subscribe to a calendar (below) to have new listings show up on their own.</li>
 </ul>
 <h2 id="calendars">Calendars</h2>
 <p>Subscribe in your calendar app, and new listings appear there on their own, updated every few hours.</p>
 <ul class="tips">
 {kind_feeds}
-<li>One venue: the calendar beside its name in the list below.</li>
 </ul>
 <h2>Venues</h2>
 <p>Every venue in the feed, with how many listings each one has coming up.</p>
@@ -1788,11 +1783,6 @@ Subscribe to a calendar (below) to have new listings show up on their own.</li>
         {"@type": "Question", "name": question,
          "acceptedAnswer": {"@type": "Answer", "text": html.unescape(re.sub(r"<[^>]+>", "", answer))}}  # Links' words kept.
         for question, answer in answers]}
-    # On Android, where webcal:// opens nothing, a venue's calendar goes to Google Calendar's page for it.
-    body += """<script>
-  if (/Android/i.test(navigator.userAgent)) for (const a of document.querySelectorAll(".subscribe"))
-    a.href = "https://calendar.google.com/calendar/r?" + new URLSearchParams({ cid: a.href });
-</script>"""
     return public_page("about/", f"About · {PUBLIC_NAME}", body,
                        description=f"What {PUBLIC_NAME} is, how to use it, the Boston, Cambridge and Somerville venues it "
                                    f"lists, and questions about it.", data=data)
@@ -2472,8 +2462,10 @@ PUBLIC_CSS = """
   .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   .prose h2 { margin-top: 2rem; }
   .prose h2 + p { margin-top: -.25rem; }
-  /* How to use it: short lines, a little apart. */
-  .tips li { margin: 0 0 .6em; }
+  /* How to use it: short lines, bulleted, a little apart. */
+  .tips { padding-left: 1.15em; list-style: disc; }
+  .tips li { margin: 0 0 .6em; padding-left: .2em; }
+  .tips li::marker { color: #555; }
   /* The venues, each a link to its events, with how many it has coming up after it in gray; in two columns,
      down the first and then the second, so they read in order. */
   .venues { columns: 13rem 2; column-gap: 1.5rem; }
@@ -2492,10 +2484,6 @@ PUBLIC_CSS = """
   .prose .venues a { text-decoration: none; }
   .prose .venues a:hover { text-decoration: underline; text-decoration-color: #555; }
   .venues .count { margin-left: .35em; color: #666; font-size: .8em; }
-  /* A venue's calendar to subscribe to, after its name: a small calendar, gray until hovered. */
-  .prose .venues .subscribe { margin-left: .45em; color: #555; text-decoration: none; }
-  .prose .venues .subscribe:hover { color: #ddd; }
-  .calendar-mark { width: 13px; height: 13px; vertical-align: -1px; }
   .contact { display: grid; gap: 1.1rem; margin-top: 1.5rem; }
   .contact label { display: grid; gap: .35rem; color: #888; font-size: .8rem; }
   .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
