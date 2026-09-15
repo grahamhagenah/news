@@ -1171,14 +1171,6 @@ def render_combined(item):
     )
 
 
-def venue_menu(venues):
-    """The venue filter: a quiet menu at the end of the filter's row, "All venues" or one of them, sorted
-    as they'd be said, "The Sinclair" among the S's."""
-    names = sorted(venues, key=lambda name: re.sub(r"^the\s+", "", name, flags=re.I).casefold())
-    options = "".join(f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in names)
-    return f'<select class="venue" aria-label="Venue"><option value="">All venues</option>{options}</select>'
-
-
 def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
     page (music/, film/, talks/), holding only that kind's events, or with weekend (0 for this one, 1 for the
@@ -1262,7 +1254,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         others = (f'<nav class="weekends"><span></span><a href="{href}">{name}, {days} →</a></nav>\n' if other else
                   f'<nav class="weekends"><a href="{href}">← {name}, {days}</a><span></span></nav>\n')
     body = (
-        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}<span class="finders">{venue_menu(venues)}{shared.SEARCH}</span></nav>\n'
+        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}<span class="finders">{shared.menu(venues, "All venues", "Venue")}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
@@ -1506,7 +1498,7 @@ INDEX_JS = """
   let show = kindPages ? filter.dataset.current : "all";
   if (remember) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
   // The venue menu shows one venue's events, of every kind, kept in the address too (?venue=).
-  const venue = document.querySelector(".venue");
+  const venue = document.querySelector(".filter .pick");
   const combined = [...document.querySelectorAll(".combined")];
   const fromAddress = () => {
     const params = new URLSearchParams(location.search);
@@ -1730,28 +1722,6 @@ CSS = """
   .times time[data-time]:not(.from) { cursor: pointer; }
   .times time[data-time]:not(.from):hover, .times time[data-time]:not(.from):focus-visible { color: #ddd; outline: none; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  /* The venue menu, as quiet as the filter beside it: a small arrow after it, and white once a venue is
-     chosen. As wide as what's chosen, where the browser can size it so. */
-  .venue { max-width: 12rem; padding: 0 1.05em 0 0; border: 0; border-radius: 0; color: #666;
-           background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em;
-           font: inherit; font-size: .8rem; text-overflow: ellipsis; cursor: pointer; field-sizing: content;
-           -webkit-appearance: none; appearance: none; }
-  .venue:hover { color: #999; }
-  .venue.chosen { color: #fff; }
-  .venue:focus-visible { outline: 1px solid #444; outline-offset: 3px; }
-  .venue option { background: #000; color: #fff; }
-  /* The venue menu and the search, together at the end of the filter's row. On a phone, where the newsfeed
-     leaves its search out, they're on a line of their own under the kinds, from the left, the search taking
-     the rest of it; at 16px, since iPhones zoom in on a smaller field when it's tapped. */
-  .finders { display: flex; align-items: baseline; gap: 1.4rem; margin-left: auto; }
-  .finders .search { margin-left: 0; }
-  @media (max-width: 34rem) {
-    /* Neither may push the line wider than the screen: a long venue's name ends in "…" past 60% of it,
-       and the search takes whatever's left. */
-    .finders { flex-basis: 100%; min-width: 0; gap: 1.1rem; margin: .4rem 0 0; }
-    .finders .search { display: block; flex: 1 1 0; min-width: 3rem; width: 0; font-size: 1rem; }
-    .venue { flex: 0 1 auto; min-width: 0; max-width: 60%; font-size: 1rem; }
-  }
   /* A film at several places: the row opens to each place's times, with a › that turns when it's open. */
   .row.combined { display: block; }
   .combined summary { display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline;

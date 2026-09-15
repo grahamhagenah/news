@@ -108,6 +108,15 @@ def excerpt(markup, max_chars=600, skip=None, min_words=4, max_paragraphs=3):
 SEARCH = '<input class="search" type="search" placeholder="Search" aria-label="Search" autocomplete="off" spellcheck="false">'
 
 
+def menu(names, everything, label):
+    """A menu for the filter's row, beside the search: everything, or just one of names, sorted as they'd be
+    said ("The Sinclair" among the S's). everything is what the first choice says ("All venues")."""
+    ordered = sorted(names, key=lambda name: re.sub(r"^the\s+", "", name, flags=re.I).casefold())
+    options = "".join(f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in ordered)
+    return (f'<select class="pick" aria-label="{html.escape(label)}"><option value="">{html.escape(everything)}</option>'
+            f"{options}</select>")
+
+
 def preview(title, paragraphs):
     """The box that opens under a headline on hover: the full headline, shown only when the one-line one is cut
     off, then the item's first paragraphs. It goes right after the headline's title, which the hover is on."""
@@ -161,16 +170,34 @@ BASE_CSS = """
   .headline:not(.truncated) .preview.title-only { display: none; }
   .headline .title:hover ~ .preview { visibility: visible; opacity: 1; transition: opacity .1s .4s, visibility 0s .4s; }
   @media (hover: none), (max-width: 34rem) { .preview { display: none; } }
-  /* The search, at the end of the filter's row and as quiet as the filter. Not on phones, where the row has
-     no room, unless a page makes room for it (the events pages do); a page ignores its ?q= where it's hidden,
-     so nothing is hidden by a search that can't be seen. */
+  /* The search, at the end of the filter's row and as quiet as the filter. */
   .search { margin-left: auto; width: 10rem; padding: 0 0 .15rem; border: 0; border-bottom: 1px solid #333;
             border-radius: 0; background: none; color: #fff; font: inherit; font-size: .8rem; outline: none;
             -webkit-appearance: none; appearance: none; }
   .search::placeholder { color: #555; }
   .search:focus { border-bottom-color: #777; }
   .search::-webkit-search-cancel-button { display: none; }
-  @media (max-width: 34rem) { .search { display: none; } }
+  /* A menu beside it (the events' venues, the newsfeed's sources), as quiet as the filter: a small arrow
+     after it, and white once something's chosen. As wide as what's chosen, where the browser can size it so. */
+  .pick { max-width: 12rem; padding: 0 1.05em 0 0; border: 0; border-radius: 0; color: #666;
+          background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em;
+          font: inherit; font-size: .8rem; text-overflow: ellipsis; cursor: pointer; field-sizing: content;
+          -webkit-appearance: none; appearance: none; }
+  .pick:hover { color: #999; }
+  .pick.chosen { color: #fff; }
+  .pick:focus-visible { outline: 1px solid #444; outline-offset: 3px; }
+  .pick option { background: #000; color: #fff; }
+  /* The menu and the search, together at the end of the filter's row. On a phone they're on a line of their
+     own under it, from the left, the search taking the rest of it, at 16px, since iPhones zoom in on a smaller
+     field when it's tapped. Neither may push the line wider than the screen: a long name ends in "…" past 60%
+     of it, and the search takes whatever's left. */
+  .finders { display: flex; align-items: baseline; gap: 1.4rem; margin-left: auto; }
+  .finders .search { margin-left: 0; }
+  @media (max-width: 34rem) {
+    .finders { flex-basis: 100%; min-width: 0; gap: 1.1rem; margin: .4rem 0 0; }
+    .finders .search { flex: 1 1 0; min-width: 3rem; width: 0; font-size: 1rem; }
+    .pick { flex: 0 1 auto; min-width: 0; max-width: 60%; font-size: 1rem; }
+  }
   .pager { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
   .pager a, .pager a:visited { color: #999; }
   .empty { color: #666; font-size: .9rem; }

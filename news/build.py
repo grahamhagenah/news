@@ -483,7 +483,7 @@ def render_index(feeds, posts, failed, stale, built_at):
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         items.append(
-            f'<li class="row"{marked}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
+            f'<li class="row" data-from="{html.escape(post["source"])}"{marked}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
             f"{when}{comments}{preview}</div></li>"
         )
@@ -502,7 +502,7 @@ def render_index(feeds, posts, failed, stale, built_at):
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
         f'<button data-show="articles">{icon("article", decorative=True)}Articles</button>'
         + "".join(f'<button data-show="{key}">{icon(mark, decorative=True)}{label}</button>' for key, mark, label, there in kinds if there)
-        + shared.SEARCH + "</nav>\n"
+        + f'<span class="finders">{shared.menu({post["source"] for post in posts}, "All sources", "Source")}{shared.SEARCH}</span></nav>\n'
         if any(there for *_, there in kinds)
         else ""
     )
@@ -654,20 +654,26 @@ INDEX_JS = """
   const empty = document.querySelector(".empty");
 
   // The filter shows every post, or only articles, podcast episodes or videos. The choice is remembered in
-  // this browser, and paging counts only the posts it shows. The search keeps the posts with every word typed
-  // somewhere in their headline, source or preview (accents aside), and is kept in the address (?q=); it's
-  // hidden on phones, and ignored there.
+  // this browser, and paging counts only the posts it shows. The menu beside it shows one source's posts, of
+  // every kind, and the search the posts with every word typed somewhere in their headline, source or preview
+  // (accents aside); both are kept in the address (?source=, ?q=).
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
+  const from = document.querySelector(".filter .pick");
   let show = "all";
   try { show = (filter && localStorage.getItem("reader-show")) || "all"; } catch (error) {}
   const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const searchable = new Map(items.map(li => [li, plain(li.textContent)]));
   const query = () => (search && search.offsetParent ? search.value.trim() : "");
   if (search) search.value = new URLSearchParams(location.search).get("q") || "";
+  if (from) {
+    from.value = new URLSearchParams(location.search).get("source") || "";
+    if (from.selectedIndex < 0) from.value = ""; // A source with nothing on the page now.
+  }
   const address = page => {
     const params = new URLSearchParams();
     if (query()) params.set("q", query());
+    if (from && from.value) params.set("source", from.value);
     if (page > 1) params.set("page", page);
     return params.toString() ? "?" + params : location.pathname;
   };
@@ -676,7 +682,9 @@ INDEX_JS = """
 
   function showPosts() {
     const words = plain(query()).split(/\\s+/).filter(Boolean);
-    const shown = items.filter(li => (show === "all" || kind(li) === show) && words.every(word => searchable.get(li).includes(word)));
+    const source = from ? from.value : "";
+    const shown = items.filter(li => (show === "all" || kind(li) === show) && (!source || li.dataset.from === source)
+      && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(shown.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     items.forEach(li => { li.hidden = true; });
@@ -687,8 +695,10 @@ INDEX_JS = """
       (page > 1 ? link(page - 1, "← Newer") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Older →") : "<span></span>");
-    empty.textContent = words.length ? `Nothing here matches “${query()}”.`
+    empty.textContent = words.length ? `Nothing ${source ? "from " + source : "here"} matches “${query()}”.`
+      : source ? `Nothing from ${source} right now.`
       : { podcasts: "No podcast episodes right now.", videos: "No videos right now." }[show] || "No articles right now.";
+    if (from) from.classList.toggle("chosen", Boolean(source));
     empty.hidden = shown.length > 0;
     if (filter) for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
   }
@@ -703,6 +713,13 @@ INDEX_JS = """
     showPosts();
   });
   if (search) search.addEventListener("input", () => {
+    history.replaceState(null, "", address(1));
+    showPosts();
+  });
+  // Choosing a source shows all its posts, whatever their kind.
+  if (from) from.addEventListener("change", () => {
+    show = "all";
+    try { localStorage.setItem("reader-show", show); } catch (error) {}
     history.replaceState(null, "", address(1));
     showPosts();
   });

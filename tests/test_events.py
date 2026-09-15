@@ -480,12 +480,6 @@ class Fallback(unittest.TestCase):
 
 
 class Page(unittest.TestCase):
-    def test_venue_menu(self):
-        menu = build.venue_menu({"The Sinclair", "Brattle", "Arts at the Armory", "Club Passim"})
-        self.assertEqual(re.findall(r'<option value="([^"]*)">', menu), ["", "Arts at the Armory", "Brattle", "Club Passim", "The Sinclair"],
-                         "All venues first, then as they'd be said: The Sinclair among the S's")
-        self.assertIn("All venues", menu)
-
     def test_renders_rows_and_filters(self):
         with mock.patch.object(build, "fetch", sample):
             found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json"))
@@ -567,7 +561,7 @@ class Page(unittest.TestCase):
         self.assertEqual(film.count('class="row" data-category="music"'), 0)
         self.assertGreater(film.count('data-category="film" data-sources='), 0)
         # Its venue menu has every venue, whatever its kind: a choice goes to the home page, which has them all.
-        menu = film.split('<select class="venue"')[1].split("</select>")[0]
+        menu = film.split('<select class="pick" aria-label="Venue">')[1].split("</select>")[0]
         self.assertIn('<option value="Roadrunner">', menu)
         self.assertNotIn("Roadrunner", film.split("<footer>")[1])
         # Your own page keeps its buttons.

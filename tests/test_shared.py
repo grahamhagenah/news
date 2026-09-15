@@ -37,6 +37,12 @@ class Page(unittest.TestCase):
         self.assertIn('<button class="to-top" type="button" aria-label="Back to top">', page)
         self.assertLess(page.index("</main>"), page.index('class="to-top"'), "outside the page's content")
 
+    def test_menu(self):
+        menu = site.menu({"The Sinclair", "Brattle", "Arts at the Armory", "Club Passim"}, "All venues", "Venue")
+        self.assertEqual(re.findall(r'<option value="([^"]*)">', menu), ["", "Arts at the Armory", "Brattle", "Club Passim", "The Sinclair"],
+                         "everything first, then as they'd be said: The Sinclair among the S's")
+        self.assertIn('<select class="pick" aria-label="Venue"><option value="">All venues</option>', menu)
+
     def test_icons(self):
         self.assertIn('aria-label="Film"', site.icon("film", "Film"))
         self.assertIn('aria-hidden="true"', site.icon("film"))

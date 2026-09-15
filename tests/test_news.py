@@ -6,8 +6,10 @@ The samples are real feeds trimmed to a few posts. When a feed changes and the r
 save a fresh sample alongside the fix.
 """
 
+import html
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -238,10 +240,15 @@ class Page(unittest.TestCase):
         posts = build.all_posts(feeds)
         page = build.render_index(feeds, posts, ["Broken Blog"], [("Slow Site", datetime.now(timezone.utc))], datetime.now(timezone.utc))
         self.assertEqual(page.count('<span class="source">'), len(posts))
-        self.assertEqual(page.count("<li class=\"row\" data-podcast>"), sum(post["podcast"] for post in posts))
+        self.assertEqual(len(re.findall(r'<li class="row" data-from="[^"]*" data-podcast>', page)), sum(post["podcast"] for post in posts))
         self.assertIn('data-show="podcasts"', page)
         self.assertIn('data-show="videos"', page)
-        self.assertEqual(page.count('<li class="row" data-video="'), 2)
+        self.assertEqual(len(re.findall(r'<li class="row" data-from="[^"]*" data-video="', page)), 2)
+        # A menu of the sources on the page, beside the search.
+        menu = page.split('<select class="pick" aria-label="Source">')[1].split("</select>")[0]
+        self.assertEqual(re.findall(r'<option value="([^"]*)">', menu)[0], "", "All sources first")
+        self.assertEqual({html.unescape(name) for name in re.findall(r'<option value="([^"]+)">', menu)},
+                         {post["source"] for post in posts})
         self.assertIn('<dialog class="player"', page)
         self.assertIn("Couldn’t load Broken Blog", page)
         self.assertIn("Couldn’t reach Slow Site", page)
