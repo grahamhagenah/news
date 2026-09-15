@@ -2,6 +2,7 @@
 """Fetch every source in sources.txt and write the coming weeks' Boston-area events to dist/events. Run from
 the repo's top folder: python3 -m events.build"""
 
+import hashlib
 import html
 import json
 import os
@@ -1117,6 +1118,21 @@ ICON_DRAWINGS = {
             '<path d="M5 2v12M11 2v12M2 5.5h3M2 10.5h3M11 5.5h3M11 10.5h3"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
+
+
+def tabler(paths, css_class):
+    """One of Tabler Icons' outline icons (MIT license), from its paths, verbatim."""
+    drawn = "".join(f'<path d="{d}"/>' for d in paths)
+    return (f'<svg class="{css_class}" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" '
+            f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{drawn}</g></svg>')
+
+
+# A listing's share button's icon (Tabler's "share-2"), and a calendar to subscribe to (its "calendar-plus").
+SHARE_MARK = tabler(["M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1", "M12 14v-11",
+                     "M9 6l3 -3l3 3"], "share-mark")
+CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5", "M16 3v4", "M8 3v4",
+                        "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
+SHARE_BUTTON = f'<button class="share" type="button" aria-label="Share">{SHARE_MARK}</button>'
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
 # same as the favicon's (events/pushpin).
 PIN_MARK = ('<svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" '
@@ -1158,7 +1174,8 @@ def render_row(item):
         f'<span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div></li>'
+        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div>'
+        f'{SHARE_BUTTON}</li>'
     )
 
 
@@ -1180,7 +1197,7 @@ def render_combined(item):
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
         f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
         f'{shared.preview(item["title"], item["about"])}</div></summary>'
-        f'<ul class="showings">{showings}</ul></details></li>'
+        f'<ul class="showings">{showings}</ul></details>{SHARE_BUTTON}</li>'
     )
 
 
@@ -1271,7 +1288,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         + "\n".join(sections)
         + '\n<p class="empty" hidden>Nothing coming up.</p>\n<nav class="pager"></nav>\n' + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
-        + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)};</script>\n"
+        + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)}, SHARE_URL = {json.dumps(PUBLIC_URL)};</script>\n"
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
@@ -1339,7 +1356,7 @@ def public_footer(path, notes="", names=""):
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]),
         ("When", [("Tonight", PUBLIC_TONIGHT[0])] + [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
-        (PUBLIC_NAME, [("About", "about/"), ("Contact", "contact/")]),
+        (PUBLIC_NAME, [("About", "about/"), ("Calendars", "about/#calendars"), ("Contact", "contact/")]),
     ]
     marked = ' aria-current="page"'
     lists = "".join(
@@ -1438,8 +1455,16 @@ def render_about(sources, built_at, events=()):
 
     def venue(name, key):
         count = counts.get((name, key))
+        subscribe = (f' <a class="subscribe" href="{calendar_address(f"calendar/{calendar_slug(name)}.ics")}" '
+                     f'title="Subscribe to {html.escape(name)} in your calendar" aria-label="Subscribe to {html.escape(name)}">'
+                     f'{CALENDAR_MARK}</a>') if any(n == name for n, _ in counts) else ""
         return (f'<li><a href="{root}?{urlencode({"venue": name})}">{html.escape(name)}</a>'
-                + (f' <span class="count">{count}</span>' if count else "") + "</li>")
+                + (f' <span class="count">{count}</span>' if count else "") + subscribe + "</li>")
+
+    kind_feeds = "".join(
+        f'<li>{html.escape(CATEGORIES[key])}: <a class="subscribe-kind" href="{calendar_address(f"calendar/{slug}.ics")}">Apple Calendar</a>'
+        f' · <a href="{calendar_address(f"calendar/{slug}.ics", google=True)}">Google Calendar</a></li>'
+        for key, (slug, *_) in PUBLIC_PAGES.items())
 
     groups = "".join(
         f'<h2>{html.escape(CATEGORIES[key])}</h2>\n<ul class="venues">{"".join(venue(name, key) for name in shared.as_said(kinds[key]))}</ul>\n'
@@ -1464,6 +1489,14 @@ those days.</li>
 it with friends.</li>
 <li>Search matches names, venues, and descriptions: a band, a director, “35mm”. On a keyboard, press slash to jump
 to it.</li>
+<li>Share a listing with the icon beside it, and subscribe to a calendar (below) to have new listings show up on
+their own.</li>
+</ul>
+<h2 id="calendars">Calendars</h2>
+<p>Subscribe in your calendar app, and new listings appear there on their own, updated every few hours.</p>
+<ul class="tips">
+{kind_feeds}
+<li>One venue: the calendar beside its name in the list below.</li>
 </ul>
 <h2>Venues</h2>
 <p>Every venue in the feed, with how many listings each one has coming up.</p>
@@ -1480,6 +1513,11 @@ to it.</li>
         {"@type": "Question", "name": question,
          "acceptedAnswer": {"@type": "Answer", "text": html.unescape(re.sub(r"<[^>]+>", "", answer))}}  # Links' words kept.
         for question, answer in answers]}
+    # On Android, where webcal:// opens nothing, a venue's calendar goes to Google Calendar's page for it.
+    body += """<script>
+  if (/Android/i.test(navigator.userAgent)) for (const a of document.querySelectorAll(".subscribe"))
+    a.href = "https://calendar.google.com/calendar/r?" + new URLSearchParams({ cid: a.href });
+</script>"""
     return public_page("about/", f"About · {PUBLIC_NAME}", body,
                        description=f"What {PUBLIC_NAME} is, how to use it, the Boston, Cambridge and Somerville venues it "
                                    f"lists, and questions about it.", data=data)
@@ -1499,6 +1537,80 @@ def render_redirect(address, paths=False):
             f'<meta name="color-scheme" content="dark">\n<style>html {{ background: #000; }}</style>\n'
             f"<script>location.replace({target} + location.search + location.hash);</script>\n"
             f'<p><a href="{link}">{html.escape(PUBLIC_NAME)}</a></p>\n</html>\n')
+
+
+# Calendar feeds to subscribe to: one for each kind, and one for each venue, under the city's calendar/ folder.
+def calendar_slug(name):
+    """A venue's name as its feed's file name: "The Sinclair" is the-sinclair.ics."""
+    return re.sub(r"[^a-z0-9]+", "-", name.casefold()).strip("-")
+
+
+def calendar_address(path, google=False):
+    """A feed's address to subscribe with: webcal://, which Apple's Calendar (and Outlook) open to subscribe; or
+    Google Calendar's page for adding it."""
+    webcal = "webcal://" + (PUBLIC_URL + path).removeprefix("https://")
+    return f"https://calendar.google.com/calendar/r?{urlencode({'cid': webcal})}" if google else webcal
+
+
+def ics_text(value):
+    """Text as an iCalendar value: its backslashes, commas, semicolons and line breaks escaped."""
+    return re.sub(r"([\\,;])", r"\\\1", value).replace("\n", "\\n")
+
+
+def ics_fold(line):
+    """An iCalendar line folded at 75 bytes, as the format asks, the rest on lines starting with a space."""
+    out, current = [], b""
+    for character in line:
+        encoded = character.encode()
+        if len(current) + len(encoded) > (75 if not out else 74):
+            out.append(current.decode())
+            current = b""
+        current += encoded
+    out.append(current.decode())
+    return "\r\n ".join(out)
+
+
+def render_calendar(name, description, items, built_at):
+    """A calendar feed of items, which a calendar app subscribes to and checks again every few hours: one event
+    for each listing, with its first time (two hours, as most give only when they start) and the rest of its
+    times in its notes, or all day when it has none. Its id stays the same from build to build, so an app
+    updates it rather than adding it again."""
+    stamp = f"{built_at.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}"
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Pushpin//Pushpin Boston//EN", "CALSCALE:GREGORIAN",
+             "METHOD:PUBLISH", f"X-WR-CALNAME:{ics_text(name)}", f"X-WR-CALDESC:{ics_text(description)}",
+             "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
+    for item in sorted(items, key=lambda item: (item["date"], item["times"][:1], item["title"].casefold())):
+        key = "|".join([item["source"], item["venue"], item["title"], item["date"].isoformat()])
+        lines += ["BEGIN:VEVENT", f"UID:{hashlib.sha1(key.encode()).hexdigest()}@pushpin.city", f"DTSTAMP:{stamp}"]
+        if item["times"]:
+            start = datetime.combine(item["date"], item["times"][0], BOSTON).astimezone(timezone.utc)
+            lines += [f"DTSTART:{start:%Y%m%dT%H%M%SZ}", f"DTEND:{start + timedelta(hours=2):%Y%m%dT%H%M%SZ}"]
+        else:
+            lines += [f"DTSTART;VALUE=DATE:{item['date']:%Y%m%d}", f"DTEND;VALUE=DATE:{item['date'] + timedelta(days=1):%Y%m%d}"]
+        place = item.get("address") or VENUE_ADDRESSES.get(item["venue"])
+        notes = ([f"Times: {', '.join(clock(moment) for moment in item['times'])}"] if len(item["times"]) > 1 else []) + \
+                [item["detail"]] * bool(item["detail"]) + item.get("about", [])[:1] + [item["link"], f"From {PUBLIC_NAME}: {PUBLIC_URL}"]
+        lines += [f"SUMMARY:{ics_text(item['title'])}",
+                  f"LOCATION:{ics_text(item['venue'] + (', ' + written(place) if place else ''))}",
+                  f"DESCRIPTION:{ics_text(chr(10).join(notes))}", f"URL:{item['link']}", "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(ics_fold(line) for line in lines) + "\r\n"
+
+
+def calendar_feeds(sources, events, built_at):
+    """Each feed's path under the city's folder and what's in it: each kind's (calendar/music.ics), and each
+    venue's (calendar/the-sinclair.ics), of the public site's venues."""
+    public = {source["name"] for source in sources if source.get("public", True)}
+    events = [item for item in events if item["source"] in public]
+    feeds = {f"calendar/{slug}.ics": render_calendar(f"{PUBLIC_NAME} · {CATEGORIES[key]}",
+                                                     f"{CATEGORIES[key]} around Boston, Cambridge, and Somerville, from {PUBLIC_NAME}.",
+                                                     [item for item in events if item["category"] == key], built_at)
+             for key, (slug, *_) in PUBLIC_PAGES.items()}
+    for name in sorted({item["source"] for item in events}):
+        feeds[f"calendar/{calendar_slug(name)}.ics"] = render_calendar(
+            f"{PUBLIC_NAME} · {name}", f"What’s coming up at {name}, from {PUBLIC_NAME}.",
+            [item for item in events if item["source"] == name], built_at)
+    return feeds
 
 
 def render_sitemap(built_at):
@@ -1808,6 +1920,41 @@ INDEX_JS = """
     if (t && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); addToCalendar(t); }
   });
 
+  // Share a listing: the device's own share sheet, where there is one, with what it is ("Aldous Harding · The
+  // Sinclair · Mon, Sep 14, 8pm") and a link to just it on Pushpin Boston (its venue and name); elsewhere, the
+  // same copied, to paste.
+  const toast = message => {
+    const note = document.querySelector(".toast") || document.body.appendChild(Object.assign(document.createElement("p"), { className: "toast" }));
+    note.textContent = message;
+    note.classList.add("shown");
+    clearTimeout(note.timer);
+    note.timer = setTimeout(() => note.classList.remove("shown"), 2200);
+  };
+  document.addEventListener("click", async event => {
+    const button = event.target.closest(".share");
+    if (!button) return;
+    const li = button.closest("li.row");
+    const title = li.querySelector(".title").textContent;
+    const venue = li.classList.contains("combined") ? "" : li.dataset.sources;
+    const day = new Date(li.closest(".day").dataset.date + "T12:00:00Z")
+      .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+    const time = li.querySelector("time");
+    const when = day + (time ? (time.classList.contains("from") ? ", from " : ", ") + time.textContent : "");
+    const text = [title, li.querySelector(".source > span").textContent, when].join(" · ");
+    const url = SHARE_URL + "?" + new URLSearchParams(venue ? { venue, q: title } : { q: title });
+    tally("share/" + (venue || "several theaters"), title);
+    if (navigator.share) {
+      try { await navigator.share({ title, text, url }); } catch (error) {} // Closed without sharing.
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text + "\\n" + url);
+      toast("Copied, ready to paste");
+    } catch (error) {
+      toast("Couldn’t copy it");
+    }
+  });
+
   // A listing followed to its venue's page, counted as the venue's (by a click, or a middle click for a new tab).
   const followed = event => {
     const a = event.target.closest(".day a.title, .showings a");
@@ -1864,6 +2011,10 @@ PUBLIC_CSS = """
   .prose .venues a { text-decoration: none; }
   .prose .venues a:hover { text-decoration: underline; text-decoration-color: #555; }
   .venues .count { margin-left: .35em; color: #666; font-size: .8em; }
+  /* A venue's calendar to subscribe to, after its name: a small calendar, gray until hovered. */
+  .prose .venues .subscribe { margin-left: .45em; color: #555; text-decoration: none; }
+  .prose .venues .subscribe:hover { color: #ddd; }
+  .calendar-mark { width: 13px; height: 13px; vertical-align: -1px; }
   .contact { display: grid; gap: 1.1rem; margin-top: 1.5rem; }
   .contact label { display: grid; gap: .35rem; color: #888; font-size: .8rem; }
   .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
@@ -1923,6 +2074,20 @@ CSS = """
   .times time[data-time]:not(.from) { cursor: pointer; }
   .times time[data-time]:not(.from):hover, .times time[data-time]:not(.from):focus-visible { color: #ddd; outline: none; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* A listing's share button, at the right end of its row: on a screen with a pointer, only while the row is
+     hovered (or the button has the keyboard); on a phone, always there, faintly. The row keeps room for it. */
+  .row { padding-right: 1.75rem; }
+  .share { position: absolute; top: calc(.4rem + (1.45em - 1.1rem) / 2); right: 0; display: grid; place-items: center;
+           width: 1.1rem; height: 1.1rem; padding: 0; border: 0; background: none; color: #555; cursor: pointer; }
+  .share:hover, .share:focus-visible { color: #ddd; outline: none; }
+  .share-mark { width: 15px; height: 15px; }
+  @media (hover: hover) { .share { opacity: 0; transition: opacity .1s; } .row:hover .share, .share:focus-visible { opacity: 1; } }
+  @media (max-width: 34rem) { .share { top: calc(.4rem + (1.45 * .8em - 1.1rem) / 2); } }
+  /* What sharing did, where there's no share sheet: a note at the foot of the window for a moment. */
+  .toast { position: fixed; z-index: 3; left: 50%; bottom: 1.5rem; margin: 0; padding: .5rem .9rem; transform: translate(-50%, .5rem);
+           border: 1px solid #333; border-radius: 999px; background: #111; color: #ddd; font-size: .85rem;
+           opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
+  .toast.shown { opacity: 1; transform: translate(-50%, 0); }
   /* A film at several places: the row opens to each place's times, with a › that turns when it's open. */
   .row.combined { display: block; }
   .combined summary { display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline;
@@ -2083,6 +2248,9 @@ def main():
         (CITY_DIR / path).mkdir(parents=True, exist_ok=True)
         (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
     (CITY_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
+    (CITY_DIR / "calendar").mkdir(exist_ok=True)
+    for path, feed in calendar_feeds(sources, events, built_at).items():
+        (CITY_DIR / path).write_bytes(feed.encode())  # As written: its lines end \r\n, as the format asks.
     # The site's root: straight to Boston, the only city so far, and robots.txt, which only works there.
     shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
     (PUBLIC_DIR / "index.html").write_text(render_redirect(PUBLIC_URL))

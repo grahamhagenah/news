@@ -251,6 +251,46 @@ class Skipping(unittest.TestCase):
             self.assertIsNone(build.skipping())
 
 
+class Calendars(unittest.TestCase):
+    def test_a_feed_one_event_per_listing_in_utc(self):
+        sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+        show = build.event(sinclair, "Chanel Beads; a show, live", date(2026, 9, 13), time(20, 0), link="https://example.com/1",
+                           detail="with Horse Vision", about=["Doors at seven " * 10])
+        show["times"].append(time(22, 0))
+        untimed = build.event(sinclair, "An Exhibition", date(2026, 9, 14), link="https://example.com/2")
+        feed = build.render_calendar("Pushpin Boston · The Sinclair", "What's on", [untimed, show], datetime(2026, 9, 13, tzinfo=timezone.utc))
+        self.assertTrue(feed.startswith("BEGIN:VCALENDAR\r\n") and feed.endswith("END:VCALENDAR\r\n"))
+        self.assertNotIn("\n", feed.replace("\r\n", ""), "every line ends CRLF")
+        self.assertTrue(all(len(line.encode()) <= 75 for line in feed.split("\r\n")), "folded at 75 bytes")
+        self.assertEqual(feed.count("BEGIN:VEVENT"), 2, "one event a listing, however many times it has")
+        self.assertIn("DTSTART:20260914T000000Z", feed, "8pm in Boston, in UTC")
+        self.assertIn("DTSTART;VALUE=DATE:20260914", feed, "all day, without a time")
+        unfolded = feed.replace("\r\n ", "")
+        self.assertIn("SUMMARY:Chanel Beads\\; a show\\, live", unfolded)
+        self.assertIn("Times: 8pm\\, 10pm", unfolded)
+        self.assertIn("LOCATION:The Sinclair\\, 52 Church St\\, Cambridge\\, MA 02138", unfolded)
+        uid = re.findall(r"UID:(\S+)", unfolded)
+        again = build.render_calendar("x", "y", [untimed, show], datetime(2026, 9, 14, tzinfo=timezone.utc))
+        self.assertEqual(uid, re.findall(r"UID:(\S+)", again.replace("\r\n ", "")), "the same ids from build to build")
+
+    def test_a_feed_for_each_kind_and_venue(self):
+        sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+        hidden = dict(source("ics", "y", "music", "Not Ours"), public=False)
+        items = [build.event(sinclair, "A", date(2026, 9, 13), time(20, 0)), build.event(hidden, "B", date(2026, 9, 13))]
+        feeds = build.calendar_feeds([sinclair, hidden], items, datetime(2026, 9, 13, tzinfo=timezone.utc))
+        self.assertEqual(set(feeds), {"calendar/music.ics", "calendar/film.ics", "calendar/talks.ics", "calendar/the-sinclair.ics"})
+        self.assertNotIn("SUMMARY:B", feeds["calendar/music.ics"], "not a source kept off the public site")
+        self.assertEqual(build.calendar_address("calendar/music.ics"), "webcal://pushpin.city/boston/calendar/music.ics")
+        self.assertIn("calendar.google.com", build.calendar_address("calendar/music.ics", google=True))
+
+    def test_each_listing_can_be_shared(self):
+        sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+        page = build.render_index([build.event(sinclair, "A", date(2026, 9, 13), time(20, 0))], [sinclair], [], [],
+                                  datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
+        self.assertEqual(page.count('<button class="share" type="button" aria-label="Share">'), 1)
+        self.assertIn(f"SHARE_URL = {json.dumps(build.PUBLIC_URL)}", page)
+
+
 class Moving(unittest.TestCase):
     def test_redirects_keep_the_page_and_its_filters(self):
         page = build.render_redirect(build.PUBLIC_URL + "music/")
