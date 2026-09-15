@@ -254,7 +254,7 @@ def event(source, title, day, start=None, link="", detail="", venue="", about=()
     what the source says about it, a few short paragraphs for its preview. image, price and ages when the source
     gives them; otherwise a price and ages from its short lines of facts ("$10 cover · 21+"), not its prose,
     where a "$1 from every ticket" isn't one."""
-    facts = " · ".join([detail] + [paragraph for paragraph in about if len(paragraph) <= FACT_LINE_CHARS])
+    facts = " · ".join([detail] + [paragraph for paragraph in list(about)[:3] if len(paragraph) <= FACT_LINE_CHARS])
     return {
         "title": title,
         "date": day,
@@ -275,6 +275,7 @@ def event(source, title, day, start=None, link="", detail="", venue="", about=()
 
 
 ABOUT_CHARS = 400  # Roughly how much of what a source says about an event its preview shows.
+ABOUT_FULL_CHARS = 2400  # And how much is kept, for a listing's own view, which can show all of it.
 # Short lines worth keeping, like "Doors 7pm", "21+" and "$10 cover": the rest are headings, names and labels.
 FACT = re.compile(r"\d|\$|\b(free|ages?|doors?|cover|cash|sold out|cancel\w*|postponed|tickets?)\b", re.I)
 NOT_ABOUT = re.compile(r"(buy|get)? ?(your )?tickets?( here| now)?|more info(rmation)?|learn more|rsvp( here)?|register( here)?", re.I)
@@ -284,9 +285,10 @@ LINKS = re.compile(r"https?://\S+|\b[\w-]+(\.[\w-]+)*\.(com|net|org|io|co|fm|me|
 def about(markup):
     """What a source says about an event, as its preview's paragraphs: its sentences, with short lines of facts
     ("Doors 7pm", "21+", "$10 cover") run together into one, and a sentence split by a line break made whole.
-    Links, headings and "Buy tickets" are left out."""
+    Links, headings and "Buy tickets" are left out. All of it, up to ABOUT_FULL_CHARS; a preview shows less
+    (clip)."""
     kept = []
-    for paragraph in shared.excerpt(markup, ABOUT_CHARS * 2, min_words=1, max_paragraphs=12):
+    for paragraph in shared.excerpt(markup, ABOUT_FULL_CHARS * 2, min_words=1, max_paragraphs=24):
         paragraph = re.sub(r"\s+", " ", LINKS.sub("", paragraph.replace("**", ""))).strip(" ·|-")
         words = len(paragraph.split())
         if not paragraph or paragraph.endswith(":") or NOT_ABOUT.fullmatch(paragraph.strip(" .!")):
@@ -300,14 +302,21 @@ def about(markup):
                 kept[-1] = (f"{kept[-1][0]} · {paragraph}", True)
             else:
                 kept.append((paragraph, True))
-    paragraphs, budget = [], ABOUT_CHARS
-    for paragraph, _ in kept[:3]:
+    return clip([paragraph for paragraph, _ in kept], ABOUT_FULL_CHARS, 12)
+
+
+def clip(paragraphs, budget, most=3, least=0):
+    """The first few paragraphs, cut to about budget characters, the last one ending "…" where it's cut, unless
+    less than least would be left of it."""
+    kept = []
+    for paragraph in paragraphs[:most]:
         if len(paragraph) > budget:
-            paragraphs.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
+            if budget > least:
+                kept.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
             break
-        paragraphs.append(paragraph)
+        kept.append(paragraph)
         budget -= len(paragraph)
-    return paragraphs
+    return kept
 
 
 def at_boston(moment):
@@ -1246,6 +1255,7 @@ def combine_films(items):
             "category": "film",
             # The first theater's description that has one: most describe the film the same way.
             "about": next((item["about"] for item in showings if item.get("about")), []),
+            "more": next((item.get("more", False) for item in showings if item.get("about")), False),
             "image": next((item["image"] for item in showings if item.get("image")), ""),
         })
     return rows
@@ -1307,6 +1317,7 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <div class="event-times"></div>
 <ul class="event-places"></ul>
 <div class="event-about"></div>
+<button class="event-more" type="button" hidden aria-expanded="false">Read more</button>
 <p class="event-place"></p>
 <p class="event-also"></p>
 <button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button>
@@ -1344,8 +1355,10 @@ def address_attribute(item):
 
 
 def facts_attributes(item):
-    """What the listing's view shows up top that the row doesn't: its picture, price and ages, when known."""
-    return "".join(f' data-{key}="{html.escape(item[key])}"' for key in ("image", "price", "ages") if item.get(key))
+    """What the listing's view shows that the row doesn't: its picture, price and ages, when known; and that
+    there's more of what it's about on its own page (data-more)."""
+    return ("".join(f' data-{key}="{html.escape(item[key])}"' for key in ("image", "price", "ages") if item.get(key))
+            + ' data-more=""' * bool(item.get("more")))
 
 
 def listing_id(day, title, venue=""):
@@ -1368,7 +1381,7 @@ def render_row(item):
         f'<span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], item.get("about", []))}</div></li>'
+        f'{render_times(item["times"])}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div></li>'
     )
 
 
@@ -1391,7 +1404,7 @@ def render_combined(item):
         f'<span class="source">{icon(item["category"])}<span>{places} theaters</span></span>'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
         f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
-        f'{shared.preview(item["title"], item["about"])}</div></summary>'
+        f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div></summary>'
         f'<ul class="showings">{showings}</ul></details></li>'
     )
 
@@ -1403,7 +1416,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
-        events = [dict(item, about=shorter(item.get("about", []))) for item in events if item["source"] in shown]
+        # With more, where there's more of it on the listing's own page, for its view.
+        events = [dict(item, about=shorter(item.get("about", [])), more=shorter(item.get("about", [])) != item.get("about", []))
+                  for item in events if item["source"] in shown]
     # The venue filter's choices: every venue with events coming up, whatever their kind (on a kind's page, a
     # choice goes to the home page, which has them all); on a weekend's or tonight's page, those with events then.
     venues = {item["source"] for item in events}
@@ -1533,16 +1548,8 @@ def event_data(item):
 
 def shorter(paragraphs):
     """A public preview: less of the venue's own words than this page shows, as an excerpt that sends
-    readers to the venue for the rest."""
-    kept, budget = [], PUBLIC_ABOUT_CHARS
-    for paragraph in paragraphs[:2]:
-        if len(paragraph) > budget:
-            if budget > 60:
-                kept.append(paragraph[:budget].rsplit(" ", 1)[0] + "…")
-            break
-        kept.append(paragraph)
-        budget -= len(paragraph)
-    return kept
+    readers to the venue for the rest. A listing's view shows all of it, from its own page."""
+    return clip(paragraphs, PUBLIC_ABOUT_CHARS, 2, least=60)
 
 
 def public_footer(path, notes="", names=""):
@@ -1815,7 +1822,8 @@ def calendar_feeds(sources, events, built_at):
 
 def render_event_page(item, day):
     """A listing's own small page (/boston/e/<its id>/), for the preview a shared link shows: its name, when and
-    where, its price and ages, and its picture (or its kind's card). A link's preview comes from the page it points to, and the apps that show one
+    where, its price and ages, and its picture (or its kind's card); and all of what it's about, which the
+    listing's view reads from it. A link's preview comes from the page it points to, and the apps that show one
     don't run the page's script, so the home page's ?event= address would show only the home page's. Someone
     who opens it goes straight on to the listing's view there."""
     combined = "showings" in item
@@ -1844,6 +1852,7 @@ def render_event_page(item, day):
             f'body {{ margin: 2rem 1.25rem; }} a {{ color: #fff; }}</style>\n'
             f"<script>location.replace({json.dumps(target)});</script>\n"
             f'<h1>{html.escape(item["title"])}</h1>\n<p>{html.escape(description)}</p>\n'
+            f'<div class="about">{"".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in item.get("about", []))}</div>\n'
             f'<p><a href="{html.escape(target)}">See it on {html.escape(PUBLIC_NAME)}</a></p>\n</html>\n')
 
 
@@ -2196,6 +2205,32 @@ INDEX_JS = """
     times.append(...buttons);
     return times;
   };
+  // All of what a listing's about, from its own page, which has it (a row has only an excerpt): fetched once,
+  // when it's pressed or opened, and only where there's more (data-more).
+  const abouts = new Map();
+  const aboutOf = li => {
+    const id = li.dataset.id;
+    if (!("more" in li.dataset)) return null;
+    if (!abouts.has(id)) abouts.set(id, fetch(new URL(SHARE_URL).pathname + "e/" + id + "/")
+      .then(response => response.ok ? response.text() : Promise.reject())
+      .then(page => [...new DOMParser().parseFromString(page, "text/html").querySelectorAll(".about p")].map(p => p.textContent))
+      .catch(() => { abouts.delete(id); return null; }));
+    return abouts.get(id);
+  };
+  // Shown up to a few lines, fading out, with Read more for the rest, when it's longer than that.
+  function showAbout(paragraphs) {
+    const box = part("about"), more = part("more");
+    box.replaceChildren(...paragraphs.map(text => Object.assign(document.createElement("p"), { textContent: text })));
+    box.classList.add("clamped");
+    more.hidden = true;
+    requestAnimationFrame(() => { // Once the view's open, to measure it.
+      const long = box.scrollHeight > box.clientHeight + 8;
+      box.classList.toggle("clamped", long);
+      more.hidden = !long;
+      more.textContent = "Read more";
+      more.setAttribute("aria-expanded", "false");
+    });
+  }
   function fill(li, note = "") {
     shown = li;
     const combined = li.classList.contains("combined");
@@ -2233,7 +2268,9 @@ INDEX_JS = """
       item.append(a, timeButtons(place.querySelectorAll("time[data-time]")));
       return item;
     }) : []));
-    part("about").replaceChildren(...[...li.querySelectorAll(".preview p:not(.full-title)")].map(p => Object.assign(document.createElement("p"), { textContent: p.textContent })));
+    // What it's about: the row's excerpt at once, then all of it, from its own page, where there's more.
+    showAbout([...li.querySelectorAll(".preview p:not(.full-title)")].map(p => p.textContent));
+    aboutOf(li)?.then(full => { if (full?.length && shown === li) showAbout(full); });
     const address = combined ? "" : li.dataset.address || PLACES[venue] || "";
     part("place").replaceChildren(...(address ? [address, " · ", Object.assign(document.createElement("a"), {
       href: "https://www.google.com/maps/search/?" + new URLSearchParams({ api: 1, query: venue + ", " + address }), textContent: "Map ↗" })] : []));
@@ -2272,6 +2309,11 @@ INDEX_JS = """
   view.addEventListener("close", () => { if (closing) closing = false; else restore(); });
   view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
   part("close").addEventListener("click", closeEvent);
+  part("more").addEventListener("click", () => {
+    const open = part("about").classList.toggle("clamped") === false;
+    part("more").textContent = open ? "Show less" : "Read more";
+    part("more").setAttribute("aria-expanded", open);
+  });
   // It fades in once it's all there and decoded, rather than drawing itself top to bottom.
   part("image").firstElementChild.addEventListener("load", async event => {
     const img = event.target, src = img.src;
@@ -2280,10 +2322,12 @@ INDEX_JS = """
     part("image").classList.toggle("whole", img.naturalWidth / img.naturalHeight < 1.3);
     part("image").classList.add("loaded");
   });
-  // Fetched as a listing's pressed, a moment before its view opens.
+  // Its picture and what it's about, fetched as a listing's pressed, a moment before its view opens.
   document.addEventListener("pointerdown", event => {
-    const src = event.target.closest?.(".day > ul > li.row")?.dataset.image;
-    if (src) Object.assign(new Image(), { referrerPolicy: "no-referrer", src });
+    const li = event.target.closest?.(".day > ul > li.row");
+    if (!li) return;
+    if (li.dataset.image) Object.assign(new Image(), { referrerPolicy: "no-referrer", src: li.dataset.image });
+    aboutOf(li);
   });
   part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
   view.addEventListener("click", event => { if (event.target === view) closeEvent(); }); // Outside it, on the backdrop.
@@ -2513,6 +2557,12 @@ CSS = """
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
   .event-places a { margin-right: auto; color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
+  .event-about.clamped { max-height: 12em; overflow: hidden;
+                         -webkit-mask-image: linear-gradient(#000 calc(100% - 3.5em), transparent);
+                         mask-image: linear-gradient(#000 calc(100% - 3.5em), transparent); }
+  .event-more { display: block; margin: -.1rem 0 .2rem; padding: 0; border: 0; background: none; color: #ccc; font: inherit;
+                font-size: .85rem; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; cursor: pointer; }
+  .event-more:hover, .event-more:focus-visible { color: #fff; text-decoration-color: #aaa; outline: none; }
   .event-place, .event-also { margin: .9rem 0 0; color: #888; font-size: .85rem; }
   .event-place a, .event-also a { color: #ccc; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   .event-copy { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1.2rem; padding: .4rem .9rem;

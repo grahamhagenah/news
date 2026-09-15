@@ -349,6 +349,29 @@ class Facts(unittest.TestCase):
         self.assertEqual(build.combine_films([dict(film, category="film") for film in films])[0]["image"], "https://b/1.jpg")
 
 
+class Descriptions(unittest.TestCase):
+    def test_all_of_it_kept_and_a_preview_clipped(self):
+        long = "\n\n".join(f"Paragraph {n} says a good deal about the show, the band, and the night ahead of us all." for n in range(8))
+        kept = build.about(long)
+        self.assertEqual(len(kept), 8, "all of it, for the view")
+        self.assertEqual(build.clip(["a" * 10, "b b b " * 100], 100), ["a" * 10, ("b b b " * 100)[:90].rsplit(" ", 1)[0] + "…"])
+        self.assertEqual(build.clip(["one", "two", "three", "four"], 400), ["one", "two", "three"])
+        self.assertEqual(build.clip(["x" * 300, "y y y " * 50], 320, least=60), ["x" * 300], "not a stub of a paragraph")
+
+    def test_the_public_row_has_an_excerpt_and_its_page_all_of_it(self):
+        sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+        words = [f"Paragraph {n} says a good deal about the show, the band, and the night ahead of us all." for n in range(6)]
+        show = build.event(sinclair, "A show", date(2026, 9, 13), time(20, 0), about=words)
+        brief = build.event(sinclair, "Another", date(2026, 9, 13), time(21, 0), about=words[:1])
+        page = build.render_index([show, brief], [sinclair], [], [], datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
+        self.assertNotIn("Paragraph 5", page)
+        self.assertEqual(page.count('data-more=""'), 1, "only where there's more")
+        own = build.event_pages([sinclair], [show])["e/2026-09-13-a-show-the-sinclair/index.html"]
+        self.assertIn('<div class="about"><p>Paragraph 0', own)
+        self.assertIn("Paragraph 5 says", own)
+        self.assertIn('<button class="event-more" type="button" hidden', page)
+
+
 class SharedLinks(unittest.TestCase):
     def test_each_listing_has_a_page_with_its_own_preview(self):
         coolidge = dict(source("coolidge", "x", "film", "Coolidge Corner"), public=True)
