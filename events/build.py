@@ -1710,6 +1710,10 @@ CSS = """
   [data-show="film"], [data-category="film"] { --dot: var(--film); }
   [data-show="art"], [data-category="art"] { --dot: var(--art); }
   h2 { margin: 2.25rem 0 .5rem; color: #777; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  /* A day's heading stays at the top of the window while its events scroll under it, until the next day's
+     pushes it up and takes its place. The space around it is padding, where it's black, so the events passing
+     under are hidden there too; the same space as before, in all. */
+  .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000; }
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
