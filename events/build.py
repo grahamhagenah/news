@@ -1302,13 +1302,13 @@ CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2
                         "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
 CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
               'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
-# A listing's own view, opened by clicking it: its picture, where and when, its price and ages, each place it's
-# at, a link to its page (tickets), with its times to add to a calendar, what it's about, the address, its other
+# A listing's own view, opened by clicking it: its picture, when, its price and ages, each place it's at, a
+# link to its page (tickets), with its times, what it's about, the address, its other
 # dates, and a way to copy its link. The script fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button>
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
-<p class="event-where"><span class="event-icon"></span><span class="event-venue"></span><span class="event-day"></span></p>
+<p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>
 <h2 class="event-title" id="event-title"></h2>
 <p class="event-facts"></p>
 <p class="event-detail"></p>
@@ -1335,7 +1335,7 @@ def icon(category, decorative=False):
 
 def render_times(moments):
     # data-time lets the page drop today's showings once they've started. The commas between are their own,
-    # so a time, which adds its showing to a calendar, lights up alone on hover.
+    # so one goes with a time that's gone.
     times = '<span class="sep">, </span>'.join(f'<time data-time="{moment:%H:%M}">{clock(moment)}</time>' for moment in moments)
     return f'<span class="times">{times}</span>' if times else ""
 
@@ -1347,8 +1347,8 @@ def written(address):
 
 
 def address_attribute(item):
-    """An event's own address, when the source gives one, for adding it to a calendar; otherwise the page's
-    table of venues' addresses serves."""
+    """An event's own address, when the source gives one, for its view; otherwise the page's table of venues'
+    addresses serves."""
     return f' data-address="{html.escape(written(item["address"]))}"' if item.get("address") else ""
 
 
@@ -1390,7 +1390,7 @@ def render_combined(item):
     first = item["times"][0] if item["times"] else None
     start = f'<span class="times">from <time class="from" data-time="{first:%H:%M}">{clock(first)}</time></span>' if first else ""
     showings = "".join(
-        f'<li data-source="{html.escape(showing["source"])}"{address_attribute(showing)}>'
+        f'<li data-source="{html.escape(showing["source"])}">'
         f'<a href="{html.escape(showing["link"])}">{html.escape(showing["venue"])}</a>'
         f'{render_times(showing["times"])}</li>'
         for showing in item["showings"]
@@ -2115,53 +2115,6 @@ INDEX_JS = """
     showEvents();
   });
 
-  // A showtime adds that showing to a calendar: on an iPhone or iPad, Calendar's own sheet for adding it; on
-  // Android, Google Calendar's page with it filled in; elsewhere a file any calendar app opens. It runs two
-  // hours, since most listings give only when things start. The time looks just as before, until it's hovered.
-  const pad = n => String(n).padStart(2, "0");
-  const stamp = (day, time, hours = 0) => {
-    const [h, m] = time.split(":").map(Number);
-    const d = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10), h + hours, m));
-    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00`;
-  };
-  const calendarText = text => text.replace(/[\\\\;,]/g, "\\\\$&").replace(/\\n/g, "\\\\n");
-  function showing(t) {
-    const row = t.closest(".row");
-    const place = t.closest(".showings li"); // One theater's times, in a film at several.
-    const venue = place ? place.querySelector("a").textContent : row.querySelector(".source > span").textContent;
-    const address = (place && place.dataset.address) || row.dataset.address || PLACES[venue] || "";
-    const day = t.closest(".day").dataset.date;
-    return {
-      title: row.querySelector(".title").textContent.trim(),
-      where: [venue, address].filter(Boolean).join(", "),
-      link: (place ? place.querySelector("a") : row.querySelector("a.title")).href,
-      start: stamp(day, t.dataset.time),
-      end: stamp(day, t.dataset.time, 2),
-    };
-  }
-  function addToCalendar(t) {
-    const { title, where, link, start, end } = showing(t);
-    tally("calendar/" + venueOf(t), title);
-    if (/Android/i.test(navigator.userAgent)) {
-      const details = { action: "TEMPLATE", text: title, dates: `${start}/${end}`, ctz: "America/New_York", location: where, details: link };
-      open("https://calendar.google.com/calendar/render?" + new URLSearchParams(details), "_blank", "noopener");
-      return;
-    }
-    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//" + location.hostname + "//EN", "BEGIN:VEVENT",
-      `UID:${start}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@${location.hostname}`,
-      "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z",
-      `DTSTART;TZID=America/New_York:${start}`, `DTEND;TZID=America/New_York:${end}`,
-      "SUMMARY:" + calendarText(title), "LOCATION:" + calendarText(where), "URL:" + link,
-      "DESCRIPTION:" + calendarText(link), "END:VEVENT", "END:VCALENDAR"].join("\\r\\n");
-    const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (apple) { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics); return; }
-    const a = Object.assign(document.createElement("a"), {
-      href: URL.createObjectURL(new Blob([ics], { type: "text/calendar" })),
-      download: (title.replace(/[^\\w\\s-]+/g, "").trim().slice(0, 60) || "event") + ".ics",
-    });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  }
   // A note at the foot of the window, for a moment: that a listing sent in a link has passed.
   const toast = message => {
     const note = document.querySelector(".toast") || document.body.appendChild(Object.assign(document.createElement("p"), { className: "toast" }));
@@ -2171,8 +2124,7 @@ INDEX_JS = """
     note.timer = setTimeout(() => note.classList.remove("shown"), 2200);
   };
 
-  // A listing opens its own view: where and when; each place it's at, a link to its page, for tickets, with
-  // its times, each adding that showing to a calendar; what it's about; the address and a map; its other dates; and a way
+  // A listing opens its own view: when; each place it's at, a link to its page, for tickets, with its times; what it's about; the address and a map; its other dates; and a way
   // to copy its link. The view has an address of its own (?event=…), so Back closes it and a shared link opens it.
   // The listing's name is still a link to the venue's page: a click with a modifier key, or a middle click,
   // goes straight there.
@@ -2189,17 +2141,12 @@ INDEX_JS = """
   };
   let shown = null, pushed = false;
   for (const opener of document.querySelectorAll(".day a.title, .combined summary")) opener.setAttribute("aria-haspopup", "dialog");
-  // Its times, as buttons that add a showing to a calendar (the listing's own time, which knows where and when).
-  const timeButtons = times => group([...times].map(t => {
-    const b = Object.assign(document.createElement("button"), { type: "button", className: "event-time", textContent: t.textContent });
-    b.title = "Add to calendar";
-    b.addEventListener("click", () => addToCalendar(t));
-    return b;
-  }));
+  // Its times, as the listing has them.
+  const timeLabels = times => group([...times].map(t => Object.assign(document.createElement("span"), { className: "event-time", textContent: t.textContent })));
   // Together, to the right of what they're for, going on to another line there when there are more than fit.
-  const group = buttons => {
+  const group = labels => {
     const times = Object.assign(document.createElement("span"), { className: "event-group" });
-    times.append(...buttons);
+    times.append(...labels);
     return times;
   };
   // All of what a listing's about, from its own page, which has it (a row has only an excerpt): fetched once,
@@ -2235,7 +2182,6 @@ INDEX_JS = """
     const venue = li.querySelector(".source > span").textContent;
     view.dataset.category = li.dataset.category;
     part("icon").replaceChildren(li.querySelector(".source .icon").cloneNode(true));
-    part("venue").textContent = venue;
     part("day").textContent = dayName(li.closest(".day").dataset.date);
     part("title").textContent = title;
     // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
@@ -2261,7 +2207,7 @@ INDEX_JS = """
       const a = Object.assign(document.createElement("a"), { href: place.href, textContent: place.name + " ↗",
         title: (li.dataset.category === "art" ? "Details at " : "Tickets at ") + place.name });
       a.dataset.source = place.source;
-      item.append(a, timeButtons(place.times));
+      item.append(a, timeLabels(place.times));
       return item;
     }));
     // What it's about: the row's excerpt at once, then all of it, from its own page, where there's more.
@@ -2533,7 +2479,6 @@ CSS = """
                 font-variant-numeric: tabular-nums; }
   .event-where { display: flex; align-items: center; gap: .45em; margin: 0 2.5rem .5rem 0; color: #888; font-size: .8rem; }
   .event-where .icon { width: 12px; height: 12px; }
-  .event-day::before { content: "·"; margin-right: .45em; }
   .event-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em;
                  line-height: 1.25; text-transform: none; }
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
@@ -2541,11 +2486,9 @@ CSS = """
   .event-note { color: #bbb; }
   /* Each place it's at, a link to its page (for tickets), with its times to the right, going on to another line
      there, not under it, when there are more than fit. */
-  .event-time { padding: .3rem .7rem; border: 1px solid #333; border-radius: 999px; background: none; color: #ddd;
-                font: inherit; font-size: .85rem; cursor: pointer; }
-  .event-time:hover, .event-time:focus-visible { border-color: #888; color: #fff; outline: none; }
+  .event-time { color: #ddd; font-size: .9rem; font-variant-numeric: tabular-nums; }
   .event-places { margin: 1.1rem 0 1rem; }
-  .event-group { display: flex; flex-wrap: wrap; gap: .45rem; }
+  .event-group { display: flex; flex-wrap: wrap; gap: .2rem .9rem; }
   .event-places li { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .75rem; padding: .55rem 0;
                      border-top: 1px solid #1c1c1c; }
   .event-places .event-group { justify-content: flex-end; }
