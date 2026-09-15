@@ -2517,6 +2517,8 @@ CSS = """
     dialog.event { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 1.25rem 1.25rem 1.5rem;
                    border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }
+    .event-close { top: .75rem; right: .75rem; width: 2.5rem; height: 2.5rem; } /* A bigger target for a thumb. */
+    .close-mark { width: 17px; height: 17px; }
     dialog.event[open] { animation: sheet .22s ease-out; }
     @keyframes sheet { from { transform: translateY(100%); } }
   }
