@@ -1208,7 +1208,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         rows.sort(key=lambda item: (bool(item["times"]), item["times"][:1], item["title"].casefold()))
         sections.append(
             f'<section class="day" data-date="{day.isoformat()}">'
-            f'<h2><span class="relative"></span><span class="date">{day.strftime("%a, %b")} {day.day}</span></h2>\n'
+            f'<h2><span class="relative"></span><span class="date"><span class="weekday">{day:%a}</span>, {day:%b} {day.day}</span></h2>\n'
             '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>"
         )
 
@@ -1446,6 +1446,21 @@ INDEX_JS = """
       day.dataset.date === today ? "Today" : day.dataset.date === tomorrow ? "Tomorrow" : "";
   }
 
+  // A day's heading pinned to the top of the window gets a faint line under it: the one at the top whose day
+  // is still on screen. Checked as the page scrolls, once a frame at most, and whenever the list changes.
+  const headings = [...document.querySelectorAll(".day > h2")];
+  function markPinned() {
+    for (const h2 of headings) {
+      const top = h2.getBoundingClientRect().top;
+      h2.classList.toggle("pinned", h2.offsetParent !== null && top < 1 && h2.parentElement.getBoundingClientRect().bottom > 0);
+    }
+  }
+  let pinning = false;
+  addEventListener("scroll", () => {
+    if (!pinning) requestAnimationFrame(() => { pinning = false; markPinned(); });
+    pinning = true;
+  }, { passive: true });
+
   // Today lists only what's still to come: showings drop off once they've started, and an event goes
   // once its last one has. Events without a time stay all day.
   const now = new Date().toLocaleTimeString("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" });
@@ -1563,6 +1578,7 @@ INDEX_JS = """
       a.setAttribute("href", a.dataset.href + query()); // A search goes along to the other pages.
     }
     document.querySelector("main").classList.add("paged");
+    markPinned();
   }
   showEvents();
   filter.addEventListener("click", event => {
@@ -1713,10 +1729,17 @@ CSS = """
   /* A day's heading stays at the top of the window while its events scroll under it, until the next day's
      pushes it up and takes its place. The space around it is padding, where it's black, so the events passing
      under are hidden there too; the same space as before, in all. */
-  .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000; }
+  .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000;
+              transition: box-shadow .15s; }
+  /* While it's pinned there, a faint line under it (the same as above the footer), marking where the events
+     go under; the script tells when it's pinned. */
+  .day > h2.pinned { box-shadow: 0 1px 0 rgba(255, 255, 255, .09); }
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
+  /* The day of the week in white, as Today and Tomorrow are; after those, it's in gray with the date. */
+  .weekday { color: #fff; }
+  .relative:not(:empty) + .date .weekday { color: inherit; }
   /* A source that didn't load, at the foot of the page, marked by a small circled exclamation point. */
   .notice { display: flex; align-items: baseline; gap: .45em; }
   .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
