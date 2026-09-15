@@ -6,6 +6,7 @@ key, so that one follows its documented format. When a site changes and its read
 sample alongside the fix.
 """
 
+import json
 import os
 import re
 import sys
@@ -666,6 +667,13 @@ class Page(unittest.TestCase):
         self.assertIn("MFA</a> <span class=\"count\">1</span>", sections["Art &amp; talks"])
         self.assertNotIn("Not Ours", about)
         self.assertIn("How to use it", about)
+        # The questions, each opening to its answer, and told to search engines as an FAQ.
+        self.assertEqual(about.count("<details><summary>"), len(build.FAQS))
+        self.assertIn("<summary>Why isn’t the Somerville Theatre on here?</summary>", about)
+        data = json.loads(about.split('<script type="application/ld+json">')[1].split("</script>")[0])
+        self.assertEqual(data["@type"], "FAQPage")
+        self.assertEqual([q["name"] for q in data["mainEntity"]], [q for q, _ in build.FAQS])
+        self.assertNotIn("<a", json.dumps(data), "answers as plain text there")
 
     def test_sitemap(self):
         sitemap = build.render_sitemap(datetime(2026, 9, 13, tzinfo=timezone.utc))

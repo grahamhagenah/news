@@ -1393,6 +1393,30 @@ def public_page(path, title, body, built_at=None, description=PUBLIC_DESCRIPTION
                        here=PAGE_NAMES.get(path, ""))
 
 
+# The About page's questions, each with its answer (markup, with {root} for the site's root), in Graham's words.
+FAQS = [
+    ("Who makes this?",
+     "I’m Graham Hagenah. I live in Somerville and love supporting my local theaters and concert venues, and I "
+     "wanted an easier way to track what’s coming up than relying on Google or visiting each venue’s website."),
+    ("Why isn’t the Somerville Theatre on here?",
+     "Its concerts are, but not its films. The theater’s website has no public calendar feed and doesn’t allow "
+     "automated web crawling, so its screenings can’t be gathered. I’m trying to get in touch with its managers "
+     "to find a way around this. The same goes for the Capitol Theatre in Arlington."),
+    ("Why isn’t my favorite venue here?",
+     "It may not publish its calendar in a way that can be read automatically, or I may not have found it yet. "
+     "<a href=\"{root}contact/\">Tell me about it</a> and I’ll take a look."),
+    ("How often is it updated?",
+     "Every few hours, from each venue’s own calendar. Shows added or changed since then appear with the next "
+     "update, so check the venue’s page before you go."),
+    ("Why do some listings have no time?",
+     "Some venues post only the date, or only when their doors open, not when the show starts. The listing links "
+     "to the venue’s page, which usually has the rest."),
+    ("Does it track me?",
+     "No. There are no ads, no accounts, no cookies, and no analytics. Your venue and search choices live only "
+     "in the page’s address."),
+]
+
+
 def render_about(sources, built_at, events=()):
     """What the public site is, how to use it, and every venue it reads, by kind: each a link to its events,
     with how many it has coming up. A venue is under each kind it has events of (the MFA's concerts and films
@@ -1415,6 +1439,8 @@ def render_about(sources, built_at, events=()):
         f'<h2>{html.escape(CATEGORIES[key])}</h2>\n<ul class="venues">{"".join(venue(name, key) for name in shared.as_said(kinds[key]))}</ul>\n'
         for key in CATEGORIES if kinds.get(key)
     )
+    faq = "\n".join(f"<details><summary>{html.escape(question)}</summary><p>{answer.replace('{root}', root)}</p></details>"
+                    for question, answer in FAQS)
     body = f"""<div class="prose">
 <p>{PUBLIC_NAME} puts concerts, films, and talks from venues across Boston, Cambridge, and Somerville on one page,
 day by day: concerts two months ahead, films and talks one month.</p>
@@ -1436,10 +1462,20 @@ to it.</li>
 <h2>Venues</h2>
 <p>Every venue in the feed, with how many listings each one has coming up.</p>
 {groups}
+<h2>Questions</h2>
+<div class="faq">
+{faq}
+</div>
 <p>Know a venue that should be here, or spotted a mistake? <a href="{root}contact/">Get in touch</a>.</p>
 </div>"""
+    # The questions, for search engines too, which can show them in their results.
+    answers = [(question, answer.replace("{root}", root)) for question, answer in FAQS]
+    data = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+        {"@type": "Question", "name": question, "acceptedAnswer": {"@type": "Answer", "text": text(answer)}}
+        for question, answer in answers]}
     return public_page("about/", f"About · {PUBLIC_NAME}", body,
-                       description=f"What {PUBLIC_NAME} is, how to use it, and the Boston, Cambridge and Somerville venues it lists.")
+                       description=f"What {PUBLIC_NAME} is, how to use it, the Boston, Cambridge and Somerville venues it "
+                                   f"lists, and questions about it.", data=data)
 
 
 def render_redirect(address, paths=False):
@@ -1790,6 +1826,16 @@ PUBLIC_CSS = """
   .venues { columns: 13rem 2; column-gap: 1.5rem; }
   .venues li { margin-bottom: .35rem; break-inside: avoid; }
   .venues + p { margin-top: 2rem; }
+  /* The questions: one to a line between faint rules, each opening to its answer, with a › that turns. */
+  .faq { margin: .75rem 0 2rem; border-bottom: 1px solid #1c1c1c; }
+  .faq details { border-top: 1px solid #1c1c1c; }
+  .faq summary { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 0; color: #fff;
+                 list-style: none; cursor: pointer; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "›"; color: #666; transition: transform .15s; }
+  .faq details[open] summary::after { transform: rotate(90deg); }
+  .faq summary:hover::after { color: #bbb; }
+  .faq details p { margin: -.25rem 0 .9rem; color: #bbb; }
   .prose .venues a { text-decoration: none; }
   .prose .venues a:hover { text-decoration: underline; text-decoration-color: #555; }
   .venues .count { margin-left: .35em; color: #666; font-size: .8em; }
