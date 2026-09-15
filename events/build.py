@@ -1286,6 +1286,8 @@ def tabler(paths, css_class):
 # A listing's share button's icon (Tabler's "share-2"), and a calendar to subscribe to (its "calendar-plus").
 SHARE_MARK = tabler(["M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1", "M12 14v-11",
                      "M9 6l3 -3l3 3"], "share-mark")
+# And its "check", which takes the share icon's place once the link is copied.
+CHECK_MARK = tabler(["M5 12l5 5l10 -10"], "check-mark")
 CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5", "M16 3v4", "M8 3v4",
                         "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
 CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
@@ -1307,7 +1309,7 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <div class="event-about"></div>
 <p class="event-place"></p>
 <p class="event-also"></p>
-<button class="event-share" type="button">{SHARE_MARK}<span>Share</span></button>
+<button class="event-share" type="button">{SHARE_MARK}{CHECK_MARK}<span aria-live="polite">Share</span></button>
 </dialog>
 """
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
@@ -2153,7 +2155,7 @@ INDEX_JS = """
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   }
-  // A note at the foot of the window, for a moment: what sharing did, where there's no share sheet.
+  // A note at the foot of the window, for a moment: that a listing sent in a link has passed.
   const toast = message => {
     const note = document.querySelector(".toast") || document.body.appendChild(Object.assign(document.createElement("p"), { className: "toast" }));
     note.textContent = message;
@@ -2237,7 +2239,7 @@ INDEX_JS = """
       history.replaceState(null, "", withEvent(others[i].dataset.id));
       fill(others[i]);
     });
-    part("share").classList.remove("sharing");
+    shareSays("Share");
     view.scrollTop = 0;
   }
   function openEvent(li, push, note) {
@@ -2295,10 +2297,18 @@ INDEX_JS = """
   }
 
   // Share the listing in view: the device's own share sheet, where there is one, with what it is ("Aldous
-  // Harding · The Sinclair · Mon, Sep 14, 8pm") and its own link; elsewhere, the same copied, to paste.
+  // Harding · The Sinclair · Mon, Sep 14, 8pm") and its own link; elsewhere, the same copied, to paste, which
+  // the button itself says for a moment, with a check for its icon.
+  function shareSays(label, state = "") {
+    const button = part("share");
+    clearTimeout(button.timer);
+    button.classList.remove("sharing", "copied");
+    if (state) button.classList.add(state);
+    button.lastElementChild.textContent = label;
+  }
   part("share").addEventListener("click", async () => {
     const li = shown, button = part("share");
-    button.classList.add("sharing");
+    shareSays("Share", "sharing");
     const title = li.querySelector(".title").textContent.trim();
     const time = li.querySelector("time");
     const when = dayName(li.closest(".day").dataset.date).replace(/^Today$|^Tomorrow$/, () => new Date(li.closest(".day").dataset.date + "T12:00:00Z")
@@ -2309,11 +2319,12 @@ INDEX_JS = """
     tally("share/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), title);
     if (navigator.share) {
       try { await navigator.share({ title, text, url }); } catch (error) {} // Closed without sharing.
+      shareSays("Share");
     } else {
-      try { await navigator.clipboard.writeText(text + "\\n" + url); toast("Copied, ready to paste"); }
-      catch (error) { toast("Couldn’t copy it"); }
+      try { await navigator.clipboard.writeText(text + "\\n" + url); shareSays("Link copied", "copied"); }
+      catch (error) { shareSays("Couldn’t copy it"); }
+      button.timer = setTimeout(() => shareSays("Share"), 2500);
     }
-    button.classList.remove("sharing");
   });
 
   // A listing followed to its venue's page, counted as the venue's: from its view, or straight from its name
@@ -2484,7 +2495,10 @@ CSS = """
   .event-share { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1.2rem; padding: .4rem .9rem;
                  border: 1px solid #333; border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .85rem; cursor: pointer; }
   .event-share:hover, .event-share:focus-visible, .event-share.sharing { border-color: #888; color: #fff; outline: none; }
-  .share-mark { width: 15px; height: 15px; }
+  .share-mark, .check-mark { width: 15px; height: 15px; }
+  .event-share .check-mark, .event-share.copied .share-mark { display: none; }
+  .event-share.copied .check-mark { display: block; color: #4ade80; }
+  .event-share.copied { border-color: #888; color: #fff; }
   @media (max-width: 34rem) {
     dialog.event { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 1.25rem 1.25rem 1.5rem;
                    border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
@@ -2492,7 +2506,7 @@ CSS = """
     dialog.event[open] { animation: sheet .22s ease-out; }
     @keyframes sheet { from { transform: translateY(100%); } }
   }
-  /* What sharing did, where there's no share sheet: a note at the foot of the window for a moment. */
+  /* That a listing sent in a link has passed: a note at the foot of the window for a moment. */
   .toast { position: fixed; z-index: 3; left: 50%; bottom: 1.5rem; margin: 0; padding: .5rem .9rem; transform: translate(-50%, .5rem);
            border: 1px solid #333; border-radius: 999px; background: #111; color: #ddd; font-size: .85rem;
            opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
