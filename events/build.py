@@ -193,9 +193,68 @@ def text(markup):
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", markup or ""))).strip()
 
 
-def event(source, title, day, start=None, link="", detail="", venue="", about=(), address=None):
+# What a listing costs and who it's for, as its view shows them up top: "$18–$20", "Free"; "All ages", "18+", "21+".
+# A line that says the event itself is free ("Free", "Free admission", "This talk is free"), not something at it
+# ("Free pizza", "18 and under free", "Free for members").
+FREE = re.compile(r"^free\b(?! (with|for|to members|pizza|food|drinks|parking))|^no cover\b|\bfree (admission|entry|event|show|concert|"
+                  r"screening|to attend|and open)\b|\badmission( is)?:? free\b|\bthis (event|program|show|screening|talk|"
+                  r"lecture|concert) is free\b", re.I)
+# An amount, or a range of them ("$5-20"), not a sum raised ("$5 million") or the ages after it ("$10-21+").
+PRICE = re.compile(r"\$\s?(\d{1,4}(?:\.\d{2})?)(?:\s*[-–]\s*\$?(\d{1,4}(?:\.\d{2})?)(?![\d.+]))?(?![\d,]*\s*(?:million|billion|k\b))", re.I)
+NOT_PRICE = re.compile(r"donat|proceeds|raised|from (every|each)\b", re.I)  # "$4 from every ticket goes to …"
+AGES = re.compile(r"\b(all[ -]ages|(18|21)\s*(?:\+|and over|& over|and up|and older|or older))", re.I)
+# Ages as a venue states them in its description, the one place prose is read for them: "Ages: This event is 21+".
+AGES_STATED = re.compile(r"\bage(?:s| limit| restriction)?:\s*(?:this (?:event|show) is\s*)?(all[ -]ages|18\+|21\+)", re.I)
+FACT_LINE_CHARS = 140  # A line this short is a line of facts ("$15 / $10 students · seated"); a longer one, prose.
+
+
+def money(amount):
+    """15.5 as $15.50, 18.0 as $18."""
+    amount = float(amount)
+    return f"${amount:.2f}" if amount % 1 else f"${amount:.0f}"
+
+
+def price_of(low, high=None):
+    """A price, or a range of them: $18, $18–$20; none for nothing, or for $0, which some sources give
+    for a price they don't have."""
+    amounts = sorted({float(amount) for amount in (low, high) if amount not in (None, "") and float(amount) > 0})
+    return "–".join(money(amount) for amount in (amounts[:1] + amounts[1:][-1:])) if amounts else ""
+
+
+def price_from(text_):
+    """A price in a line of text: every amount in it as a range ("$15 / $10 students" is $10–$15), or Free
+    when it says so and has none."""
+    parts = [part.strip() for part in re.split(r"\s[·|–-]\s|\n", text_ or "") if not NOT_PRICE.search(part)]
+    amounts = [amount for part in parts for found in PRICE.findall(part) for amount in found if amount]
+    if amounts:
+        return price_of(min(amounts, key=float), max(amounts, key=float))
+    return "Free" if any(FREE.search(part) for part in parts) else ""
+
+
+def ages_from(text_):
+    """Who it's for, as a line of text says: All ages, 18+ or 21+."""
+    found = AGES.search(text_ or "")
+    if not found:
+        return ""
+    return f"{found.group(2)}+" if found.group(2) else "All ages"
+
+
+def image_of(value):
+    """A schema.org image: a URL, a list of them, or an ImageObject."""
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    if isinstance(value, dict):
+        value = value.get("url") or value.get("contentUrl") or ""
+    return value if isinstance(value, str) and value.startswith("http") else ""
+
+
+def event(source, title, day, start=None, link="", detail="", venue="", about=(), address=None, image="", price="",
+          ages=""):
     """One listing. start is a time of day in Boston, or None when the source gives only the date; about is
-    what the source says about it, a few short paragraphs for its preview."""
+    what the source says about it, a few short paragraphs for its preview. image, price and ages when the source
+    gives them; otherwise a price and ages from its short lines of facts ("$10 cover · 21+"), not its prose,
+    where a "$1 from every ticket" isn't one."""
+    facts = " · ".join([detail] + [paragraph for paragraph in about if len(paragraph) <= FACT_LINE_CHARS])
     return {
         "title": title,
         "date": day,
@@ -209,6 +268,9 @@ def event(source, title, day, start=None, link="", detail="", venue="", about=()
         "about": [paragraph for paragraph in about if paragraph.casefold() != title.casefold()],
         # Where it is, (street, town, ZIP), when the source says and it isn't the venue's usual address.
         "address": list(address) if address else None,
+        "image": image or "",
+        "price": price or price_from(facts),
+        "ages": ages_from(ages) or ages_from(facts) or ages_from(" ".join(AGES_STATED.findall(" ".join(about)))),
     }
 
 
@@ -274,8 +336,20 @@ def read_aeg(source):
             link=(item.get("ticketing") or {}).get("url", ""),
             detail=f"with {support}" if support else "",
             about=about(item.get("bio") or item.get("description")),  # Its description is mostly a ticket charity note.
+            image=aeg_image(item.get("relatedMedia")),
+            price=price_from(f"{item.get('ticketPriceLow') or ''} {item.get('ticketPriceHigh') or ''}"),  # "$0" for none.
+            ages=item.get("age") or "",
         ))
     return events
+
+
+def aeg_image(media):
+    """The widest of an AEG listing's pictures up to 800 pixels (its 678 by 399, usually); they come in a
+    dozen sizes and shapes, down to thumbnails."""
+    pictures = [picture for picture in (media or {}).values() if isinstance(picture, dict) and picture.get("file_name")]
+    width = lambda picture: int(picture.get("width") or 0) if str(picture.get("width") or 0).isdigit() else 0
+    fitting = [picture for picture in pictures if width(picture) <= 800] or pictures
+    return max(fitting, key=width)["file_name"] if fitting else ""
 
 
 def read_axs(source):
@@ -295,7 +369,9 @@ def read_axs(source):
         doors = re.search(r"\d{1,2}:\d{2} [AP]M", field(r'<span class="time">.*?</span>(.*?)</span>'))
         start = datetime.strptime(doors.group(), "%I:%M %p").time() if doors else None
         support = field(r'class="supporting[^"]*">(.*?)</h4>')
-        facts = [field(r'<h5 class="tour">(.*?)</h5>'), f"Doors {clock(start)}" if start else "", field(r'<span class="age">(.*?)</span>')]
+        age = field(r'<span class="age">(.*?)</span>')
+        facts = [field(r'<h5 class="tour">(.*?)</h5>'), f"Doors {clock(start)}" if start else "", age]
+        picture = re.search(r'<img[^>]+src="(https?://[^"]+)"', entry)
         events.append(event(
             source,
             text(name.group(2)),
@@ -304,6 +380,8 @@ def read_axs(source):
             link=html.unescape(name.group(1)),
             detail=f"with {support}" if support else "",
             about=[" · ".join(fact for fact in facts if fact)],
+            image=html.unescape(picture.group(1)) if picture else "",
+            ages=age,
         ))
     soon = [listing for listing in events if listing["date"] <= window_end(source["category"])]
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -337,6 +415,7 @@ def read_ticketweb(source):
         if day < today - timedelta(days=60):  # A January show listed in December.
             day = day.replace(year=today.year + 1)
         room = re.search(r'class="tw-venue-name">(.*?)</span>', section, re.S)
+        picture = re.search(r'<img[^>]+class="event-img[^"]*"[^>]+src="([^"]+)"', section)
         events.append(event(
             source,
             html.unescape(title),
@@ -345,6 +424,7 @@ def read_ticketweb(source):
             link=html.unescape(link),
             # "@ Middle East - Zuzu": just the venue, not the room; Sonia, next door, stays Sonia.
             venue=text(room.group(1)).lstrip("@ ").split(" - ")[0] if room else "",
+            image=html.unescape(picture.group(1)).replace("_Original.", "_Edp.") if picture else "",  # 800 pixels, not 3000.
         ))
     return events
 
@@ -367,7 +447,8 @@ def read_jsonld(source):
                 if isinstance(value, (dict, list)):
                     collect(value)
 
-    for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', fetch(source["url"]), re.S):
+    page = fetch(source["url"])
+    for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', page, re.S):
         try:
             collect(json.loads(block))
         except ValueError:
@@ -382,9 +463,29 @@ def read_jsonld(source):
         title = re.sub(r"\s+-\s+\d{1,2}/\d{1,2}/\d{2,4}\s+@.*$", "", html.unescape(item.get("name", "")))
         work = item.get("workPresented") or {}
         work = works.get(work.get("@id"), work) if isinstance(work, dict) else {}
+        offers = item.get("offers") or {}
+        offers = offers[0] if isinstance(offers, list) and offers else offers if isinstance(offers, dict) else {}
         events.append(event(source, title, day, start if "T" in item["startDate"] else None, link=item.get("url", ""),
-                            about=jsonld_about(item, work)))
+                            about=jsonld_about(item, work), image=lighter(image_of(item.get("image")) or image_of(work.get("image")), page),
+                            price=price_of(offers.get("lowPrice") or offers.get("price"), offers.get("highPrice"))))
     return events
+
+
+def lighter(image, page=""):
+    """A smaller copy of a picture where its host makes one, rather than the full size schema.org gives (up to
+    2560 pixels and a megabyte or two): Ticketmaster's 1024-pixel one, 800 pixels from imgix, and from a
+    WordPress site, the size nearest 800 pixels wide its page uses (poster-2-768x1138.jpg for poster-2-scaled.jpg)."""
+    if "ticketm.net/" in image:
+        return image.replace("_TABLET_LANDSCAPE_LARGE_16_9", "_TABLET_LANDSCAPE_16_9")
+    if ".imgix.net/" in image and not re.search(r"[?&]w=", image):
+        return image + ("&" if "?" in image else "?") + "w=800"
+    stem = re.match(r"(.+?)(?:-scaled|-\d+x\d+)?\.(jpe?g|png|webp)$", image, re.I)
+    if stem and page:
+        sizes = {(int(width), found) for found, width in re.findall(rf"({re.escape(stem.group(1))}-(\d+)x\d+\.{stem.group(2)})", page)}
+        fitting = [size for size in sizes if 600 <= size[0] <= 1100]
+        if fitting:
+            return min(fitting, key=lambda size: abs(size[0] - 800))[1]
+    return image
 
 
 def jsonld_about(item, work):
@@ -433,8 +534,10 @@ def read_coolidge(source):
             blurb = re.search(r'class="film-card__excerpt">(.*?)</div>', card, re.S)
             runtime = re.search(r'class="film-card__runtime">(.*?)</div>', card, re.S)
             facts = [text(runtime.group(1))] if runtime else []
+            picture = re.search(r'<img[^>]+src="([^"]+)"', card)
             listing = event(source, html.unescape(film.group(1)), day, link=f"https://coolidge.org{film.group(2)}",
-                            about=about(blurb.group(1) if blurb else "") + facts)
+                            about=about(blurb.group(1) if blurb else "") + facts,
+                            image=urljoin("https://coolidge.org/", html.unescape(picture.group(1))) if picture else "")
             listing["times"] = [
                 datetime.strptime(clock.strip().upper(), "%I:%M%p").time()
                 for clock in re.findall(r'class="showtime-ticket__time">([^<]+)<', card)
@@ -448,6 +551,7 @@ def read_alamo(source):
     data = json.loads(fetch(source["url"]))["data"]
     titles = {item["slug"]: (item.get("show") or {}).get("title") for item in data["presentations"]}
     headlines = {item["slug"]: (item.get("show") or {}).get("headline") or "" for item in data["presentations"]}
+    pictures = {item["slug"]: alamo_image(item.get("show") or {}) for item in data["presentations"]}
     market = urlsplit(source["url"]).path.rstrip("/").rsplit("/", 1)[-1]
     events = []
     for session in data["sessions"]:
@@ -458,8 +562,17 @@ def read_alamo(source):
         start = datetime.fromisoformat(session["showTimeClt"])
         link = f"https://drafthouse.com/{market}/show/{session['presentationSlug']}"
         events.append(event(source, title, start.date(), start.time(), link=link,
-                            about=about(headlines.get(session["presentationSlug"]))))
+                            about=about(headlines.get(session["presentationSlug"])), image=pictures.get(session["presentationSlug"], "")))
     return events
+
+
+def alamo_image(show):
+    """A film's wide still, asked for at 800 by 450 rather than the 1920 by 1080 it comes as; else its poster."""
+    wide = (show.get("landscapeHeroImage") or {}).get("uri") or ""
+    if wide:
+        return re.sub(r"\bh=\d+", "h=450", re.sub(r"\bw=\d+", "w=800", wide))
+    posters = show.get("posterImages") or []
+    return (posters[0].get("uri") or "") if posters and isinstance(posters[0], dict) else ""
 
 
 def read_hfa(source):
@@ -475,6 +588,7 @@ def read_hfa(source):
         series = re.search(r'class="event__series">(.*?)</div>', block, re.S)
         credit = re.search(r'class="event__info">(.*?)</div>', block, re.S)
         notes = [text(note) for note in re.findall(r'class="tooltip">(.*?)</span>', block, re.S)]
+        picture = re.search(r'<img[^>]+src="([^"]+)"', block)
         name = text(title.group(1))
         # "Directed by João César Monteiro, 2000"; the series it's part of, and how it's shown.
         credit = re.sub(r"\s*,\s*", ", ", text(credit.group(1) if credit else ""))
@@ -485,6 +599,7 @@ def read_hfa(source):
             datetime.min.time().replace(hour=int(when.group(2)), minute=int(when.group(3))),
             link=urljoin(source["url"], html.unescape(link.group(1))) if link else "",
             about=[line for line in (credit, facts) if line],
+            image=urljoin(source["url"], html.unescape(picture.group(1))) if picture else "",
         ))
     return events
 
@@ -534,9 +649,11 @@ def read_ica(source):
             day = day.replace(year=today_.year + 1)
         name = text(re.sub(r"<[^>]+>", "", title.group(2)))  # Italics for a work's name, without a gap after.
         link = html.unescape(title.group(1))
+        picture = re.search(r'<img[^>]+src="([^"]+)"', node)
         # Its own page for what it's about, only when it's soon enough to be listed.
         listing = event(source, name, day, clock_range_start(clock_text), link=link,
-                        about=ica_about(link) if day <= window_end(category) else [])
+                        about=ica_about(link) if day <= window_end(category) else [],
+                        image=html.unescape(picture.group(1)) if picture else "")
         listing["category"] = category
         events.append(listing)
     return events
@@ -590,8 +707,10 @@ def read_french_library(source):
         if clock_text:
             hour = int(clock_text.group(1)) % 12 + (12 if clock_text.group(3) == "P" else 0)
             start = datetime.min.time().replace(hour=hour, minute=int(clock_text.group(2)))
+        picture = re.search(r'<img[^>]+src="([^"]+)"', card)
         listing = event(source, name, datetime.strptime(day.group(1), "%B %d, %Y").date(), start,
-                        link=html.unescape(title.group(1)), about=about(excerpt.group(1) if excerpt else ""))
+                        link=html.unescape(title.group(1)), about=about(excerpt.group(1) if excerpt else ""),
+                        image=html.unescape(picture.group(1)) if picture else "")
         listing["category"] = category
         events.append(listing)
     return events
@@ -612,6 +731,7 @@ def read_veezi_site(source):
         facts = " · ".join(fact for fact in (f"Directed by {directors}" if directors else "",
                                                f"{minutes // 60}h {minutes % 60}m" if minutes else "") if fact)
         described = about(film.get("synopsisShort") or film.get("tagline") or "") + ([facts] if facts else [])
+        picture = film.get("imageHorizontalUrl") or film.get("imageVerticalUrl") or ""
         for session in film.get("sessionTimes") or []:
             clock_text = re.fullmatch(r"(\d{1,2}):(\d{2}) ?([ap])m", (session.get("time") or "").strip(), re.I)
             if not session.get("date") or not clock_text:
@@ -619,7 +739,7 @@ def read_veezi_site(source):
             hour = int(clock_text.group(1)) % 12 + (12 if clock_text.group(3).lower() == "p" else 0)
             events.append(event(source, film["title"], date.fromisoformat(session["date"][:10]),
                                 datetime.min.time().replace(hour=hour, minute=int(clock_text.group(2))),
-                                link=urljoin(source["url"], f"/movie/{film['url']}"), about=described))
+                                link=urljoin(source["url"], f"/movie/{film['url']}"), about=described, image=picture))
     return events
 
 
@@ -641,6 +761,13 @@ def read_landmark(source):
     # The schedule has only film ids; titles come separately, all at once.
     films = json.loads(fetch(f"{LANDMARK_API}/movies?" + urlencode([("ids", film) for film in schedule])))
     titles = {film["id"]: film["title"] for film in films}
+    # Its picture: a wide still, else its poster; and what it's about, with its length (in seconds there).
+    pictures = {film["id"]: next(iter(film.get("heroImages") or []), "")
+                or next((still.get("url") for still in film.get("images") or [] if isinstance(still, dict) and still.get("url")), "")
+                or film.get("poster") or "" for film in films}
+    described = {film["id"]: about(film.get("synopsis") or "") + (
+        [f"{film['runtime'] // 3600}h {film['runtime'] % 3600 // 60}m"] if isinstance(film.get("runtime"), int) and film["runtime"] >= 60 else [])
+        for film in films}
     events = []
     for film, days in schedule.items():
         for showings in days.values():
@@ -653,7 +780,8 @@ def read_landmark(source):
                      if entry.get("type") == "DESKTOP" and entry.get("urls")),
                     "",
                 )
-                events.append(event(source, titles[film], start.date(), start.time(), link=tickets))
+                events.append(event(source, titles[film], start.date(), start.time(), link=tickets,
+                                    about=described.get(film, []), image=pictures.get(film, "")))
     return events
 
 
@@ -688,11 +816,22 @@ def read_ticketmaster(source):
         if segment and segment not in TICKETMASTER_SEGMENTS:
             continue
         notes = item.get("description") or item.get("info") or item.get("pleaseNote") or ""
+        prices = [band for band in item.get("priceRanges") or [] if isinstance(band, dict)]
         listing = event(source, item["name"], date.fromisoformat(start["localDate"]), clock, link=item.get("url", ""),
-                        about=about(notes))
+                        about=about(notes), image=ticketmaster_image(item.get("images")),
+                        price=price_of(min((band.get("min") or 0 for band in prices), default=None),
+                                       max((band.get("max") or 0 for band in prices), default=None)))
         listing["category"] = TICKETMASTER_SEGMENTS.get(segment, source["category"])
         events.append(listing)
     return events
+
+
+def ticketmaster_image(images):
+    """A show's wide picture about 640 to 1024 pixels across, of the dozen sizes Ticketmaster gives."""
+    images = [image for image in images or [] if isinstance(image, dict) and image.get("url")]
+    wide = [image for image in images if image.get("ratio") == "16_9"] or images
+    fitting = [image for image in wide if 600 <= (image.get("width") or 0) <= 1100] or wide
+    return min(fitting, key=lambda image: abs((image.get("width") or 0) - 800))["url"] if fitting else ""
 
 
 # A line of a web page's script left in an event's description (a ticket button's tracking): not about it.
@@ -733,8 +872,10 @@ def read_ics(source, kinds=None):
             summary = unescape(fields.get("SUMMARY", ("", ""))[1])
             description = re.sub(r"\\([,;\\])", r"\1", fields.get("DESCRIPTION", ("", ""))[1]).split("\\n")
             description = "\n\n".join(part for part in description if not CODE.search(part))
+            params, value = fields.get("ATTACH", ("", ""))
+            picture = value if value.startswith("http") and ("image/" in params or re.search(r"\.(jpe?g|png|webp|gif)(\?|$)", value, re.I)) else ""
             listing = event(source, summary, day, start, link=fields.get("URL", ("", ""))[1], venue=venue,
-                            about=about(html.escape(html.unescape(description))), address=postal(place))
+                            about=about(html.escape(html.unescape(description))), address=postal(place), image=picture)
             listing["category"] = category
             events.append(listing)
             fields = None
@@ -770,7 +911,9 @@ def read_squarespace(source):
             continue
         day, start = at_boston(datetime.fromtimestamp(item["startDate"] // 1000, timezone.utc))
         described = re.sub(r"<(style|script)\b.*?</\1>", "", item.get("body") or item.get("excerpt") or "", flags=re.S)
-        events.append(event(source, title, day, start, link=urljoin(source["url"], item["fullUrl"]), about=about(described)))
+        picture = item.get("assetUrl") or ""
+        events.append(event(source, title, day, start, link=urljoin(source["url"], item["fullUrl"]), about=about(described),
+                            image=f"{picture}?format=750w" if picture.startswith("http") else ""))
     return events
 
 
@@ -792,7 +935,9 @@ def read_passim(source):
             continue
         when = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?\s*([AP]M)", field("showtime").strip(), re.I)
         start = datetime.strptime(f"{when.group(1)}:{when.group(2) or '00'} {when.group(3).upper()}", "%I:%M %p").time() if when else None
-        events.append(event(source, title, date.fromisoformat(day), start, link=field("link"), detail=field("detail")))
+        picture = field("imageurl")
+        events.append(event(source, title, date.fromisoformat(day), start, link=field("link"), detail=field("detail"),
+                            image=urljoin("https://www.passim.org/", picture) if picture else ""))
     return events
 
 
@@ -816,8 +961,12 @@ def read_tribe(source):
                 continue
             # The venue's own local time, which for these is Boston's.
             moment = datetime.strptime(item["start_date"], "%Y-%m-%d %H:%M:%S")
+            picture = item.get("image") if isinstance(item.get("image"), dict) else {}
             events.append(event(source, title, moment.date(), None if item.get("all_day") else moment.time(),
-                                link=item.get("url", ""), about=about(item.get("description") or item.get("excerpt"))))
+                                link=item.get("url", ""), about=about(item.get("description") or item.get("excerpt")),
+                                image=next((size["url"] for name in ("medium_large", "large") for size in [(picture.get("sizes") or {}).get(name) or {}]
+                                            if size.get("url")), picture.get("url") or ""),
+                                price=price_from(html.unescape(str(item.get("cost") or "")))))
         url = data.get("next_rest_url")  # 50 to a page.
     return events
 
@@ -836,12 +985,12 @@ def window_end(category=None):
     return today() + timedelta(days=days_ahead(category))
 
 
-def opening(source, title, first, last, link, start=None, about=()):
+def opening(source, title, first, last, link, start=None, about=(), image=""):
     """An exhibition, listed once, on the day it opens, with when it closes; one already open is left out, so it
     isn't at the top of every day for months."""
     if first < today():
         return []
-    return [event(source, title, first, start, link=link, detail=f"through {last:%b} {last.day}", about=about)]
+    return [event(source, title, first, start, link=link, detail=f"through {last:%b} {last.day}", about=about, image=image)]
 
 
 MIT_EXHIBITS, MIT_LECTURES = 102763, 102764  # Its event_types filter's ids for Exhibits, Conferences/Seminars/Lectures.
@@ -878,13 +1027,15 @@ def read_mit(source):
             start = None if instance.get("all_day") or (start.hour, start.minute) == (0, 0) else start
             link = item.get("localist_url") or source["url"]
             described = about(item.get("description") or "")
+            picture = item.get("photo_url") or ""
             first, last = date.fromisoformat(item["first_date"]), date.fromisoformat(item["last_date"])
             if "Exhibits" in types and last > first:
                 if item["id"] not in seen:
                     seen.add(item["id"])
-                    events += opening(source, item["title"], first, last, link, about=described)
+                    events += opening(source, item["title"], first, last, link, about=described, image=picture)
                 continue
-            events.append(event(source, item["title"], day, start, link=link, about=described, address=postal(item.get("address"))))
+            events.append(event(source, item["title"], day, start, link=link, about=described, address=postal(item.get("address")),
+                                image=picture, price=price_from(item.get("ticket_cost") or ("Free" if item.get("free") else ""))))
         page = data.get("page", {}).get("next_page") if page < 20 else None
     return events
 
@@ -923,13 +1074,15 @@ def read_bibliocommons(source):
             venue = source["name"] if branch.startswith("Central") or not branch else f"{branch} Library"
             title, link = text(field("title")), field("link")
             described = about(field("description"))
+            picture = re.search(r'<enclosure url="([^"]+)"[^>]*type="image/', item)
+            picture = html.unescape(picture.group(1)).replace("http://", "https://", 1) if picture else ""
             street = " ".join(part for part in (field("bc:number"), field("bc:street")) if part)
             place = (street, field("bc:city") or "Boston", field("bc:zip")) if street else None
             last = date.fromisoformat((field("bc:end_date_local") or day.isoformat())[:10])
             if "Exhibitions" in tags and last > day:
-                events += [dict(listing, venue=venue) for listing in opening(source, title, day, last, link, about=described)]
+                events += [dict(listing, venue=venue) for listing in opening(source, title, day, last, link, about=described, image=picture)]
             else:
-                events.append(event(source, title, day, start, link=link, venue=venue, about=described, address=place))
+                events.append(event(source, title, day, start, link=link, venue=venue, about=described, address=place, image=picture))
         if not items or day > end:
             break
     return events
@@ -948,11 +1101,12 @@ def read_mfa(source):
         end = window_end(category)
         for page in range(10):
             markup = fetch(f"{source['url']}/{section}" + (f"?page={page}" if page else ""))
-            programs = re.findall(
-                r'<div\s+class="col-lg-8">.*?<h[23] class="field-content"><a href="([^"]+)">(.*?)</a></h[23]>'
-                r'.*?<span class="date-display-range">(.*?)</span>', markup, re.S)
+            # Each program's picture, then its name, link and when.
+            programs = [re.search(
+                r'(?:<img[^>]+src="([^"]+)".*?)?<div\s+class="col-lg-8">.*?<h[23] class="field-content"><a href="([^"]+)">(.*?)</a></h[23]>'
+                r'.*?<span class="date-display-range">(.*?)</span>', block, re.S) for block in markup.split('<div class="well">')[1:]]
             day = None
-            for link, title, when in programs:
+            for picture, link, title, when in (program.groups() for program in programs if program):
                 # "Saturday, September 12, 2026<br>10:00 am–11:15 am"; a span reads "Friday, October 2–Friday, …".
                 single = re.fullmatch(r"\w+, (\w+ \d{1,2}, \d{4})(?:<br>\s*(\d{1,2})(?::(\d{2}))?\s*([ap])m.*)?", when.strip(), re.S)
                 if not single:
@@ -962,7 +1116,8 @@ def read_mfa(source):
                 if single.group(2):
                     hour = int(single.group(2)) % 12 + (12 if single.group(4) == "p" else 0)
                     start = datetime.min.time().replace(hour=hour, minute=int(single.group(3) or 0))
-                listing = event(source, text(title), day, start, link=f"https://www.mfa.org{html.unescape(link)}")
+                listing = event(source, text(title), day, start, link=f"https://www.mfa.org{html.unescape(link)}",
+                                image=html.unescape(picture or ""))
                 listing["category"] = category
                 events.append(listing)
             if 'rel="next"' not in markup or (day and day > end):
@@ -1005,7 +1160,7 @@ def read_harvard_art(source):
         moment = datetime.fromisoformat(item["date"].replace("Z", "+00:00")).replace(second=0, microsecond=0)
         day, start = at_boston(moment)
         listing = event(source, title, day, start, link=item.get("event_link") or source["url"],
-                        about=about(item.get("summary") or ""))
+                        about=about(item.get("summary") or ""), image=(item.get("image_styles") or {}).get("list") or "")
         listing["category"] = category
         events.append(listing)
     return events
@@ -1091,6 +1246,7 @@ def combine_films(items):
             "category": "film",
             # The first theater's description that has one: most describe the film the same way.
             "about": next((item["about"] for item in showings if item.get("about")), []),
+            "image": next((item["image"] for item in showings if item.get("image")), ""),
         })
     return rows
 
@@ -1134,13 +1290,15 @@ CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2
                         "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
 CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
               'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
-# A listing's own view, opened by clicking it: where and when, a way to its venue's page first (tickets), its
+# A listing's own view, opened by clicking it: its picture, where and when, its price and ages, a way to its venue's page first (tickets), its
 # times to add to a calendar, what it's about, the address, its other dates, and a way to share it. The script
 # fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button>
+<div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
 <p class="event-where"><span class="event-icon"></span><span class="event-venue"></span><span class="event-day"></span></p>
 <h2 class="event-title" id="event-title"></h2>
+<p class="event-facts"></p>
 <p class="event-detail"></p>
 <p class="event-note"></p>
 <a class="event-tickets" href=""><span></span> ↗</a>
@@ -1183,6 +1341,11 @@ def address_attribute(item):
     return f' data-address="{html.escape(written(item["address"]))}"' if item.get("address") else ""
 
 
+def facts_attributes(item):
+    """What the listing's view shows up top that the row doesn't: its picture, price and ages, when known."""
+    return "".join(f' data-{key}="{html.escape(item[key])}"' for key in ("image", "price", "ages") if item.get(key))
+
+
 def listing_id(day, title, venue=""):
     """A listing's own address on the page (?event=…), the same from build to build: its date, then its series
     (its name, and its venue's, which the same show on other days shares): 2026-09-15-akira-4k-restoration-
@@ -1199,7 +1362,7 @@ def render_row(item):
     ident, series = listing_id(item["date"], item["title"], item["venue"])
     return (
         f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
-        f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}>'
+        f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
         f'<span class="source">{icon(item["category"])}'
         f'<span>{html.escape(item["venue"])}</span></span>'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
@@ -1222,7 +1385,7 @@ def render_combined(item):
     ident, series = listing_id(item["showings"][0]["date"], item["title"])
     return (
         f'<li class="row combined" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
-        f'data-sources="{html.escape(sources)}"><details><summary>'
+        f'data-sources="{html.escape(sources)}"{facts_attributes(item)}><details><summary>'
         f'<span class="source">{icon(item["category"])}<span>{places} theaters</span></span>'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
         f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
@@ -1650,7 +1813,7 @@ def calendar_feeds(sources, events, built_at):
 
 def render_event_page(item, day):
     """A listing's own small page (/boston/e/<its id>/), for the preview a shared link shows: its name, when and
-    where, and its kind's card. A link's preview comes from the page it points to, and the apps that show one
+    where, its price and ages, and its picture (or its kind's card). A link's preview comes from the page it points to, and the apps that show one
     don't run the page's script, so the home page's ?event= address would show only the home page's. Someone
     who opens it goes straight on to the listing's view there."""
     combined = "showings" in item
@@ -1662,15 +1825,16 @@ def render_event_page(item, day):
         when = f"from {clock(item['times'][0])}" if item["times"] else ""
     else:
         where, when = item["venue"], ", ".join(clock(moment) for moment in item["times"])
-    description = " · ".join(filter(None, [where, f"{day:%a, %b} {day.day}", when]))
+    description = " · ".join(filter(None, [where, f"{day:%a, %b} {day.day}", when, item.get("price"), item.get("ages")]))
     title = f"{item['title']} · {PUBLIC_NAME}"
-    card = PUBLIC_PAGES[item["category"]][0]
+    # Its own picture when the venue gives one; else its kind's card, whose size is known.
+    image = item.get("image") or f"{PUBLIC_URL}share/{PUBLIC_PAGES[item['category']][0]}.png?pin"
+    size = [] if item.get("image") else ['<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">']
     tags = "\n".join([
         f'<meta property="og:{key}" content="{html.escape(value)}">' for key, value in [
             ("type", "website"), ("site_name", PUBLIC_NAME), ("title", item["title"]), ("description", description),
-            ("url", f"{PUBLIC_URL}e/{ident}/"), ("image", f"{PUBLIC_URL}share/{card}.png?pin")]
-    ] + ['<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">',
-         '<meta name="twitter:card" content="summary_large_image">'])
+            ("url", f"{PUBLIC_URL}e/{ident}/"), ("image", image)]
+    ] + size + ['<meta name="twitter:card" content="summary_large_image">'])
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<title>{html.escape(title)}</title>\n<meta name="description" content="{html.escape(description)}">\n'
             f'<meta name="robots" content="noindex">\n{tags}\n<meta name="color-scheme" content="dark">\n'
@@ -2033,6 +2197,15 @@ INDEX_JS = """
     part("venue").textContent = venue;
     part("day").textContent = dayName(li.closest(".day").dataset.date);
     part("title").textContent = title;
+    // Its picture, in a frame kept its size while it loads, and gone if it doesn't; a poster or a square
+    // flyer shown whole, not cropped to the frame.
+    const picture = part("image"), img = picture.firstElementChild;
+    img.removeAttribute("src");
+    picture.classList.remove("whole");
+    picture.hidden = !li.dataset.image;
+    if (li.dataset.image) img.src = li.dataset.image;
+    part("facts").replaceChildren(...[li.dataset.price, li.dataset.ages].filter(Boolean).map(fact =>
+      Object.assign(document.createElement("span"), { className: "event-fact", textContent: fact })));
     part("detail").textContent = li.querySelector(".detail")?.textContent || "";
     part("note").textContent = note;
     const link = li.querySelector("a.title");
@@ -2090,6 +2263,11 @@ INDEX_JS = """
   view.addEventListener("close", () => { if (closing) closing = false; else restore(); });
   view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
   part("close").addEventListener("click", closeEvent);
+  part("image").firstElementChild.addEventListener("load", event => {
+    const img = event.target;
+    part("image").classList.toggle("whole", img.naturalWidth / img.naturalHeight < 1.3);
+  });
+  part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
   view.addEventListener("click", event => { if (event.target === view) closeEvent(); }); // Outside it, on the backdrop.
   document.addEventListener("click", event => {
     const li = event.target.closest(".day > ul > li.row");
@@ -2271,6 +2449,15 @@ CSS = """
                  padding: 0; border: 0; border-radius: 50%; background: none; color: #888; cursor: pointer; }
   .event-close:hover, .event-close:focus-visible { background: #1a1a1a; color: #fff; outline: none; }
   .close-mark { width: 14px; height: 14px; }
+  /* Its picture across the top, edge to edge; a tall or square one whole, on grey. */
+  .event-image { aspect-ratio: 16 / 9; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; border-radius: 13px 13px 0 0; background: #151515; }
+  .event-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .event-image.whole img { object-fit: contain; }
+  dialog.event:has(.event-image:not([hidden])) .event-close { z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; }
+  .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
+  .event-facts:empty { display: none; }
+  .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
+                font-variant-numeric: tabular-nums; }
   .event-where { display: flex; align-items: center; gap: .45em; margin: 0 2.5rem .5rem 0; color: #888; font-size: .8rem; }
   .event-where .icon { width: 12px; height: 12px; }
   .event-day::before { content: "·"; margin-right: .45em; }
@@ -2301,6 +2488,7 @@ CSS = """
   @media (max-width: 34rem) {
     dialog.event { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 1.25rem 1.25rem 1.5rem;
                    border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
+    .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }
     dialog.event[open] { animation: sheet .22s ease-out; }
     @keyframes sheet { from { transform: translateY(100%); } }
   }
@@ -2356,6 +2544,9 @@ def saved(item):
         "category": item["category"],
         "about": item.get("about", []),
         "address": item.get("address"),
+        "image": item.get("image", ""),
+        "price": item.get("price", ""),
+        "ages": item.get("ages", ""),
     }
 
 

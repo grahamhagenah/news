@@ -88,6 +88,10 @@ class Readers(unittest.TestCase):
         self.assertEqual(len(found), 3)
         self.assertTrue(all(item["times"] for item in found))
         self.assertTrue(any(item["detail"].startswith("with ") for item in found))
+        # Its picture about 678 pixels wide, not a thumbnail; its ages; no price, for the $0 it gives.
+        self.assertTrue(all(item["image"].startswith("https://images.discovery-prod.axs.com/") for item in found))
+        self.assertEqual({item["ages"] for item in found}, {"All ages", "18+"})
+        self.assertFalse(any(item["price"] for item in found))
 
     def test_axs_show_times_without_cancelled_shows(self):
         with mock.patch.object(build, "today", lambda: date(2026, 9, 1)):
@@ -97,6 +101,8 @@ class Readers(unittest.TestCase):
         # Its own page's show time, not the listing's door time, which its preview gives.
         self.assertEqual((first["date"], first["times"]), (date(2026, 9, 13), [time(20, 0)]))
         self.assertEqual(first["about"], ["Doors 7pm · All Ages"])
+        self.assertEqual(first["ages"], "All ages")
+        self.assertTrue(first["image"].startswith("https://images.discovery-prod.axs.com/"))
         self.assertEqual(first["detail"], "with Horse Vision, Ivy Knight")
         self.assertEqual(first["link"], "https://www.sinclaircambridge.com/events/detail/1460677")
         self.assertEqual(found[1]["times"], [time(19, 30)], "a page without a show time leaves the door time")
@@ -296,6 +302,52 @@ class Calendars(unittest.TestCase):
         self.assertNotIn('class="share"', page, "sharing is in the view, not on each row")
 
 
+class Facts(unittest.TestCase):
+    def test_price_from_a_line_of_facts(self):
+        for line, price in [("$15 / $10 students", "$10–$15"), ("21+ · $10 cover", "$10"), ("Doors 8pm | 21+ | $5-20 cover", "$5–$20"),
+                            ("$10-21+", "$10"), ("$13.50", "$13.50"), ("NO COVER! · 21+", "Free"), ("Free (cash only bar)", "Free"),
+                            ("Free admission", "Free"), ("$0", ""), ("18 and under free", ""), ("Free pizza", ""),
+                            ("Free with museum admission", ""), ("Raised $5 million", ""),
+                            ("The cinema will be donating $4 from every ticket", "")]:
+            self.assertEqual(build.price_from(line), price, line)
+        self.assertEqual(build.price_of("18", 20.0), "$18–$20")
+        self.assertEqual(build.price_of(0, None), "")
+
+    def test_ages(self):
+        for line, ages in [("All Ages", "All ages"), ("21+ · $10 cover", "21+"), ("18 and over", "18+"), ("18 and under free", "")]:
+            self.assertEqual(build.ages_from(line), ages, line)
+
+    def test_an_event_takes_price_and_ages_from_its_facts_not_its_prose(self):
+        club = source("ics", "x")
+        show = build.event(club, "A show", date(2026, 9, 13), about=["Doors at 8 · 21+ · $10 cover"])
+        self.assertEqual((show["price"], show["ages"]), ("$10", "21+"))
+        prose = "A long paragraph about the band, who raised $5,000 for charity and have played for all ages, " * 3
+        self.assertEqual(build.event(club, "B", date(2026, 9, 13), about=[prose])[("price")], "")
+        stated = "Presented by Get To The Gig Ages: This event is 21+ Valid ID required for Entry Doors 7:00 PM " * 2
+        self.assertEqual(build.event(club, "C", date(2026, 9, 13), about=[stated])["ages"], "21+", "ages as a venue states them")
+        given = build.event(club, "D", date(2026, 9, 13), about=["$10 cover"], price="$12", ages="All Ages")
+        self.assertEqual((given["price"], given["ages"]), ("$12", "All ages"), "the source's own, when it gives them")
+
+    def test_lighter_pictures(self):
+        self.assertEqual(build.lighter("https://s1.ticketm.net/dam/a/1/x_TABLET_LANDSCAPE_LARGE_16_9.jpg"),
+                         "https://s1.ticketm.net/dam/a/1/x_TABLET_LANDSCAPE_16_9.jpg")
+        self.assertEqual(build.lighter("https://dice-media.imgix.net/a.jpg?rect=0"), "https://dice-media.imgix.net/a.jpg?rect=0&w=800")
+        page = 'srcset="https://s3/p-2-203x300.jpg 203w, https://s3/p-2-768x1138.jpg 768w, https://s3/p-2-1382x2048.jpg 1382w"'
+        self.assertEqual(build.lighter("https://s3/p-2-scaled.jpg", page), "https://s3/p-2-768x1138.jpg")
+        self.assertEqual(build.lighter("https://s3/q.jpg", page), "https://s3/q.jpg")
+
+    def test_the_view_shows_them(self):
+        sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+        show = build.event(sinclair, "A show", date(2026, 9, 13), time(20, 0), image="https://example.com/a.jpg?w=1&h=2",
+                           price="$18–$20", ages="21+")
+        page = build.render_index([show], [sinclair], [], [], datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
+        self.assertIn('data-image="https://example.com/a.jpg?w=1&amp;h=2" data-price="$18–$20" data-ages="21+"', page)
+        self.assertIn('<div class="event-image" hidden><img alt=""', page)
+        self.assertIn('<p class="event-facts"></p>', page)
+        films = [build.event(dict(sinclair, name=name), "Hope", date(2026, 9, 13), image=image) for name, image in (("A", ""), ("B", "https://b/1.jpg"))]
+        self.assertEqual(build.combine_films([dict(film, category="film") for film in films])[0]["image"], "https://b/1.jpg")
+
+
 class SharedLinks(unittest.TestCase):
     def test_each_listing_has_a_page_with_its_own_preview(self):
         coolidge = dict(source("coolidge", "x", "film", "Coolidge Corner"), public=True)
@@ -315,6 +367,16 @@ class SharedLinks(unittest.TestCase):
         self.assertIn(f'location.replace("{build.PUBLIC_URL}?event=2026-09-15-akira-4k-restoration-coolidge-corner")', akira)
         self.assertIn('<meta name="robots" content="noindex">', akira)
         self.assertIn("2 theaters (Alamo Drafthouse, Coolidge Corner) · Tue, Sep 15 · from 12:45pm", pages["e/2026-09-15-hope/index.html"])
+        self.assertIn('<meta property="og:image:width" content="1200">', akira)
+
+    def test_a_listings_own_picture_price_and_ages_in_its_preview(self):
+        rockwell = dict(source("tribe", "x", "music", "The Rockwell"), public=True)
+        show = build.event(rockwell, "Telescreens", date(2026, 9, 18), time(19, 0), image="https://therockwell.org/t.png",
+                           price="$18–$20", ages="21+")
+        page = build.event_pages([rockwell], [show])["e/2026-09-18-telescreens-the-rockwell/index.html"]
+        self.assertIn('<meta property="og:image" content="https://therockwell.org/t.png">', page)
+        self.assertNotIn("og:image:width", page, "its size isn't known")
+        self.assertIn('content="The Rockwell · Fri, Sep 18 · 7pm · $18–$20 · 21+"', page)
 
     def test_a_passed_listings_page_goes_to_its_view(self):
         missing = build.render_redirect(build.PUBLIC_URL, paths=True)
@@ -570,7 +632,7 @@ class Page(unittest.TestCase):
         with mock.patch.object(build, "fetch", sample):
             found = build.read_aeg(source("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json"))
         page = build.render_index(found, [source("aeg", "x", name="Roadrunner")], [], [], datetime.now(timezone.utc))
-        self.assertEqual(len(re.findall(r'<li class="row" data-id="[^"]+" data-series="[^"]+" data-category="music" data-sources="Somewhere">', page)), len(found))
+        self.assertEqual(len(re.findall(r'<li class="row" data-id="[^"]+" data-series="[^"]+" data-category="music" data-sources="Somewhere"[^>]*>', page)), len(found))
         self.assertEqual(page.count('<div class="preview">'), sum(bool(item["about"]) for item in found))
         for key in build.CATEGORIES:
             self.assertIn(f'data-show="{key}"', page)
