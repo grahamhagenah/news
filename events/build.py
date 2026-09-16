@@ -3100,6 +3100,20 @@ INDEX_JS = """
     restore();
   }
   view.addEventListener("close", () => { if (closing) closing = false; else restore(); });
+  // Chrome can leave the view open but out of the top layer it was shown in — coming back to the page from
+  // its cache, say. It keeps its place on the screen and loses everything that made it a view over the page:
+  // no backdrop dimming the list, the day headings painting across it, and nothing outside it to click,
+  // because there's no backdrop there to take the click. Whatever drops it, showing it again puts it back,
+  // and a press anywhere is soon enough to ask.
+  const keepModal = () => {
+    if (!view.open || view.matches(":modal")) return;
+    closing = true;
+    view.close();
+    view.showModal();
+  };
+  addEventListener("pointerdown", keepModal, true);
+  addEventListener("pageshow", keepModal);
+  addEventListener("visibilitychange", keepModal);
   view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
   part("close").addEventListener("click", closeEvent);
   part("back").addEventListener("click", () => step(-1));
