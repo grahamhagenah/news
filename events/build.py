@@ -3473,11 +3473,14 @@ CSS = """
   .row .source { justify-content: flex-end; max-width: 14rem; text-align: right; }
   @media (max-width: 34rem) {
     /* Too narrow for columns, so the row reads as a line instead — The Odyssey from 11:15am at 2 theaters —
-       wrapping where a sentence would, with the icon in a slot at the left edge beside its first line (half a
-       line down, less half of the icon). */
+       wrapping where a sentence would, with the icon in a slot at the left edge beside its first line.
+       It stands against the name here rather than the small grey line it used to lead, so it takes the name's
+       measure: a size that holds its own beside it, a clear space after it, and set by the middle of the
+       letters rather than the middle of the line, which sits low by the depth of a descender. */
     .row, .combined > details > summary { display: block; }
-    .row { padding-left: calc(12px + .5em); }
-    .row > .icon, .combined > details > summary > .icon { position: absolute; left: 0; top: calc(.4rem + .72em - 6px); }
+    .row { padding-left: calc(14px + .7em); }
+    .row > .icon, .combined > details > summary > .icon { position: absolute; left: 0; width: 14px; height: 14px;
+                                                          top: calc(.4rem + .72em - 8px); }
     .headline, .headline .title, .tail { display: inline; }
     .headline .title { white-space: normal; }
     .row .source { display: inline; max-width: none; margin-left: .45em; color: #666; }
