@@ -3391,6 +3391,9 @@ CSS = """
   .event-said { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
                 clip-path: inset(50%); white-space: nowrap; }
   .event-steps { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
+  /* A press that drifts is a press, not the start of a selection: dragging off a button used to take the
+     picture and half the panel into a highlight. */
+  .event-steps button, .event-copy, .event-more, .event-image { user-select: none; -webkit-user-select: none; }
   .event-steps button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
                         border-radius: 50%; background: none; color: #888; cursor: pointer;
                         transition: background-color .15s, color .15s; }
