@@ -3434,7 +3434,7 @@ CSS = """
   /* Down the side of the screen, so it's the same size whatever's in it and stepping through the list doesn't
      move it around; what doesn't fit scrolls inside it, under the buttons at its top. */
   dialog.event { width: min(32rem, 100%); height: 100dvh; max-height: none; margin: 0 0 0 auto; box-sizing: border-box;
-                 display: flex; flex-direction: column; overflow: hidden;
+                 overflow: hidden;
                  padding: 0; border: 0; border-left: 1px solid #262626; border-radius: 0; background: #0b0b0b; color: #ddd;
                  box-shadow: -1px 0 40px rgba(0, 0, 0, .5); font-size: .95rem; line-height: 1.5; }
   .event-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 1.4rem 1.5rem 1.5rem; }
@@ -3444,7 +3444,9 @@ CSS = """
      and the picture, sized by its shape rather than its content, is squashed to nothing. */
   .event-body > * { flex: none; }
   dialog.event::backdrop { background: rgba(0, 0, 0, .6); }
-  dialog.event[open] { animation: slide .22s ease-out; }
+  /* Laid out only while it's open. A dialog is display: none when it's shut, and saying how to lay this one
+     out without saying when undid that: shut, it stood a screen tall at the foot of every page. */
+  dialog.event[open] { display: flex; flex-direction: column; animation: slide .22s ease-out; }
   @keyframes slide { from { transform: translateX(100%); } }
   @keyframes appear { from { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { dialog.event[open] { animation: appear .15s ease-out; } }
