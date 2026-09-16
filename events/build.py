@@ -3416,6 +3416,14 @@ CSS = """
   .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }
   /* A listing opens its own view (below) wherever it's clicked. */
   .day > ul > li.row { cursor: pointer; }
+  /* The row under the pointer, lit just enough to follow across a wide line. Where a pointer hovers only:
+     on a touch screen a "hover" is the last thing tapped, and would stay lit behind the view. The band
+     reaches a little past the text on both sides, taken back out of the margin so nothing else moves. */
+  @media (hover: hover) and (pointer: fine) {
+    .day > ul > li.row { margin: 0 -.6rem; padding-left: .6rem; padding-right: .6rem; border-radius: 6px;
+                         transition: background-color .12s; }
+    .day > ul > li.row:hover { background: #0e0e0e; }
+  }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
      way to the venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
