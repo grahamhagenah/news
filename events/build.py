@@ -3611,7 +3611,8 @@ CSS = """
   .event-about.clamped { max-height: 7.5em; overflow: hidden; /* About five lines. */
                          -webkit-mask-image: linear-gradient(#000 calc(100% - 3em), transparent);
                          mask-image: linear-gradient(#000 calc(100% - 3em), transparent); }
-  .event-more { display: block; margin: -.1rem 0 .2rem; padding: 0; border: 0; background: none; color: #ccc; font: inherit;
+  /* Room under it before the address: it ends what's above it, and shouldn't read as the head of what's below. */
+  .event-more { display: block; margin: -.1rem 0 1rem; padding: 0; border: 0; background: none; color: #ccc; font: inherit;
                 font-size: .85rem; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; cursor: pointer; }
   .event-more:hover, .event-more:focus-visible { color: #fff; text-decoration-color: #aaa; outline: none; }
   .event-place, .event-also { margin: .9rem 0 0; color: #888; font-size: .85rem; }
