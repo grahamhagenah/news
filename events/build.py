@@ -3567,8 +3567,10 @@ CSS = """
                         transition: background-color .15s, color .15s; }
   .event-tools button:hover, .event-tools button:focus-visible { background: #262626; color: #fff; outline: none; }
   .event-tools button:focus-visible { box-shadow: 0 0 0 2px #888; }
-  .event-tools button:disabled { color: #3a3a3a; cursor: default; }
-  .event-tools button:disabled:hover { background: none; }
+  /* At either end of the list, the way on in that direction goes rather than greying: a button you can't press
+     is only in the way. Hidden, not removed, so it keeps its place and nothing beside it moves; and at once, so
+     a circle left lit by the pointer doesn't fade out after it. */
+  .event-tools button:disabled { visibility: hidden; transition: none; }
   .step-mark { width: 16px; height: 16px; }
   .close-mark { width: 14px; height: 14px; }
   /* Its picture across the top, edge to edge, filling it: a poster is cut off at the foot rather than set
@@ -3585,7 +3587,6 @@ CSS = """
   }
   .event-image.tall img { object-position: top; }
   dialog.event.shows-picture .event-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
-  dialog.event.shows-picture .event-tools button:disabled { color: #777; }
   dialog.event.shows-picture .event-tools button:hover:not(:disabled),
   dialog.event.shows-picture .event-tools button:focus-visible { background: rgba(0, 0, 0, .9); }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
