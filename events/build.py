@@ -1764,6 +1764,8 @@ ICON_DRAWINGS = {
              '<circle cx="11.75" cy="10.5" r="1.75" fill="currentColor"/>',
     "film": '<rect x="2" y="2" width="12" height="12" rx="1.5"/>'
             '<path d="M5 2v12M11 2v12M2 5.5h3M2 10.5h3M11 5.5h3M11 10.5h3"/>',
+    # How long a film runs, beside the time it says: a clock at ten past ten.
+    "clock": '<circle cx="8" cy="8" r="6.25"/><path d="M8 4.5V8l2.25 1.5"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 
@@ -2970,10 +2972,21 @@ INDEX_JS = """
       .catch(() => { abouts.delete(id); return null; }));
     return abouts.get(id);
   };
+  // A paragraph that is nothing but a running time — how the cinemas give one — marked with a clock, so it
+  // reads as the length of the film rather than a number left behind in the text.
+  const RUNTIME = /^\s*(?:\d+\s*hrs?\.?(?:\s*\d+\s*mins?\.?)?|\d+\s*h\s*\d+\s*m|\d+\s*min(?:ute)?s?)\s*$/i;
+  const aboutLine = text => {
+    const p = document.createElement("p");
+    if (!RUNTIME.test(text)) { p.textContent = text; return p; }
+    p.className = "about-runtime";
+    p.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-clock"/></svg>';
+    p.append(text.trim());
+    return p;
+  };
   // Shown up to a few lines, fading out, with Read more for the rest, when it's longer than that.
   function showAbout(paragraphs) {
     const box = part("about"), more = part("more");
-    box.replaceChildren(...paragraphs.map(text => Object.assign(document.createElement("p"), { textContent: text })));
+    box.replaceChildren(...paragraphs.map(aboutLine));
     box.classList.add("clamped");
     more.hidden = true;
     requestAnimationFrame(() => { // Once the view's open, to measure it.
@@ -3515,6 +3528,8 @@ CSS = """
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
   .event-places a { color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
+  .event-about .about-runtime { display: flex; align-items: center; gap: .4em; color: #888; }
+  .event-about .about-runtime .icon { flex: none; width: 13px; height: 13px; }
   .event-about.clamped { max-height: 7.5em; overflow: hidden; /* About five lines. */
                          -webkit-mask-image: linear-gradient(#000 calc(100% - 3em), transparent);
                          mask-image: linear-gradient(#000 calc(100% - 3em), transparent); }
