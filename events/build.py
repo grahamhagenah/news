@@ -1792,7 +1792,7 @@ CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><p
 # link to its page (tickets), with its times, what it's about, the address, its other
 # dates, and a way to copy its link. The script fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
-<div class="event-steps"><button class="event-back" type="button" aria-label="Previous listing">{STEP_MARKS["back"]}</button><button class="event-on" type="button" aria-label="Next listing">{STEP_MARKS["on"]}</button><button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button></div>
+<div class="event-tools"><div class="event-steps"><button class="event-back" type="button" aria-label="Previous listing">{STEP_MARKS["back"]}</button><button class="event-on" type="button" aria-label="Next listing">{STEP_MARKS["on"]}</button></div><button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button></div>
 <p class="event-said" role="status" aria-live="polite" aria-atomic="true"></p>
 <div class="event-body">
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
@@ -3419,6 +3419,8 @@ CSS = """
                  padding: 0; border: 0; border-left: 1px solid #262626; border-radius: 0; background: #0b0b0b; color: #ddd;
                  box-shadow: -1px 0 40px rgba(0, 0, 0, .5); font-size: .95rem; line-height: 1.5; }
   .event-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 1.4rem 1.5rem 1.5rem; }
+  /* With no picture for the buttons to lie over, they need the top of the view to themselves. */
+  dialog.event:not(:has(.event-image:not([hidden]))) .event-body { padding-top: 3.4rem; }
   /* What's in it keeps its size and the body scrolls past it: a column squashes what it can to fit otherwise,
      and the picture, sized by its shape rather than its content, is squashed to nothing. */
   .event-body > * { flex: none; }
@@ -3430,17 +3432,18 @@ CSS = """
   /* The way out of the view, and the way through the list from inside it, together at the top of it. */
   .event-said { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
                 clip-path: inset(50%); white-space: nowrap; }
-  .event-steps { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
+  .event-tools { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
+  .event-steps { display: flex; gap: .2rem; }
   /* A press that drifts is a press, not the start of a selection: dragging off a button used to take the
      picture and half the panel into a highlight. */
-  .event-steps, .event-copy, .event-more, .event-image, .event-foot { user-select: none; -webkit-user-select: none; }
-  .event-steps button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
+  .event-tools, .event-copy, .event-more, .event-image, .event-foot { user-select: none; -webkit-user-select: none; }
+  .event-tools button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
                         border-radius: 50%; background: none; color: #888; cursor: pointer;
                         transition: background-color .15s, color .15s; }
-  .event-steps button:hover, .event-steps button:focus-visible { background: #262626; color: #fff; outline: none; }
-  .event-steps button:focus-visible { box-shadow: 0 0 0 2px #888; }
-  .event-steps button:disabled { color: #3a3a3a; cursor: default; }
-  .event-steps button:disabled:hover { background: none; }
+  .event-tools button:hover, .event-tools button:focus-visible { background: #262626; color: #fff; outline: none; }
+  .event-tools button:focus-visible { box-shadow: 0 0 0 2px #888; }
+  .event-tools button:disabled { color: #3a3a3a; cursor: default; }
+  .event-tools button:disabled:hover { background: none; }
   .step-mark { width: 16px; height: 16px; }
   .close-mark { width: 14px; height: 14px; }
   /* Its picture across the top, edge to edge; a tall or square one whole, on grey. */
@@ -3455,10 +3458,10 @@ CSS = """
     .event-image:not(.loaded) { animation: none; }
   }
   .event-image.whole img { object-fit: contain; }
-  dialog.event:has(.event-image:not([hidden])) .event-steps button { background: rgba(0, 0, 0, .6); color: #fff; }
-  dialog.event:has(.event-image:not([hidden])) .event-steps button:disabled { color: #777; }
-  dialog.event:has(.event-image:not([hidden])) .event-steps button:hover:not(:disabled),
-  dialog.event:has(.event-image:not([hidden])) .event-steps button:focus-visible { background: rgba(0, 0, 0, .9); }
+  dialog.event:has(.event-image:not([hidden])) .event-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
+  dialog.event:has(.event-image:not([hidden])) .event-tools button:disabled { color: #777; }
+  dialog.event:has(.event-image:not([hidden])) .event-tools button:hover:not(:disabled),
+  dialog.event:has(.event-image:not([hidden])) .event-tools button:focus-visible { background: rgba(0, 0, 0, .9); }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
   .event-facts:empty { display: none; }
   .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
@@ -3509,9 +3512,15 @@ CSS = """
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }  /* Inside the sheet's own corners. */
     /* Bigger targets for a thumb, and the width of the sheet between the way on and the way out: side by side
        they're a mis-tap away from closing what you meant to step through. */
-    .event-steps { top: .75rem; left: .75rem; right: .75rem; gap: .25rem; }
+    .event-tools { top: .75rem; left: .75rem; right: .75rem; }
+    .event-steps { gap: .25rem; }
     .event-close { margin-left: auto; }
-    .event-steps button { width: 2.5rem; height: 2.5rem; }
+    /* Where there's a picture, the arrows drop to its lower right: under the thumb rather than up at the top
+       of the sheet, and further still from ×, which keeps its corner. The picture is 16:9 across the width of
+       the sheet, so its foot is that far below the top of it; the arrows sit just above that. */
+    dialog.event:has(.event-image:not([hidden])) .event-steps { position: absolute; right: 0;
+                                                                top: calc(100vw * 9 / 16 - 4rem); }
+    .event-tools button { width: 2.5rem; height: 2.5rem; }
     .close-mark { width: 17px; height: 17px; }
     .step-mark { width: 19px; height: 19px; }
     dialog.event[open] { animation: sheet .22s ease-out; }
