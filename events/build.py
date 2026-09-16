@@ -2033,10 +2033,16 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         name, href = PUBLIC_WEEKENDS[other][1], root + PUBLIC_WEEKENDS[other][0]
         others = (f'<nav class="weekends"><span></span><a href="{href}">{name}, {days} →</a></nav>\n' if other else
                   f'<nav class="weekends"><a href="{href}">← {name}, {days}</a><span></span></nav>\n')
+    # What a page says with nothing on it: Just announced, that nothing's been added lately, not that there's
+    # nothing on at all. The script says the same with a venue or a search narrowing it ("Nothing added in the
+    # last week at The Sinclair").
+    empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
+                       if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
         f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}<span class="finders">{shared.menu(venues, "All venues", "Venue")}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
-        + '\n<p class="empty" hidden>{"Nothing announced in the last week." if added else "Nothing coming up."}</p>\n<nav class="pager"></nav>\n' + others + footer
+        + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager"></nav>\n'
+        + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
         + f"<script>const FRESH = {fresh}, PLACES = {json.dumps(places, ensure_ascii=False)}, "
@@ -2774,6 +2780,7 @@ INDEX_JS = """
   const search = document.querySelector(".search");
   const pager = document.querySelector(".pager");
   const empty = document.querySelector(".empty");
+  empty.dataset.none = empty.textContent;  // What it says with nothing narrowing it, as the page wrote it.
   const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const allRows = [...document.querySelectorAll(".day > ul > li")];
   const searchable = new Map(allRows.map(li => [li, plain(li.textContent)]));
@@ -2837,8 +2844,11 @@ INDEX_JS = """
       (page > 1 ? link(page - 1, "← Earlier") : "<span></span>") +
       `<span>Page ${page} of ${pages}</span>` +
       (page < pages ? link(page + 1, "Later →") : "<span></span>");
+    // With a venue or a search narrowing it, what the page says of those; with neither, what it says of itself.
     const at = venue.value ? ` at ${venue.value}` : "";
-    empty.textContent = words.length ? `Nothing coming up${at} matches “${search.value.trim()}”.` : `Nothing coming up${at}.`;
+    const narrowed = empty.dataset.narrowed;
+    empty.textContent = words.length ? `${narrowed}${at} matches “${search.value.trim()}”.`
+      : at ? `${narrowed}${at}.` : empty.dataset.none;
     venue.classList.toggle("chosen", Boolean(venue.value));
     empty.hidden = rows.length > 0;
     for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
