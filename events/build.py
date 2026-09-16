@@ -3347,7 +3347,10 @@ CSS = """
   /* A listing's own view: over the list on a wide screen, a sheet up from the bottom on a phone. Its way to the
      venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
   body:has(dialog.event[open]) { overflow: hidden; }
-  dialog.event { width: min(34rem, calc(100% - 2rem)); max-height: min(85vh, 46rem); box-sizing: border-box; overflow: auto;
+  /* The same size whatever's in it, so stepping through the list doesn't move it around; what doesn't fit
+     scrolls inside it. */
+  dialog.event { width: min(34rem, calc(100% - 2rem)); height: min(85vh, 44rem); box-sizing: border-box; overflow: auto;
+                 display: flex; flex-direction: column;
                  padding: 1.4rem 1.5rem 1.5rem; border: 1px solid #262626; border-radius: 14px; background: #0b0b0b; color: #ddd;
                  font-size: .95rem; line-height: 1.5; }
   dialog.event::backdrop { background: rgba(0, 0, 0, .72); }
@@ -3412,15 +3415,19 @@ CSS = """
   .event-more:hover, .event-more:focus-visible { color: #fff; text-decoration-color: #aaa; outline: none; }
   .event-place, .event-also { margin: .9rem 0 0; color: #888; font-size: .85rem; }
   .event-place a, .event-also a { color: #ccc; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
-  .event-copy { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1.2rem; padding: .4rem .9rem; border: 1px solid #333;
+  /* Last, at the foot of the view, with what room a short listing leaves above it. */
+  .event-copy { display: inline-flex; align-self: flex-start; align-items: center; gap: .35rem; margin-top: auto;
+                padding: .4rem .9rem; border: 1px solid #333;
                 border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; }
   .event-copy:hover, .event-copy:focus-visible, .event-copy.copied { border-color: #888; color: #fff; outline: none; }
   .link-mark, .check-mark { width: 15px; height: 15px; }
   .event-copy .check-mark, .event-copy.copied .link-mark { display: none; }
   .event-copy.copied .check-mark { display: block; color: #4ade80; }
   @media (max-width: 34rem) {
-    dialog.event { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 1.25rem 1.25rem 1.5rem;
-                   border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
+    /* A sheet up from the bottom, as tall as it needs: a phone's screen is the frame that steadies it. */
+    dialog.event { width: 100%; max-width: 100%; height: auto; max-height: 88vh; margin: auto 0 0;
+                   padding: 1.25rem 1.25rem 1.5rem; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
+    .event-copy { margin-top: 1.2rem; }  /* The sheet is as tall as it needs, so nothing to push it down to. */
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }
     /* Bigger targets for a thumb. */
     .event-steps { top: .75rem; right: .75rem; gap: .1rem; }
