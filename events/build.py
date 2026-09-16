@@ -3526,6 +3526,12 @@ CSS = """
        times and the venue as much as on the name itself. */
     .day > ul > li.row:hover .title { text-decoration: underline; }
   }
+  /* A narrow window with a pointer has both: the band's room at the edge and the icon's slot after it. The
+     band's padding would otherwise stand in for the slot, and the icon, still at the edge, sit on the name. */
+  @media (hover: hover) and (pointer: fine) and (max-width: 34rem) {
+    .day > ul > li.row { padding-left: calc(.6rem + 14px + .7em); }
+    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { left: .6rem; }
+  }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
      way to the venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
