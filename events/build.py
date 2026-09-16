@@ -1953,7 +1953,8 @@ def fresh_banner(events, built_at):
                f'<b>{html.escape(first["title"])}</b> at {html.escape(first["venue"])} · {html.escape(first["when"])}</a>')
     else:
         one = '<span class="fresh-one fresh-none">No new events this week</span>'
-    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Just announced</span>{one}'
+    # "New" on the line itself, where the room is the line's; the page it opens is still Just announced.
+    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}New</span>{one}'
               f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></p>\n')
     return banner, json.dumps(fresh, ensure_ascii=False)
 
