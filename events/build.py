@@ -3095,32 +3095,20 @@ INDEX_JS = """
     if (!eventInAddress()) return;
     if (pushed) { pushed = false; history.back(); } else history.replaceState(null, "", withEvent(null));
   };
+  // The page has the run of itself again at once: the close event, which the view's own ways of closing reach
+  // it by, comes a moment later, and the page shouldn't be held still in the meantime.
+  const stopViewing = () => document.body.classList.remove("viewing");
   function closeEvent() {
     if (!view.open) return;
     closing = true;
     view.close();
+    stopViewing();
     restore();
   }
   view.addEventListener("close", () => {
-    // The close event comes a moment after the closing, by which time a view shown again in between (put back
-    // over the page) is open once more, and the page is still being viewed.
-    if (!view.open) document.body.classList.remove("viewing");
+    stopViewing();
     if (closing) closing = false; else restore();
   });
-  // Chrome can leave the view open but out of the top layer it was shown in — coming back to the page from
-  // its cache, say. It keeps its place on the screen and loses everything that made it a view over the page:
-  // no backdrop dimming the list, the day headings painting across it, and nothing outside it to click,
-  // because there's no backdrop there to take the click. Whatever drops it, showing it again puts it back,
-  // and a press anywhere is soon enough to ask.
-  const keepModal = () => {
-    if (!view.open || view.matches(":modal")) return;
-    closing = true;
-    view.close();
-    view.showModal();
-  };
-  addEventListener("pointerdown", keepModal, true);
-  addEventListener("pageshow", keepModal);
-  addEventListener("visibilitychange", keepModal);
   view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
   part("close").addEventListener("click", closeEvent);
   part("back").addEventListener("click", () => step(-1));
@@ -3361,11 +3349,6 @@ CSS = """
   /* A day's heading stays at the top of the window while its events scroll under it, until the next day's
      pushes it up and takes its place. The space around it is padding, where it's black, so the events passing
      under are hidden there too; the same space as before, in all. */
-  /* While the view is up, a heading gives up its background and its place above the page both: nothing scrolls
-     under it to hide, and where Chrome draws the view as an ordinary element rather than over the page, a
-     heading standing above it covers the way out — it sits across the top of the view, where × is, and takes
-     the press meant for it. Level with the page, the view wins on its own, coming after it. */
-  body.viewing .day > h2 { background: none; z-index: auto; }
   .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000;
               transition: box-shadow .15s; }
   /* While it's pinned there, a faint line under it (the same as above the footer), marking where the events
