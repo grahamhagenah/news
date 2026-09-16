@@ -3137,7 +3137,12 @@ INDEX_JS = """
     aboutOf(li);
   });
   part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
-  view.addEventListener("click", event => { if (event.target === view) closeEvent(); }); // Outside it, on the backdrop.
+  // Outside it, on the backdrop — and only where it began outside it too. A press that starts on a button and
+  // drifts off ends as a click on the dialog itself, wherever it's let go, which would close the view from
+  // under a slip of the hand.
+  let pressedOut = false;
+  view.addEventListener("pointerdown", event => { pressedOut = event.target === view; });
+  view.addEventListener("click", event => { if (event.target === view && pressedOut) closeEvent(); });
   // Just announced, at the top of the home page: one of the week's newest, a different one each visit, opening
   // its view here rather than loading the page again.
   {
@@ -3393,7 +3398,7 @@ CSS = """
   .event-steps { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
   /* A press that drifts is a press, not the start of a selection: dragging off a button used to take the
      picture and half the panel into a highlight. */
-  .event-steps button, .event-copy, .event-more, .event-image { user-select: none; -webkit-user-select: none; }
+  .event-steps, .event-copy, .event-more, .event-image, .event-foot { user-select: none; -webkit-user-select: none; }
   .event-steps button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
                         border-radius: 50%; background: none; color: #888; cursor: pointer;
                         transition: background-color .15s, color .15s; }
