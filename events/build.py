@@ -1796,8 +1796,8 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <p class="event-said" role="status" aria-live="polite" aria-atomic="true"></p>
 <div class="event-body">
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
-<p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>
-<h2 class="event-title" id="event-title"></h2>
+<h2 class="event-title" id="event-title"><span class="event-icon"></span><span class="event-name"></span></h2>
+<p class="event-where"><span class="event-day"></span></p>
 <p class="event-facts"></p>
 <p class="event-detail"></p>
 <p class="event-note"></p>
@@ -2988,7 +2988,7 @@ INDEX_JS = """
     view.dataset.category = li.dataset.category;
     part("icon").replaceChildren(li.querySelector(".icon").cloneNode(true));
     part("day").textContent = dayName(li.dataset.id.slice(0, 10));  // Its own day, which its heading isn't on Just announced.
-    part("title").textContent = title;
+    part("name").textContent = title;
     // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
     // poster or a square flyer shown whole, not cropped to the frame.
     const picture = part("image"), img = picture.firstElementChild;
@@ -3073,7 +3073,7 @@ INDEX_JS = """
     openEvent(near, false);
     // What it landed on, for anyone who can't see the panel change under them: the view was named when it
     // opened, and a name it's given now isn't read again.
-    part("said").textContent = part("day").textContent + ": " + part("title").textContent;
+    part("said").textContent = part("day").textContent + ": " + part("name").textContent;
     // Fading is easy on eyes that movement isn't: asked for less motion, it still marks the change, in place.
     const drift = still.matches ? 0 : where * 0.65;
     part("body").animate([{ opacity: 0, transform: "translateX(" + drift + "rem)" }, { opacity: 1, transform: "none" }],
@@ -3475,8 +3475,11 @@ CSS = """
   .event-facts:empty { display: none; }
   .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
                 font-variant-numeric: tabular-nums; }
-  .event-where { display: flex; align-items: center; gap: .45em; margin: 0 2.5rem .5rem 0; color: #888; font-size: .8rem; }
-  .event-where .icon { width: 12px; height: 12px; }
+  .event-where { margin: 0 0 .5rem; color: #888; font-size: .8rem; }
+  /* The kind's mark before the name, level with its first line, a hanging indent so a name that wraps stays
+     square under itself. */
+  .event-title { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5em; align-items: baseline; }
+  .event-title .icon { width: 14px; height: 14px; transform: translateY(1px); }
   .event-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em;
                  line-height: 1.25; text-transform: none; }
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
