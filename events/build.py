@@ -2439,17 +2439,10 @@ def render_cities(cities):
             f'<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n'
             f'<meta name="twitter:card" content="summary_large_image">\n<meta name="color-scheme" content="dark">\n'
             f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>\n'
-            # Its header as a city's pages have it: the same markup, sizes and spacing (BASE_CSS, PUBLIC_CSS).
-            '<style>\n'
-            '  html { background: #000; }\n'
-            '  body { margin: 0; padding: 2rem 1.25rem 4rem; overflow-x: clip; color: #fff; background: #000;\n'
-            '         font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }\n'
-            '  main { max-width: 46rem; margin: 0 auto; }\n'
-            '  header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 2rem; }\n'
-            '  .sites { display: flex; gap: .9rem; }\n'
-            '  .sites a, .sites a:visited { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
-            '  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }\n'
-            '  h1.tagline { margin: -1rem 0 1.25rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }\n'
+            # Its header as a city's pages have it: their own styles for it (its name is the page you're on,
+            # so it's white, as a marked one is).
+            '<style>' + shared.HEADER_CSS + PIN_CSS +
+            '  .sites a, .sites a:visited { color: #fff; }\n'
             '  ul { margin: 0; padding: 0; list-style: none; }\n'
             '  li { padding: 1.1rem 0; border-top: 1px solid #1c1c1c; }\n'
             '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
@@ -3131,6 +3124,12 @@ INDEX_JS = """
 
 
 # The public site's About and Contact pages: plain text, and a form as quiet as the search.
+# The pin before the site's name, and the line under the header: a city's pages and pushpin.city's own share them.
+PIN_CSS = """
+  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
+  h1.tagline { margin: -1rem 0 1.25rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+"""
+
 PUBLIC_CSS = """
   /* Its name in the header: Pushpin as the site's, the city after it lighter. */
   .sites .city { font-weight: 400; }
@@ -3142,12 +3141,10 @@ PUBLIC_CSS = """
   .sites { flex-wrap: wrap; gap: .15rem .55rem; }
   .sites a, .sites .here { white-space: nowrap; }
   @media (max-width: 34rem) { header:has(.here:not([hidden])) .header-note { display: none; } }
-  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
   .sites a[aria-current] .city { color: #8c8c8c; }
-  /* What the site is, in a line under its name, as quiet as the rest. */
-  /* What the site is, in a line over each page for a first visitor; and what the page is, in full at the foot
-     of it, where a repeat visitor won't have to read it. */
-  h1.tagline { margin: -1rem 0 1.25rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+""" + PIN_CSS + """
+  /* What the page is, in a line over its listings; and what the site is, in full at the foot of every page,
+     where a repeat visitor won't have to read it. */
   footer .tagline { margin: 0 0 1.4rem; max-width: 34rem; color: #888; font-size: .9rem; line-height: 1.45; }
   /* A weekend page's way to the other weekend, where the pager goes on the others: next on the right, back on the left. */
   .weekends { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }

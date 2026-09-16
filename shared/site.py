@@ -130,7 +130,9 @@ def preview(title, paragraphs):
             f'<p class="full-title">{html.escape(title)}</p>{body}</div>')
 
 
-BASE_CSS = """
+# The page around a list: its ground, its width, and the header at the top of it. A page written without the
+# rest of these styles (pushpin.city's own, which lists its cities) takes these, so its header is the same.
+HEADER_CSS = """
   html { background: #000; }
   /* Nothing scrolls the page sideways on a phone, whatever runs wide. */
   body { margin: 0; padding: 2rem 1.25rem 4rem; overflow-x: clip; color: #fff; background: #000;
@@ -144,6 +146,9 @@ BASE_CSS = """
   .sites a, .sites a:visited { color: #555; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }
   .sites a:hover { color: #999; }
   .sites a[aria-current], .sites a[aria-current]:hover { color: #fff; }
+"""
+
+BASE_CSS = HEADER_CSS + """
   /* Its choices at the top of the row, as a link sits, so a page whose choices are buttons (which center
      their text in the row's height, set by the menu and search) puts them at the same height as one of links. */
   .filter { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .4rem 1.1rem; margin: -.75rem 0 1.75rem; }
