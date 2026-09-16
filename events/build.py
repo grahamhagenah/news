@@ -2438,12 +2438,17 @@ def render_cities(cities):
             f'<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n'
             f'<meta name="twitter:card" content="summary_large_image">\n<meta name="color-scheme" content="dark">\n'
             f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>\n'
+            # Its header as a city's pages have it: the same markup, sizes and spacing (BASE_CSS, PUBLIC_CSS).
             '<style>\n'
-            '  html { background: #000; color: #fff; font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }\n'
-            '  body { max-width: 34rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }\n'
-            '  h1 { display: flex; align-items: center; gap: .45rem; margin: 0 0 .5rem; font-size: 1.35rem; letter-spacing: -.01em; }\n'
-            '  h1 .pin { width: 1.1rem; height: 1.1rem; }\n'
-            '  .intro { margin: 0 0 2.5rem; color: #8c8c8c; }\n'
+            '  html { background: #000; }\n'
+            '  body { margin: 0; padding: 2rem 1.25rem 4rem; overflow-x: clip; color: #fff; background: #000;\n'
+            '         font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }\n'
+            '  main { max-width: 46rem; margin: 0 auto; }\n'
+            '  header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 2rem; }\n'
+            '  .sites { display: flex; gap: .9rem; }\n'
+            '  .sites a, .sites a:visited { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
+            '  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }\n'
+            '  h1.tagline { margin: -1rem 0 1.25rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }\n'
             '  ul { margin: 0; padding: 0; list-style: none; }\n'
             '  li { padding: 1.1rem 0; border-top: 1px solid #1c1c1c; }\n'
             '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
@@ -2452,8 +2457,9 @@ def render_cities(cities):
             '  li a:hover { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
             '  li p { margin: .3rem 0 0; color: #8c8c8c; }\n'
             '</style>\n'
-            f'<h1>{PIN_MARK}Pushpin</h1>\n<p class="intro">Concerts, films, and talks, aggregated from select venues. No algorithms, no ads, no accounts.</p>\n'
-            f'<ul>\n{links}</ul>\n</html>\n')
+            f'<main>\n<header><nav class="sites" aria-label="Sites"><a href="/">{PIN_MARK}Pushpin</a></nav></header>\n'
+            '<h1 class="tagline">Concerts, films, and talks, aggregated from select venues. No algorithms, no ads, no accounts.</h1>\n'
+            f'<ul>\n{links}</ul>\n</main>\n</html>\n')
 
 
 def render_not_found(cities):
