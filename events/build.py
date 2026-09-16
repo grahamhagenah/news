@@ -1900,8 +1900,12 @@ def address_attribute(item):
 def facts_attributes(item):
     """What the listing's view shows that the row doesn't: its picture, price and ages, when known; that
     there's more of what it's about on its own page (data-more); and that it's sold out altogether (data-sold),
-    which its times, struck through, don't say where it has none."""
-    return ("".join(f' data-{key}="{html.escape(item[key])}"' for key in ("image", "price", "ages") if item.get(key))
+    which its times, struck through, don't say where it has none.
+
+    Not a film's price: a cinema sells a seat at several prices at once — matinee, child, senior, member — and
+    whichever of them a listing happens to name is as likely to mislead as to help."""
+    facts = [key for key in ("image", "price", "ages") if not (key == "price" and item["category"] == "film")]
+    return ("".join(f' data-{key}="{html.escape(item[key])}"' for key in facts if item.get(key))
             + ' data-more=""' * bool(item.get("more")) + ' data-sold=""' * bool(item.get("sold_out") and not item["times"]))
 
 
