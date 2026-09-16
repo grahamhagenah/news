@@ -1793,6 +1793,7 @@ CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><p
 # dates, and a way to copy its link. The script fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <div class="event-steps"><button class="event-back" type="button" aria-label="Previous listing">{STEP_MARKS["back"]}</button><button class="event-on" type="button" aria-label="Next listing">{STEP_MARKS["on"]}</button><button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button></div>
+<div class="event-body">
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
 <p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>
 <h2 class="event-title" id="event-title"></h2>
@@ -1805,6 +1806,7 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <p class="event-place"></p>
 <p class="event-also"></p>
 <div class="event-foot"><button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button></div>
+</div>
 </dialog>
 """
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
@@ -3030,7 +3032,7 @@ INDEX_JS = """
       fill(others[i]);
     });
     copySays("Copy link");
-    view.scrollTop = 0;
+    part("body").scrollTop = 0;
   }
   // The listings either side of the one shown, as the page has them: the rows still on screen, whatever the
   // filters, the search and the pager have left, across the days.
@@ -3344,18 +3346,20 @@ CSS = """
   /* A listing opens its own view (below) wherever it's clicked. */
   .day > ul > li.row { cursor: pointer; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  /* A listing's own view: over the list on a wide screen, a sheet up from the bottom on a phone. Its way to the
-     venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
+  /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
+     way to the venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
   body:has(dialog.event[open]) { overflow: hidden; }
-  /* The same size whatever's in it, so stepping through the list doesn't move it around; what doesn't fit
-     scrolls inside it. */
-  dialog.event { width: min(34rem, calc(100% - 2rem)); height: min(85vh, 44rem); box-sizing: border-box; overflow: auto;
-                 display: flex; flex-direction: column;
-                 padding: 1.4rem 1.5rem 1.5rem; border: 1px solid #262626; border-radius: 14px; background: #0b0b0b; color: #ddd;
-                 font-size: .95rem; line-height: 1.5; }
-  dialog.event::backdrop { background: rgba(0, 0, 0, .72); }
-  dialog.event[open] { animation: rise .18s ease-out; }
-  @keyframes rise { from { opacity: 0; transform: translateY(.75rem); } }
+  /* Down the side of the screen, so it's the same size whatever's in it and stepping through the list doesn't
+     move it around; what doesn't fit scrolls inside it, under the buttons at its top. */
+  dialog.event { width: min(32rem, 100%); height: 100dvh; max-height: none; margin: 0 0 0 auto; box-sizing: border-box;
+                 display: flex; flex-direction: column; overflow: hidden;
+                 padding: 0; border: 0; border-left: 1px solid #262626; border-radius: 0; background: #0b0b0b; color: #ddd;
+                 box-shadow: -1px 0 40px rgba(0, 0, 0, .5); font-size: .95rem; line-height: 1.5; }
+  .event-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 1.4rem 1.5rem 1.5rem; }
+  dialog.event::backdrop { background: rgba(0, 0, 0, .6); }
+  dialog.event[open] { animation: slide .22s ease-out; }
+  @keyframes slide { from { transform: translateX(100%); } }
+  @media (prefers-reduced-motion: reduce) { dialog.event[open] { animation: none; } }
   /* The way out of the view, and the way through the list from inside it, together at the top of it. */
   .event-steps { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
   .event-steps button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
@@ -3368,7 +3372,7 @@ CSS = """
   .step-mark { width: 16px; height: 16px; }
   .close-mark { width: 14px; height: 14px; }
   /* Its picture across the top, edge to edge; a tall or square one whole, on grey. */
-  .event-image { aspect-ratio: 16 / 9; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; border-radius: 13px 13px 0 0; background: #151515; }
+  .event-image { aspect-ratio: 16 / 9; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; background: #151515; }
   .event-image img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease-out; }
   .event-image.loaded img { opacity: 1; }
   .event-image:not(.loaded) { background: linear-gradient(100deg, #151515 40%, #1d1d1d 50%, #151515 60%) 0 0 / 250% 100%;
@@ -3427,9 +3431,10 @@ CSS = """
   .event-copy.copied .check-mark { display: block; color: #4ade80; }
   @media (max-width: 34rem) {
     /* A sheet up from the bottom, as tall as it needs: a phone's screen is the frame that steadies it. */
-    dialog.event { width: 100%; max-width: 100%; height: auto; max-height: 88vh; margin: auto 0 0;
-                   padding: 1.25rem 1.25rem 1.5rem; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
-    .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }
+    dialog.event { width: 100%; max-width: 100%; height: auto; max-height: 88dvh; margin: auto 0 0;
+                   border: 1px solid #262626; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
+    .event-body { padding: 1.25rem 1.25rem 1.5rem; }
+    .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }  /* Inside the sheet's own corners. */
     /* Bigger targets for a thumb. */
     .event-steps { top: .75rem; right: .75rem; gap: .1rem; }
     .event-steps button { width: 2.5rem; height: 2.5rem; }
@@ -3437,6 +3442,7 @@ CSS = """
     .step-mark { width: 19px; height: 19px; }
     dialog.event[open] { animation: sheet .22s ease-out; }
     @keyframes sheet { from { transform: translateY(100%); } }
+    @media (prefers-reduced-motion: reduce) { dialog.event[open] { animation: none; } }
   }
   /* That a listing sent in a link has passed: a note at the foot of the window for a moment. */
   .toast { position: fixed; z-index: 3; left: 50%; bottom: 1.5rem; margin: 0; padding: .5rem .9rem; transform: translate(-50%, .5rem);
