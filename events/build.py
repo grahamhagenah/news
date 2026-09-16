@@ -3512,14 +3512,10 @@ CSS = """
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }  /* Inside the sheet's own corners. */
     /* Bigger targets for a thumb, and the width of the sheet between the way on and the way out: side by side
        they're a mis-tap away from closing what you meant to step through. */
-    .event-tools { top: .75rem; left: .75rem; right: .75rem; }
+    /* All three in the corner together, with the arrows kept a clear finger's width from ×: side by side at
+       this size, a miss on the way on costs you the listing and your place in the list. */
+    .event-tools { top: .75rem; right: .75rem; gap: .9rem; }
     .event-steps { gap: .25rem; }
-    .event-close { margin-left: auto; }
-    /* Where there's a picture, the arrows drop to its lower right: under the thumb rather than up at the top
-       of the sheet, and further still from ×, which keeps its corner. The picture is 16:9 across the width of
-       the sheet, so its foot is that far below the top of it; the arrows sit just above that. */
-    dialog.event:has(.event-image:not([hidden])) .event-steps { position: absolute; right: 0;
-                                                                top: calc(100vw * 9 / 16 - 4rem); }
     .event-tools button { width: 2.5rem; height: 2.5rem; }
     .close-mark { width: 17px; height: 17px; }
     .step-mark { width: 19px; height: 19px; }
