@@ -3479,7 +3479,7 @@ CSS = """
   /* The kind's mark before the name, level with its first line, a hanging indent so a name that wraps stays
      square under itself. */
   .event-title { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5em; align-items: baseline; }
-  .event-title .icon { width: 14px; height: 14px; transform: translateY(1px); }
+  .event-title .icon { width: 18px; height: 18px; transform: translateY(2px); }
   .event-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em;
                  line-height: 1.25; text-transform: none; }
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
