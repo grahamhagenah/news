@@ -1827,6 +1827,10 @@ def tabler(paths, css_class):
 # A listing's copy-link button's icon (Tabler's "link").
 LINK_MARK = tabler(["M9 15l6 -6", "M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464",
                     "M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"], "link-mark")
+# Before Just announced, Tabler's "sparkles".
+SPARK_MARK = tabler(["M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
+                     "M16 6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
+                     "M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"], "spark-mark")
 # And its "check", which takes the link icon's place once the link is copied.
 CHECK_MARK = tabler(["M5 12l5 5l10 -10"], "check-mark")
 CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
@@ -1922,7 +1926,7 @@ def fresh_banner(events, built_at):
     if not fresh:
         return "", "[]"
     first = fresh[0]
-    banner = (f'<p class="fresh"><span class="fresh-tag">Just announced</span>'
+    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Just announced</span>'
               f'<a class="fresh-one" href="{PUBLIC_ROOT}?{urlencode({"event": first["id"]})}">'
               f'<b>{html.escape(first["title"])}</b> at {html.escape(first["venue"])} · {html.escape(first["when"])}</a>'
               f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></p>\n')
@@ -3227,6 +3231,7 @@ CSS = """
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
   .fresh + .filter { margin-top: 0; }
   .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
+  .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
   .fresh-one b { color: #fff; font-weight: 500; }
   .fresh-more { flex: none; margin-left: auto; color: #888; }
