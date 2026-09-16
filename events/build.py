@@ -3137,12 +3137,17 @@ INDEX_JS = """
     aboutOf(li);
   });
   part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
-  // Outside it, on the backdrop — and only where it began outside it too. A press that starts on a button and
-  // drifts off ends as a click on the dialog itself, wherever it's let go, which would close the view from
-  // under a slip of the hand.
-  let pressedOut = false;
-  view.addEventListener("pointerdown", event => { pressedOut = event.target === view; });
-  view.addEventListener("click", event => { if (event.target === view && pressedOut) closeEvent(); });
+  // Outside it, on the backdrop — but not where the press began inside it. A press that starts on a button and
+  // drifts off arrives as a click on the dialog itself, the same as a click on the backdrop does, and would
+  // close the view from under a slip of the hand. Asked the other way round on purpose: a press it doesn't
+  // hear about leaves the view closing as it always did, rather than stuck open with no way out but Esc.
+  let pressedIn = false;
+  view.addEventListener("pointerdown", event => { pressedIn = event.target !== view; });
+  view.addEventListener("click", event => {
+    const began = pressedIn;
+    pressedIn = false;
+    if (event.target === view && !began) closeEvent();
+  });
   // Just announced, at the top of the home page: one of the week's newest, a different one each visit, opening
   // its view here rather than loading the page again.
   {
@@ -3331,6 +3336,7 @@ CSS = """
   /* A day's heading stays at the top of the window while its events scroll under it, until the next day's
      pushes it up and takes its place. The space around it is padding, where it's black, so the events passing
      under are hidden there too; the same space as before, in all. */
+  body:has(dialog.event[open]) .day > h2 { background: none; }
   .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000;
               transition: box-shadow .15s; }
   /* While it's pinned there, a faint line under it (the same as above the footer), marking where the events
