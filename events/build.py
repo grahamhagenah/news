@@ -71,6 +71,7 @@ def weekend_span(friday, sunday):
 # gives its own (a library branch, an MIT building) uses that instead. Check a new venue's address when adding it.
 VENUE_ADDRESSES = {
     "Roadrunner": ("89 Guest St", "Boston", "02135"),
+    "Royale": ("279 Tremont St", "Boston", "02116"),
     "The Sinclair": ("52 Church St", "Cambridge", "02138"),
     "The Middle East": ("472 Massachusetts Ave", "Cambridge", "02139"),
     "Middle East": ("472 Massachusetts Ave", "Cambridge", "02139"),  # As its own listings name it.
@@ -325,11 +326,19 @@ def at_boston(moment):
 
 
 def read_aeg(source):
-    """AEG Presents venue sites (Roadrunner) load every listing from one events.json."""
+    """AEG Presents venue sites (Roadrunner) load every listing from one events.json. A promoter's feed holds
+    every venue it books (Bowery Presents' Boston one, which Royale is in among a dozen others), so a feed
+    naming its venues is taken for the one this source is: they name it as the source's line does."""
+    def venue_of(item):
+        where = item.get("venue")
+        return (where.get("title") if isinstance(where, dict) else where) or ""
+    listed = [item for item in json.loads(fetch(source["url"]))["events"] if item.get("active") and not item.get("private")]
+    # A venue's own feed is all its own, whatever it calls itself there; a promoter's names the venue of each,
+    # and only the one this source is belongs to it.
+    if len({venue_of(item) for item in listed}) > 1:
+        listed = [item for item in listed if venue_of(item).strip().casefold() == source["name"].strip().casefold()]
     events = []
-    for item in json.loads(fetch(source["url"]))["events"]:
-        if not item.get("active") or item.get("private"):
-            continue
+    for item in listed:
         day, start = at_boston(datetime.fromisoformat(item["eventDateTimeISO"]))
         titles = item["title"]
         support = re.sub(r"\s*,\s*", ", ", titles.get("supportingText") or "").strip(" ,")

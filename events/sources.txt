@@ -2,7 +2,8 @@
 # end keeps a source off the public page (Pushpin Boston), for one that isn't ours to republish. Some readers
 # sort a source's listings into other categories themselves, like the MFA's films.
 # How to read it:
-#   aeg        an AEG Presents venue's events.json (Roadrunner)
+#   aeg        an AEG Presents venue's events.json (Roadrunner), or a promoter's over many venues,
+#              taken for the one the line names (Royale, in Bowery Presents' Boston feed)
 #   axs        an AXS venue site's full listing page, /events/all, and each show's page for its start time
 #              (The Sinclair)
 #   ticketweb  a venue page with TicketWeb's event listing (The Middle East)
@@ -32,6 +33,7 @@
 
 # Music
 aeg        https://aegwebprod.blob.core.windows.net/json/events/219/events.json   music   Roadrunner
+aeg        https://aegwebprod.blob.core.windows.net/json/resources/8/events/7301mbln09/events.json   music   Royale
 axs        https://www.sinclaircambridge.com/events/all   music   The Sinclair
 ticketweb  https://mideastclub.com/   music   The Middle East
 jsonld     https://boston.houseofblues.com/shows   music   House of Blues

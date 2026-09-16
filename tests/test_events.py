@@ -21,6 +21,7 @@ from events import build  # noqa: E402
 FIXTURES = Path(__file__).parent / "fixtures" / "events"
 # Which sample stands in for which address.
 ROUTES = [
+    ("aegwebprod.blob.core.windows.net/json/resources/8/events", "bowery.json"),  # A promoter's, over many venues.
     ("aegwebprod", "roadrunner.json"),
     ("sinclaircambridge.com/events/detail/1460677", "sinclair_show.html"),
     ("sinclaircambridge.com", "sinclair.html"),
@@ -99,6 +100,15 @@ class Readers(unittest.TestCase):
             self.assertTrue(item["link"].startswith("http"), item["link"])
             self.assertEqual(item["category"], category)
         return found
+
+    def test_aeg_promoter_feed_is_taken_for_one_venue(self):
+        # Bowery Presents' Boston feed books a dozen venues; Royale's line takes Royale's shows out of it, and
+        # leaves the Sinclair's, which this page reads from the Sinclair's own site.
+        url = "https://aegwebprod.blob.core.windows.net/json/resources/8/events/7301mbln09/events.json"
+        found = self.read("aeg", url, "music", "Royale")
+        self.assertEqual([item["title"] for item in found], ["Willow Avalon", "Ashley Cooke"])
+        self.assertEqual([item["title"] for item in self.read("aeg", url, "music", "The Sinclair")],
+                         ["Damien Jurado", "John Craigie"])
 
     def test_aeg(self):
         found = self.read("aeg", "https://aegwebprod.blob.core.windows.net/json/events/219/events.json")
