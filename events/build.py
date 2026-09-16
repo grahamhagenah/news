@@ -1901,10 +1901,10 @@ def render_row(item):
     return (
         f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
-        f'<span class="source">{icon(item["category"])}'
-        f'<span>{html.escape(item["venue"])}</span></span>'
+        f'{icon(item["category"])}'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{when}{render_times(item["times"], sold_times(item))}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div></li>'
+        f'{when}{render_times(item["times"], sold_times(item))}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div>'
+        f'<span class="source"><span>{html.escape(item["venue"])}</span></span></li>'
     )
 
 
@@ -1924,10 +1924,11 @@ def render_combined(item):
     return (
         f'<li class="row combined" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(sources)}"{facts_attributes(item)}><details><summary>'
-        f'<span class="source">{icon(item["category"])}<span>{places} theaters</span></span>'
+        f'{icon(item["category"])}'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
         f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
-        f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div></summary>'
+        f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div>'
+        f'<span class="source"><span>{places} theaters</span></span></summary>'
         f'<ul class="showings">{showings}</ul></details></li>'
     )
 
@@ -2985,7 +2986,7 @@ INDEX_JS = """
     const title = li.querySelector(".title").textContent.trim();
     const venue = li.querySelector(".source > span").textContent;
     view.dataset.category = li.dataset.category;
-    part("icon").replaceChildren(li.querySelector(".source .icon").cloneNode(true));
+    part("icon").replaceChildren(li.querySelector(".icon").cloneNode(true));
     part("day").textContent = dayName(li.dataset.id.slice(0, 10));  // Its own day, which its heading isn't on Just announced.
     part("title").textContent = title;
     // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
@@ -3365,6 +3366,20 @@ CSS = """
   /* A source that didn't load, at the foot of the page, marked by a small circled exclamation point. */
   .notice { display: flex; align-items: baseline; gap: .45em; }
   .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
+  /* A row reads as what's on, then when, then where: the title first, led by its kind's icon, its times after
+     it, and the venue at the end of the row, where they line up down the page to be scanned. */
+  .row, .combined > details > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .6rem;
+                                        align-items: baseline; }
+  .row > .icon, .combined > details > summary > .icon { align-self: center; }
+  .row .source { justify-content: flex-end; max-width: 14rem; text-align: right; }
+  @media (max-width: 34rem) {
+    /* Too narrow for three columns: the title wraps in full, its times and venue on the line under it, and
+       the icon keeps a slot at the left edge beside the title's first line (half a line down, less half of it). */
+    .row, .combined > details > summary { grid-template-columns: 1fr; gap: 0; }
+    .row { padding-left: calc(12px + .5em); }
+    .row > .icon, .combined > details > summary > .icon { position: absolute; left: 0; top: calc(.4rem + .72em - 6px); }
+    .row .source { justify-content: flex-start; max-width: none; text-align: left; }
+  }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
   /* A sold-out time, struck through; a listing with nothing left, a quiet tag after its times. */
