@@ -2054,7 +2054,19 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
     path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else PUBLIC_TONIGHT[0] if tonight else
             PUBLIC_NEW[0] if added else f"{PUBLIC_PAGES[category][0]}/" if category else "")
-    footer = (public_footer(path, failed_note, names) if public else
+    # What this page is, in its title and description, and in a line at the foot of it.
+    title = description = tagline = ""
+    if public:
+        title, description, tagline = PUBLIC_PAGES[category][1:] if category else (PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
+        if weekend is not None:
+            _, name, title, description = PUBLIC_WEEKENDS[weekend]
+            tagline = (f"{name} around {PUBLIC_AROUND}: {friday:%A, %B} {friday.day} to "
+                       f"{sunday:%A, %B} {sunday.day}.")
+        if tonight:
+            _, title, description, tagline = PUBLIC_TONIGHT
+        if added:
+            _, title, description, tagline = PUBLIC_NEW
+    footer = (public_footer(path, failed_note, names, tagline) if public else
               f"<footer>\n<p>From {names}.</p>\n{failed_note}"
               f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n')
     others = ""
@@ -2076,16 +2088,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
-        title, description, tagline = PUBLIC_PAGES[category][1:] if category else (PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
-        if weekend is not None:
-            _, name, title, description = PUBLIC_WEEKENDS[weekend]
-            tagline = (f"{name} around {PUBLIC_AROUND}: {friday:%A, %B} {friday.day} to "
-                       f"{sunday:%A, %B} {sunday.day}.")
-        if tonight:
-            _, title, description, tagline = PUBLIC_TONIGHT
-        if added:
-            _, title, description, tagline = PUBLIC_NEW
-        return public_page(path, title, f'<h1 class="tagline">{tagline}</h1>\n' + banner + body, built_at, description=description,
+        return public_page(path, title, banner + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
 
@@ -2127,9 +2130,11 @@ def shorter(paragraphs):
     return clip(paragraphs, PUBLIC_ABOUT_CHARS, 2, least=60)
 
 
-def public_footer(path, notes="", names=""):
-    """The foot of each of the public site's pages: the site's pages in three short lists (this one marked),
-    and, under a list of events, where they come from, then any source it couldn't reach."""
+def public_footer(path, notes="", names="", tagline=""):
+    """The foot of each of the public site's pages: what the page is (a list of events says so here, at the
+    end, rather than over the listings, which a repeat visitor is there for), the site's pages in three short
+    lists (this one marked), and, under a list of events, where they come from, then any source it couldn't
+    reach."""
     root = PUBLIC_ROOT
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]
@@ -2147,7 +2152,9 @@ def public_footer(path, notes="", names=""):
         for heading, links in groups
     )
     where = f"<p>Listings from {names}, aggregated from their own calendars every few hours.</p>\n" if names else ""
-    return f'<footer>\n<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n{where}{notes}</footer>\n'
+    said = f'<h1 class="tagline">{html.escape(tagline)}</h1>\n' if tagline else ""
+    return (f'<footer>\n{said}<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n'
+            f'{where}{notes}</footer>\n')
 
 
 # Each page's name, after the site's in the header ("Pushpin Boston / Film"); the home page has none.
@@ -3121,8 +3128,8 @@ PUBLIC_CSS = """
   .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
   .sites a[aria-current] .city { color: #8c8c8c; }
   /* What the site is, in a line under its name, as quiet as the rest. */
-  .tagline { margin: -1rem 0 2.25rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
-  .tagline + .filter { margin-top: 0; }
+  /* What the page is, at the foot of it: over the site's own links, where a repeat visitor won't have to read it. */
+  footer .tagline { margin: 0 0 1.4rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
   /* A weekend page's way to the other weekend, where the pager goes on the others: next on the right, back on the left. */
   .weekends { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
   .weekends a, .weekends a:visited { color: #999; }
@@ -3216,8 +3223,9 @@ CSS = """
   .sold-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* Just announced, a line above the list on the home page: one of the newest, and the way to the rest. */
-  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: -.75rem 0 1.5rem; padding: .45rem 0; font-size: .85rem;
+  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: -1.25rem 0 2rem; padding: .5rem 0; font-size: .85rem;
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
+  .fresh + .filter { margin-top: 0; }
   .fresh-tag { flex: none; color: #777; font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
   .fresh-one b { color: #fff; font-weight: 500; }
