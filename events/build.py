@@ -3239,15 +3239,35 @@ INDEX_JS = """
     pressedIn = false;
     if (event.target === view && !began) closeEvent();
   });
-  // Just announced, at the top of the home page: one of the week's newest, a different one each visit, opening
-  // its view here rather than loading the page again.
+  // Just announced, at the top of the home page: the week's newest, turning over one at a time so a visit
+  // shows several, and opening its view here rather than loading the page again. It starts anywhere in them,
+  // so two visits don't run the same order.
   {
     const banner = document.querySelector(".fresh-one");
     if (banner && FRESH.length > 1) {
-      const pick = FRESH[Math.floor(Math.random() * FRESH.length)];
-      banner.href = new URL(SHARE_URL).pathname + "?event=" + encodeURIComponent(pick.id);
-      banner.innerHTML = "";
-      banner.append(Object.assign(document.createElement("b"), { textContent: pick.title }), ` at ${pick.venue} · ${pick.when}`);
+      const show = pick => {
+        banner.href = new URL(SHARE_URL).pathname + "?event=" + encodeURIComponent(pick.id);
+        banner.replaceChildren(Object.assign(document.createElement("b"), { textContent: pick.title }),
+                               ` at ${pick.venue} · ${pick.when}`);
+      };
+      let at = Math.floor(Math.random() * FRESH.length);
+      show(FRESH[at]);
+      // Asked for less motion, it stays as it was: the one it opened on.
+      if (!still.matches) {
+        // Held while it's under the pointer or has the keyboard, so what's about to be clicked doesn't change
+        // under the hand; held too while the page is in the background, where nobody's reading it.
+        let held = false;
+        for (const [event, on] of [["pointerenter", true], ["pointerleave", false], ["focusin", true], ["focusout", false]]) {
+          banner.closest(".fresh").addEventListener(event, () => { held = on; });
+        }
+        // The next one is put up and faded in, rather than the last one faded out and waited on: a page in the
+        // background stops animating, and waiting on one there would leave the turn half made.
+        setInterval(() => {
+          if (held || document.hidden) return;
+          show(FRESH[at = (at + 1) % FRESH.length]);
+          banner.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: "ease-out" });
+        }, 6000);
+      }
     }
   }
   document.addEventListener("click", event => {
