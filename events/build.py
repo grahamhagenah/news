@@ -2994,6 +2994,7 @@ INDEX_JS = """
     picture.classList.remove("whole", "loaded");
     picture.hidden = !li.dataset.image;
     if (li.dataset.image) img.src = li.dataset.image;
+    if (li.dataset.image && img.complete && img.naturalWidth) showPicture(img);
     // Sold out, all of it or some of its times, before its price and ages.
     const struck = li.querySelectorAll("time.sold:not(.from)").length;
     const sold = li.classList.contains("sold-out") ? "Sold out" : struck ? (struck > 1 ? "Some showings sold out" : "One showing sold out") : "";
@@ -3052,12 +3053,18 @@ INDEX_JS = """
       aboutOf(near);
     }
   }
+  // Stepping through the list: what's in the view fades in, drifting from the side it's come from, so a
+  // listing with a picture and one without read as a move along the list rather than the panel redrawing.
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
   function step(where) {
     const near = beside(where);
     if (!near) return;
     // In place in the address, so Back still closes the view rather than walking through every listing.
     history.replaceState(null, "", withEvent(near.dataset.id));
     openEvent(near, false);
+    if (still.matches) return;
+    part("body").animate([{ opacity: 0, transform: "translateX(" + where * 0.65 + "rem)" }, { opacity: 1, transform: "none" }],
+                         { duration: 180, easing: "ease-out" });
   }
   function openEvent(li, push, note) {
     fill(li, note);
@@ -3098,13 +3105,17 @@ INDEX_JS = """
     part("more").textContent = open ? "Show less" : "Read more";
     part("more").setAttribute("aria-expanded", open);
   });
+  // A poster or a square flyer whole, not cropped to the frame; a wide one across it.
+  function showPicture(img) {
+    part("image").classList.toggle("whole", img.naturalWidth / img.naturalHeight < 1.3);
+    part("image").classList.add("loaded");
+  }
   // It fades in once it's all there and decoded, rather than drawing itself top to bottom.
   part("image").firstElementChild.addEventListener("load", async event => {
     const img = event.target, src = img.src;
     await img.decode().catch(() => {});
     if (img.src !== src) return; // Another listing's, by now.
-    part("image").classList.toggle("whole", img.naturalWidth / img.naturalHeight < 1.3);
-    part("image").classList.add("loaded");
+    showPicture(img);
   });
   // Its picture and what it's about, fetched as a listing's pressed, a moment before its view opens.
   document.addEventListener("pointerdown", event => {
