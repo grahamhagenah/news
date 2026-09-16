@@ -3475,7 +3475,9 @@ CSS = """
   .event-facts:empty { display: none; }
   .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
                 font-variant-numeric: tabular-nums; }
-  .event-where { margin: 0 2.5rem .35rem 0; color: #888; font-size: .8rem; }
+  /* Set as the days are over the list, so the echo is meant rather than nearly. */
+  .event-where { margin: 0 2.5rem .4rem 0; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em;
+                 text-transform: uppercase; }
   /* The kind's mark before the name, level with its first line, a hanging indent so a name that wraps stays
      square under itself. */
   .event-title { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5em; align-items: baseline; }
