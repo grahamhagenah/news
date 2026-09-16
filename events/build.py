@@ -3464,8 +3464,10 @@ CSS = """
                    border: 1px solid #262626; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
     .event-body { padding: 1.25rem 1.25rem 1.5rem; }
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }  /* Inside the sheet's own corners. */
-    /* Bigger targets for a thumb. */
-    .event-steps { top: .75rem; right: .75rem; gap: .1rem; }
+    /* Bigger targets for a thumb, and the width of the sheet between the way on and the way out: side by side
+       they're a mis-tap away from closing what you meant to step through. */
+    .event-steps { top: .75rem; left: .75rem; right: .75rem; gap: .25rem; }
+    .event-close { margin-left: auto; }
     .event-steps button { width: 2.5rem; height: 2.5rem; }
     .close-mark { width: 17px; height: 17px; }
     .step-mark { width: 19px; height: 19px; }
