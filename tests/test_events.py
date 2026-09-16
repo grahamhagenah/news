@@ -455,6 +455,7 @@ class Cities(unittest.TestCase):
         self.assertIn('<a href="/boston/">Boston</a>', home)
         self.assertIn('<a href="/westernma/">Western Mass</a>', home)
         self.assertIn("share/home.png", home)
+        self.assertIn("<h2>Massachusetts</h2>", home, "its cities under the state they're in")
         missing = build.render_not_found(build.CITIES)
         self.assertIn('["boston", "westernma"]', missing)
         self.assertIn('"/boston/" + path.slice(1)', missing, "addresses from before there were cities, Boston's")

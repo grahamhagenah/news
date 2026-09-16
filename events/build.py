@@ -2209,13 +2209,14 @@ class City:
     weekends: list
     pages: dict
     faqs: list
+    state: str = "Massachusetts"  # Which the cities page lists it under.
 
     @property
     def sources(self):
         return SOURCES_FILE if self.slug == "boston" else ROOT / f"sources-{self.slug}.txt"
 
 
-def city_texts(slug, name, place, around, *, preposition="in", who=None, faqs=None, kinds=None):
+def city_texts(slug, name, place, around, *, state="Massachusetts", preposition="in", who=None, faqs=None, kinds=None):
     """A city's pages, in the words they all use: place in titles ("Concerts in Western Mass"), around in the
     rest ("around the Pioneer Valley and the Berkshires"), and preposition for a city whose pages say around
     ("Concerts around Boston"). kinds gives a kind's page its own title, description or tagline where the
@@ -2264,7 +2265,8 @@ def city_texts(slug, name, place, around, *, preposition="in", who=None, faqs=No
         # Its own questions, or Boston's, with its own answer to who makes it and without the one about
         # Boston's theaters.
         faqs or [(question, who if question == "Who makes this?" else answer)
-                 for question, answer in FAQS if "Somerville Theatre" not in question])
+                 for question, answer in FAQS if "Somerville Theatre" not in question],
+        state)
 
 
 BOSTON_CITY = city_texts(
@@ -2405,10 +2407,16 @@ def render_redirect(address, paths=False):
 
 
 def render_cities(cities):
-    """pushpin.city itself: each city's Pushpin, a link to it with what it covers."""
+    """pushpin.city itself: each city's Pushpin, a link to it with what it covers, under the state it's in."""
+    states = {}
+    for city in cities:
+        states.setdefault(city.state, []).append(city)
     links = "".join(
-        f'<li><a href="/{city.slug}/">{html.escape(city.name.partition(" ")[2])}</a><p>{html.escape(city.tagline)}</p></li>\n'
-        for city in cities)
+        f'<section><h2>{html.escape(state)}</h2>\n<ul>' + "".join(
+            f'<li><a href="/{city.slug}/">{html.escape(city.name.partition(" ")[2])}</a>'
+            f'<p>{html.escape(city.tagline)}</p></li>\n' for city in theirs)
+        + "</ul></section>\n"
+        for state, theirs in states.items())
     description = f"Concerts, films, and talks, aggregated from select venues: {', '.join(city.name.partition(' ')[2] for city in cities)}."
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<title>Pushpin</title>\n<meta name="description" content="{html.escape(description)}">\n'
@@ -2424,17 +2432,19 @@ def render_cities(cities):
             # so it's white, as a marked one is).
             '<style>' + shared.HEADER_CSS + PIN_CSS +
             '  .sites a, .sites a:visited { color: #fff; }\n'
+            '  section { margin-bottom: 2rem; }\n'
+            '  h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }\n'
             '  ul { margin: 0; padding: 0; list-style: none; }\n'
-            '  li { padding: 1.1rem 0; border-top: 1px solid #1c1c1c; }\n'
+            '  li { padding: .9rem 0; border-top: 1px solid #1c1c1c; }\n'
             '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
-            '  li a { color: #fff; font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
+            '  li a { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
             '  li a::after { content: " →"; color: #555; font-weight: 400; }\n'
             '  li a:hover { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
-            '  li p { margin: .3rem 0 0; color: #8c8c8c; }\n'
+            '  li p { margin: .2rem 0 0; color: #8c8c8c; font-size: .9rem; }\n'
             '</style>\n'
             f'<main>\n<header><nav class="sites" aria-label="Sites"><a href="/">{PIN_MARK}Pushpin</a></nav></header>\n'
             '<h1 class="tagline">Concerts, films, and talks, aggregated from select venues. No algorithms, no ads, no accounts.</h1>\n'
-            f'<ul>\n{links}</ul>\n</main>\n</html>\n')
+            f'{links}</main>\n</html>\n')
 
 
 def render_not_found(cities):
