@@ -1793,6 +1793,7 @@ CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><p
 # dates, and a way to copy its link. The script fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <div class="event-steps"><button class="event-back" type="button" aria-label="Previous listing">{STEP_MARKS["back"]}</button><button class="event-on" type="button" aria-label="Next listing">{STEP_MARKS["on"]}</button><button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button></div>
+<p class="event-said" role="status" aria-live="polite" aria-atomic="true"></p>
 <div class="event-body">
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
 <p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>
@@ -3044,8 +3045,15 @@ INDEX_JS = """
     return at < 0 ? null : rows[at + step] || null;
   };
   function markSteps() {
+    const had = document.activeElement;
     part("back").disabled = !beside(-1);
     part("on").disabled = !beside(1);
+    // Disabling the button under the pointer drops what's focused out of the view, and the keys through the
+    // list with it: the arrow the other way takes it, or the way out at the end of a list of one.
+    if (had && had.disabled && view.contains(had)) {
+      const other = had === part("on") ? part("back") : part("on");
+      (other.disabled ? part("close") : other).focus();
+    }
     // The next one's picture and what it's about, so stepping to it shows them at once.
     for (const near of [beside(-1), beside(1)]) {
       if (!near) continue;
@@ -3062,9 +3070,13 @@ INDEX_JS = """
     // In place in the address, so Back still closes the view rather than walking through every listing.
     history.replaceState(null, "", withEvent(near.dataset.id));
     openEvent(near, false);
-    if (still.matches) return;
-    part("body").animate([{ opacity: 0, transform: "translateX(" + where * 0.65 + "rem)" }, { opacity: 1, transform: "none" }],
-                         { duration: 180, easing: "ease-out" });
+    // What it landed on, for anyone who can't see the panel change under them: the view was named when it
+    // opened, and a name it's given now isn't read again.
+    part("said").textContent = part("day").textContent + ": " + part("title").textContent;
+    // Fading is easy on eyes that movement isn't: asked for less motion, it still marks the change, in place.
+    const drift = still.matches ? 0 : where * 0.65;
+    part("body").animate([{ opacity: 0, transform: "translateX(" + drift + "rem)" }, { opacity: 1, transform: "none" }],
+                         { duration: still.matches ? 130 : 180, easing: "ease-out" });
   }
   function openEvent(li, push, note) {
     fill(li, note);
@@ -3370,8 +3382,11 @@ CSS = """
   dialog.event::backdrop { background: rgba(0, 0, 0, .6); }
   dialog.event[open] { animation: slide .22s ease-out; }
   @keyframes slide { from { transform: translateX(100%); } }
-  @media (prefers-reduced-motion: reduce) { dialog.event[open] { animation: none; } }
+  @keyframes appear { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { dialog.event[open] { animation: appear .15s ease-out; } }
   /* The way out of the view, and the way through the list from inside it, together at the top of it. */
+  .event-said { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+                clip-path: inset(50%); white-space: nowrap; }
   .event-steps { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
   .event-steps button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
                         border-radius: 50%; background: none; color: #888; cursor: pointer;
@@ -3453,7 +3468,7 @@ CSS = """
     .step-mark { width: 19px; height: 19px; }
     dialog.event[open] { animation: sheet .22s ease-out; }
     @keyframes sheet { from { transform: translateY(100%); } }
-    @media (prefers-reduced-motion: reduce) { dialog.event[open] { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { dialog.event[open] { animation: appear .15s ease-out; } }
   }
   /* That a listing sent in a link has passed: a note at the foot of the window for a moment. */
   .toast { position: fixed; z-index: 3; left: 50%; bottom: 1.5rem; margin: 0; padding: .5rem .9rem; transform: translate(-50%, .5rem);
