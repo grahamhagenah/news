@@ -3423,6 +3423,9 @@ CSS = """
     .day > ul > li.row { margin: 0 -.6rem; padding-left: .6rem; padding-right: .6rem; border-radius: 6px;
                          transition: background-color .12s; }
     .day > ul > li.row:hover { background: #0e0e0e; }
+    /* The whole band is the one target, so the name answers wherever on it the pointer is — between the
+       times and the venue as much as on the name itself. */
+    .day > ul > li.row:hover .title { text-decoration: underline; }
   }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
