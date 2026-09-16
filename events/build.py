@@ -2073,7 +2073,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             _, title, description, tagline = PUBLIC_TONIGHT
         if added:
             _, title, description, tagline = PUBLIC_NEW
-    footer = (public_footer(path, failed_note, names, tagline) if public else
+    footer = (public_footer(path, failed_note, names) if public else
               f"<footer>\n<p>From {names}.</p>\n{failed_note}"
               f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n')
     others = ""
@@ -2095,7 +2095,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
-        said = f'<h1 class="tagline">{html.escape(PUBLIC_SHORT)}</h1>\n'
+        # What this page is, over its listings: the kind's, the weekend's, tonight's or Just announced's own
+        # words; the home page's, what the site is, in short (the foot of every page says it in full).
+        said = f'<h1 class="tagline">{html.escape(tagline if path else PUBLIC_SHORT)}</h1>\n'
         return public_page(path, title, said + banner + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
@@ -2138,11 +2140,10 @@ def shorter(paragraphs):
     return clip(paragraphs, PUBLIC_ABOUT_CHARS, 2, least=60)
 
 
-def public_footer(path, notes="", names="", tagline=""):
-    """The foot of each of the public site's pages: what the page is (a list of events says so here, at the
-    end, rather than over the listings, which a repeat visitor is there for), the site's pages in three short
-    lists (this one marked), and, under a list of events, where they come from, then any source it couldn't
-    reach."""
+def public_footer(path, notes="", names=""):
+    """The foot of each of the public site's pages: what the site is, the same on every page (its own page says
+    what it is over its listings), then the site's pages in three short lists (this one marked), and, under a
+    list of events, where they come from, then any source it couldn't reach."""
     root = PUBLIC_ROOT
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]
@@ -2160,7 +2161,7 @@ def public_footer(path, notes="", names="", tagline=""):
         for heading, links in groups
     )
     where = f"<p>Listings from {names}, aggregated from their own calendars every few hours.</p>\n" if names else ""
-    said = f'<p class="tagline">{html.escape(tagline)}</p>\n' if tagline else ""
+    said = f'<p class="tagline">{html.escape(PUBLIC_TAGLINE)}</p>\n'
     return (f'<footer>\n{said}<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n'
             f'{where}{notes}</footer>\n')
 
