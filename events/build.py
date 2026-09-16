@@ -3379,6 +3379,9 @@ CSS = """
                  padding: 0; border: 0; border-left: 1px solid #262626; border-radius: 0; background: #0b0b0b; color: #ddd;
                  box-shadow: -1px 0 40px rgba(0, 0, 0, .5); font-size: .95rem; line-height: 1.5; }
   .event-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 1.4rem 1.5rem 1.5rem; }
+  /* What's in it keeps its size and the body scrolls past it: a column squashes what it can to fit otherwise,
+     and the picture, sized by its shape rather than its content, is squashed to nothing. */
+  .event-body > * { flex: none; }
   dialog.event::backdrop { background: rgba(0, 0, 0, .6); }
   dialog.event[open] { animation: slide .22s ease-out; }
   @keyframes slide { from { transform: translateX(100%); } }
