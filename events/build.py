@@ -3226,7 +3226,7 @@ CSS = """
   .fresh { display: flex; align-items: baseline; gap: .6rem; margin: -1.25rem 0 2rem; padding: .5rem 0; font-size: .85rem;
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
   .fresh + .filter { margin-top: 0; }
-  .fresh-tag { flex: none; color: #777; font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+  .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
   .fresh-one b { color: #fff; font-weight: 500; }
   .fresh-more { flex: none; margin-left: auto; color: #888; }
