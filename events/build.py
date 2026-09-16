@@ -1804,7 +1804,7 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <button class="event-more" type="button" hidden aria-expanded="false">Read more</button>
 <p class="event-place"></p>
 <p class="event-also"></p>
-<button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button>
+<div class="event-foot"><button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button></div>
 </dialog>
 """
 # Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
@@ -3415,8 +3415,10 @@ CSS = """
   .event-more:hover, .event-more:focus-visible { color: #fff; text-decoration-color: #aaa; outline: none; }
   .event-place, .event-also { margin: .9rem 0 0; color: #888; font-size: .85rem; }
   .event-place a, .event-also a { color: #ccc; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
-  /* Last, at the foot of the view, with what room a short listing leaves above it. */
-  .event-copy { display: inline-flex; align-self: flex-start; align-items: center; gap: .35rem; margin-top: auto;
+  /* Last, at the foot of the view: the padding keeps it clear of the text above, the auto margin drops it to the
+     bottom when a short listing leaves room. */
+  .event-foot { margin-top: auto; padding-top: 1.2rem; }
+  .event-copy { display: inline-flex; align-items: center; gap: .35rem;
                 padding: .4rem .9rem; border: 1px solid #333;
                 border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; }
   .event-copy:hover, .event-copy:focus-visible, .event-copy.copied { border-color: #888; color: #fff; outline: none; }
@@ -3427,7 +3429,6 @@ CSS = """
     /* A sheet up from the bottom, as tall as it needs: a phone's screen is the frame that steadies it. */
     dialog.event { width: 100%; max-width: 100%; height: auto; max-height: 88vh; margin: auto 0 0;
                    padding: 1.25rem 1.25rem 1.5rem; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
-    .event-copy { margin-top: 1.2rem; }  /* The sheet is as tall as it needs, so nothing to push it down to. */
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }
     /* Bigger targets for a thumb. */
     .event-steps { top: .75rem; right: .75rem; gap: .1rem; }
