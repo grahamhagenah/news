@@ -3351,7 +3351,11 @@ CSS = """
   /* A day's heading stays at the top of the window while its events scroll under it, until the next day's
      pushes it up and takes its place. The space around it is padding, where it's black, so the events passing
      under are hidden there too; the same space as before, in all. */
-  body:has(dialog.event[open]) .day > h2 { background: none; }
+  /* While the view is up, a heading gives up its background and its place above the page both: nothing scrolls
+     under it to hide, and where Chrome draws the view as an ordinary element rather than over the page, a
+     heading standing above it covers the way out — it sits across the top of the view, where × is, and takes
+     the press meant for it. Level with the page, the view wins on its own, coming after it. */
+  body:has(dialog.event[open]) .day > h2 { background: none; z-index: auto; }
   .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000;
               transition: box-shadow .15s; }
   /* While it's pinned there, a faint line under it (the same as above the footer), marking where the events
