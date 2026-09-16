@@ -2245,7 +2245,7 @@ def city_texts(slug, name, place, around, *, state="Massachusetts", preposition=
         # What's turned up in the last week, newest first.
         ("new/", f"Just announced in {place} · {name}",
          f"Concerts and talks just added around {around}, from select venues.",
-         "Just announced: concerts and talks added in the last week, from select venues."),
+         "Concerts and talks added in the last week."),
         # The weekends, Friday to Sunday: this one (the one it is, or from Monday to Thursday the one coming)
         # and the next. Each: its address, what it's called, its title and description.
         [("weekend/", "This weekend", f"Things to do in {place} this weekend · {name}",
