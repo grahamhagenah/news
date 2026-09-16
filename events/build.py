@@ -1784,13 +1784,15 @@ SPARK_MARK = tabler(["M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 
                      "M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"], "spark-mark")
 # And its "check", which takes the link icon's place once the link is copied.
 CHECK_MARK = tabler(["M5 12l5 5l10 -10"], "check-mark")
+# The way through the list from inside a listing's view, Tabler's "chevron-left" and "chevron-right".
+STEP_MARKS = {"back": tabler(["M15 6l-6 6l6 6"], "step-mark"), "on": tabler(["M9 6l6 6l-6 6"], "step-mark")}
 CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" '
               'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
 # A listing's own view, opened by clicking it: its picture, when, its price and ages, each place it's at, a
 # link to its page (tickets), with its times, what it's about, the address, its other
 # dates, and a way to copy its link. The script fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
-<button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button>
+<div class="event-steps"><button class="event-back" type="button" aria-label="Previous listing">{STEP_MARKS["back"]}</button><button class="event-on" type="button" aria-label="Next listing">{STEP_MARKS["on"]}</button><button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button></div>
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
 <p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>
 <h2 class="event-title" id="event-title"></h2>
@@ -3030,10 +3032,36 @@ INDEX_JS = """
     copySays("Copy link");
     view.scrollTop = 0;
   }
+  // The listings either side of the one shown, as the page has them: the rows still on screen, whatever the
+  // filters, the search and the pager have left, across the days.
+  const rowsShown = () => [...document.querySelectorAll(".day:not([hidden]) > ul > li.row")].filter(li => !li.hidden);
+  const beside = step => {
+    const rows = rowsShown();
+    const at = rows.indexOf(shown);
+    return at < 0 ? null : rows[at + step] || null;
+  };
+  function markSteps() {
+    part("back").disabled = !beside(-1);
+    part("on").disabled = !beside(1);
+    // The next one's picture and what it's about, so stepping to it shows them at once.
+    for (const near of [beside(-1), beside(1)]) {
+      if (!near) continue;
+      if (near.dataset.image) Object.assign(new Image(), { referrerPolicy: "no-referrer", src: near.dataset.image });
+      aboutOf(near);
+    }
+  }
+  function step(where) {
+    const near = beside(where);
+    if (!near) return;
+    // In place in the address, so Back still closes the view rather than walking through every listing.
+    history.replaceState(null, "", withEvent(near.dataset.id));
+    openEvent(near, false);
+  }
   function openEvent(li, push, note) {
     fill(li, note);
     if (push) { history.pushState(null, "", withEvent(li.dataset.id)); pushed = true; }
     if (!view.open) view.showModal();
+    markSteps();
     tally("open/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), shown.querySelector(".title").textContent);
   }
   // Closing it takes its address away: Back, where opening it added one; otherwise in place. Its own ways of
@@ -3053,6 +3081,16 @@ INDEX_JS = """
   view.addEventListener("close", () => { if (closing) closing = false; else restore(); });
   view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
   part("close").addEventListener("click", closeEvent);
+  part("back").addEventListener("click", () => step(-1));
+  part("on").addEventListener("click", () => step(1));
+  view.addEventListener("keydown", event => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    // Left and right, or j and k: up and down are the keyboard's way of scrolling a long description.
+    const where = { ArrowLeft: -1, ArrowRight: 1, k: -1, j: 1 }[event.key];
+    if (!where) return;
+    event.preventDefault();
+    step(where);
+  });
   part("more").addEventListener("click", () => {
     const open = part("about").classList.toggle("clamped") === false;
     part("more").textContent = open ? "Show less" : "Read more";
@@ -3315,11 +3353,16 @@ CSS = """
   dialog.event::backdrop { background: rgba(0, 0, 0, .72); }
   dialog.event[open] { animation: rise .18s ease-out; }
   @keyframes rise { from { opacity: 0; transform: translateY(.75rem); } }
-  .event-close { position: absolute; top: .85rem; right: .85rem; display: grid; place-items: center; width: 2rem; height: 2rem;
-                 padding: 0; border: 0; border-radius: 50%; background: none; color: #888; cursor: pointer;
-                 transition: background-color .15s, color .15s; }
-  .event-close:hover, .event-close:focus-visible { background: #262626; color: #fff; outline: none; }
-  .event-close:focus-visible { box-shadow: 0 0 0 2px #888; }
+  /* The way out of the view, and the way through the list from inside it, together at the top of it. */
+  .event-steps { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
+  .event-steps button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
+                        border-radius: 50%; background: none; color: #888; cursor: pointer;
+                        transition: background-color .15s, color .15s; }
+  .event-steps button:hover, .event-steps button:focus-visible { background: #262626; color: #fff; outline: none; }
+  .event-steps button:focus-visible { box-shadow: 0 0 0 2px #888; }
+  .event-steps button:disabled { color: #3a3a3a; cursor: default; }
+  .event-steps button:disabled:hover { background: none; }
+  .step-mark { width: 16px; height: 16px; }
   .close-mark { width: 14px; height: 14px; }
   /* Its picture across the top, edge to edge; a tall or square one whole, on grey. */
   .event-image { aspect-ratio: 16 / 9; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; border-radius: 13px 13px 0 0; background: #151515; }
@@ -3333,9 +3376,10 @@ CSS = """
     .event-image:not(.loaded) { animation: none; }
   }
   .event-image.whole img { object-fit: contain; }
-  dialog.event:has(.event-image:not([hidden])) .event-close { z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; }
-  dialog.event:has(.event-image:not([hidden])) .event-close:hover,
-  dialog.event:has(.event-image:not([hidden])) .event-close:focus-visible { background: rgba(0, 0, 0, .9); }
+  dialog.event:has(.event-image:not([hidden])) .event-steps button { background: rgba(0, 0, 0, .6); color: #fff; }
+  dialog.event:has(.event-image:not([hidden])) .event-steps button:disabled { color: #777; }
+  dialog.event:has(.event-image:not([hidden])) .event-steps button:hover:not(:disabled),
+  dialog.event:has(.event-image:not([hidden])) .event-steps button:focus-visible { background: rgba(0, 0, 0, .9); }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
   .event-facts:empty { display: none; }
   .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
@@ -3378,8 +3422,11 @@ CSS = """
     dialog.event { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 1.25rem 1.25rem 1.5rem;
                    border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }
-    .event-close { top: .75rem; right: .75rem; width: 2.5rem; height: 2.5rem; } /* A bigger target for a thumb. */
+    /* Bigger targets for a thumb. */
+    .event-steps { top: .75rem; right: .75rem; gap: .1rem; }
+    .event-steps button { width: 2.5rem; height: 2.5rem; }
     .close-mark { width: 17px; height: 17px; }
+    .step-mark { width: 19px; height: 19px; }
     dialog.event[open] { animation: sheet .22s ease-out; }
     @keyframes sheet { from { transform: translateY(100%); } }
   }
