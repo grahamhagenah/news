@@ -38,51 +38,20 @@ CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
 # The same listings, for anyone: its own name, About and Contact pages, shorter previews, and only the
 # sources fine to republish (a line in sources.txt ending in public=no stays on this page only). Pushpin has
-# a site for each city (CITIES); these are Boston's, and use_city() points them at another's while its pages
-# are written.
-PUBLIC_NAME = "Pushpin Boston"
+# a site for each city (CITIES), whose words are its City's (city_texts); the PUBLIC_ names below are the
+# city whose pages are being written, which use_city() points at each in turn.
 # Pushpin's site, at pushpin.city, with each city's listings at a path of their own: Boston's at /boston/.
-# PUBLIC_DIR is the whole site, as published; the city's pages are in its boston/ folder.
+# PUBLIC_DIR is the whole site, as published; a city's pages are in its own folder (CITY_DIR).
 PUBLIC_SITE = "https://pushpin.city/"
-PUBLIC_URL = PUBLIC_SITE + "boston/"
 PUBLIC_DIR = ROOT.parent / "dist" / "public"
-# Its pages link to each other from the site's root, since the home page puts a kind's page's address in the
-# address bar without loading it, and a relative link would then go astray.
-PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
-CITY_DIR = PUBLIC_DIR / PUBLIC_ROOT.strip("/")
-# Where Pushpin Boston's visits are counted: GoatCounter, which uses no cookies and keeps nothing personal.
+# Where Pushpin's visits are counted: GoatCounter, which uses no cookies and keeps nothing personal.
 # The personal events page isn't counted.
 GOATCOUNTER = "https://hagenah.goatcounter.com/count"
 PUBLIC_CONTACT = "gwhagenah@gmail.com"  # Where the contact form's messages go, through FormSubmit.
 PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
-PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
-PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from select venues."
-PUBLIC_AROUND = "Boston, Cambridge, and Somerville"  # Where it covers, as its pages say: "… around Boston, Cambridge, and Somerville".
-# What the site is, in a line over every page, for a first visitor; the tagline at the foot says it in full.
-PUBLIC_SHORT = "Concerts, films, and talks around Boston."
-# The public site's tonight page: what's still to come today. It holds tomorrow's too, and shows only the day it
-# is where it's read, so it rolls over at midnight, before the next build.
-PUBLIC_TONIGHT = ("tonight/", f"Things to do in Boston tonight · {PUBLIC_NAME}",
-                  "Concerts, films and talks still to come today around Boston, Cambridge and Somerville, aggregated "
-                  "from select venues.",
-                  "Tonight around Boston, Cambridge, and Somerville: everything still to come today, aggregated from "
-                  "select venues.")
-
-# The public site's Just announced page: what's turned up in the last week, newest first.
-PUBLIC_NEW = ("new/", f"Just announced in Boston · {PUBLIC_NAME}",
-              "Concerts and talks just added around Boston, Cambridge and Somerville, from select venues.",
-              "Just announced: concerts and talks added in the last week, from select venues.")
-
-# The public site's weekend pages, Friday to Sunday: this weekend's (the one it is, or from Monday to Thursday the
-# one coming) and next weekend's. Each: its address, what it's called, its title and description.
-PUBLIC_WEEKENDS = [
-    ("weekend/", "This weekend", f"Things to do in Boston this weekend · {PUBLIC_NAME}",
-     "Concerts, films and talks around Boston, Cambridge and Somerville this weekend, Friday to Sunday, "
-     "aggregated from select venues."),
-    ("weekend/next/", "Next weekend", f"Things to do in Boston next weekend · {PUBLIC_NAME}",
-     "Concerts, films and talks around Boston, Cambridge and Somerville next weekend, Friday to Sunday, "
-     "aggregated from select venues."),
-]
+# Each kind's page under a city's folder. Every city's pages are at the same addresses, so what a page is
+# called (PAGE_NAMES) and which have a card of their own (SHARE_CARDS) are the same for all of them.
+KIND_PAGES = {"music": "music", "film": "film", "art": "talks"}
 
 
 def weekend_days(day, ahead=0):
@@ -97,26 +66,6 @@ def weekend_span(friday, sunday):
     """"Sep 18–20", or "Sep 30–Oct 2" across months."""
     return f"{friday:%b} {friday.day}–" + (f"{sunday.day}" if sunday.month == friday.month else f"{sunday:%b} {sunday.day}")
 
-
-# Each kind's own page on the public site, which its filter link goes to: its address, and what it tells
-# search engines and readers it is.
-PUBLIC_PAGES = {
-    "music": ("music", f"Concerts around Boston · {PUBLIC_NAME}",
-              "Concerts at clubs, bars and halls across Boston, Cambridge and Somerville for the next two months, "
-              "aggregated from select venues.",
-              "Concerts around Boston, Cambridge, and Somerville, aggregated from select venues."),
-    "film": ("film", f"Movie showtimes and repertory film in Boston · {PUBLIC_NAME}",
-             "Showtimes at the Brattle, the Coolidge, the Harvard Film Archive and more, from repertory screenings "
-             "to new releases, for the next month, aggregated from select theaters.",
-             "Films around Boston, Cambridge, and Somerville, from repertory screenings to new releases, "
-             "aggregated from select theaters."),
-    "art": ("talks", f"Art, exhibitions and talks in Boston · {PUBLIC_NAME}",
-            "Artist talks, lectures, exhibition openings and museum nights around Boston, Cambridge and Somerville "
-            "for the next month, aggregated from select venues.",
-            "Art and talks around Boston, Cambridge, and Somerville, aggregated from select venues."),
-}
-PUBLIC_DESCRIPTION = ("Concerts for the next two months, and film screenings and art talks for the next month, around "
-                      "Boston, Cambridge and Somerville, on one page, from select venues.")
 
 # Each venue's street address, town and ZIP, for the event listings search engines read; an event whose source
 # gives its own (a library branch, an MIT building) uses that instead. Check a new venue's address when adding it.
@@ -2167,11 +2116,11 @@ def public_footer(path, notes="", names=""):
 
 
 # Each page's name, after the site's in the header ("Pushpin Boston / Film"); the home page has none.
-PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, (slug, *_) in PUBLIC_PAGES.items()}
-              | {PUBLIC_TONIGHT[0]: "Tonight", PUBLIC_NEW[0]: "Just announced"}
-              | {path: name for path, name, *_ in PUBLIC_WEEKENDS} | {"about/": "About", "contact/": "Contact"})
+PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, slug in KIND_PAGES.items()}
+              | {"tonight/": "Tonight", "new/": "Just announced", "weekend/": "This weekend",
+                 "weekend/next/": "Next weekend", "about/": "About", "contact/": "Contact"})
 # The pages with a share card of their own (events/share); the rest show the home page's.
-SHARE_CARDS = {slug for slug, *_ in PUBLIC_PAGES.values()} | {"tonight", "weekend"}
+SHARE_CARDS = set(KIND_PAGES.values()) | {"tonight", "weekend"}
 
 
 def public_page(path, title, body, built_at=None, description=None, data=None):
@@ -2266,50 +2215,79 @@ class City:
         return SOURCES_FILE if self.slug == "boston" else ROOT / f"sources-{self.slug}.txt"
 
 
-BOSTON_CITY = City("boston", PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_SHORT, PUBLIC_TONIGHT,
-                   PUBLIC_NEW, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS)
+def city_texts(slug, name, place, around, *, preposition="in", who=None, faqs=None, kinds=None):
+    """A city's pages, in the words they all use: place in titles ("Concerts in Western Mass"), around in the
+    rest ("around the Pioneer Valley and the Berkshires"), and preposition for a city whose pages say around
+    ("Concerts around Boston"). kinds gives a kind's page its own title, description or tagline where the
+    words above are too plain for it; who is its About page's answer to who makes it, and faqs its questions,
+    for a city that keeps Boston's own."""
+    kinds = kinds or {}
 
+    def kind(key, title, description, tagline):
+        """A kind's page: its address, title, description and the line over its listings."""
+        own = kinds.get(key, {})
+        return (KIND_PAGES[key], f"{own.get('title', title)} · {name}", own.get("description", description),
+                own.get("tagline", tagline))
 
-def city_texts(slug, name, place, around, film_description, who):
-    """A city's page names and descriptions, in the words Boston's use: place in titles ("Concerts in Western
-    Mass"), around in the rest ("around the Pioneer Valley and the Berkshires"); and who makes it, as its
-    About page's answer says."""
     return City(
-        slug, name, f"{name} · Concerts, films and talks in {place}",
+        slug, name, f"{name} · Concerts, films and talks {preposition} {place}",
         f"Concerts, films, and talks around {around}, aggregated from select venues.",
         f"Concerts for the next two months, and film screenings and art talks for the next month, around {around}, "
         f"on one page, from select venues.",
         around,
         f"Concerts, films, and talks around {place}.",
+        # What's still to come today. The page holds tomorrow's too, and shows only the day it is where it's
+        # read, so it rolls over at midnight, before the next build.
         ("tonight/", f"Things to do in {place} tonight · {name}",
          f"Concerts, films and talks still to come today around {around}, aggregated from select venues.",
          f"Tonight around {around}: everything still to come today, aggregated from select venues."),
+        # What's turned up in the last week, newest first.
         ("new/", f"Just announced in {place} · {name}",
          f"Concerts and talks just added around {around}, from select venues.",
          "Just announced: concerts and talks added in the last week, from select venues."),
+        # The weekends, Friday to Sunday: this one (the one it is, or from Monday to Thursday the one coming)
+        # and the next. Each: its address, what it's called, its title and description.
         [("weekend/", "This weekend", f"Things to do in {place} this weekend · {name}",
           f"Concerts, films and talks around {around} this weekend, Friday to Sunday, aggregated from select venues."),
          ("weekend/next/", "Next weekend", f"Things to do in {place} next weekend · {name}",
           f"Concerts, films and talks around {around} next weekend, Friday to Sunday, aggregated from select venues.")],
-        {"music": ("music", f"Concerts in {place} · {name}",
-                   f"Concerts around {around} for the next two months, aggregated from select venues.",
-                   f"Concerts around {around}, aggregated from select venues."),
-         "film": ("film", f"Movie showtimes in {place} · {name}", film_description,
-                  f"Films around {around}, aggregated from select theaters."),
-         "art": ("talks", f"Art, exhibitions and talks in {place} · {name}",
-                 f"Talks, readings, performances and exhibition openings around {around} for the next month, aggregated "
-                 f"from select venues.",
-                 f"Art and talks around {around}, aggregated from select venues.")},
-        # Boston's questions, with its own answer to who makes it, but not the one about Boston's theaters.
-        [(question, who if question == "Who makes this?" else answer) for question, answer in FAQS if "Somerville Theatre" not in question])
+        {"music": kind("music", f"Concerts {preposition} {place}",
+                       f"Concerts around {around} for the next two months, aggregated from select venues.",
+                       f"Concerts around {around}, aggregated from select venues."),
+         "film": kind("film", f"Movie showtimes {preposition} {place}",
+                      f"Showtimes around {around} for the next month, aggregated from select theaters.",
+                      f"Films around {around}, aggregated from select theaters."),
+         "art": kind("art", f"Art, exhibitions and talks in {place}",
+                     f"Talks, readings, performances and exhibition openings around {around} for the next month, "
+                     f"aggregated from select venues.",
+                     f"Art and talks around {around}, aggregated from select venues.")},
+        # Its own questions, or Boston's, with its own answer to who makes it and without the one about
+        # Boston's theaters.
+        faqs or [(question, who if question == "Who makes this?" else answer)
+                 for question, answer in FAQS if "Somerville Theatre" not in question])
 
 
-WESTERN_MASS = city_texts("westernma", "Pushpin Western Mass", "Western Mass", "the Pioneer Valley and the Berkshires",
-                          "Showtimes at Amherst Cinema, Images Cinema, the Triplex and the Beacon, for the next month, "
-                          "aggregated from select theaters.",
-                          "I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I grew up in Western Mass, and I love "
-                          "supporting its theaters and concert venues. I wanted an easier way to track what’s coming up than "
-                          "relying on Google or visiting each venue’s website.")
+BOSTON_CITY = city_texts(
+    "boston", "Pushpin Boston", "Boston", "Boston, Cambridge, and Somerville", preposition="around", faqs=FAQS,
+    kinds={"music": {"description": "Concerts at clubs, bars and halls across Boston, Cambridge and Somerville for the "
+                                    "next two months, aggregated from select venues."},
+           "film": {"title": "Movie showtimes and repertory film in Boston",
+                    "description": "Showtimes at the Brattle, the Coolidge, the Harvard Film Archive and more, from "
+                                   "repertory screenings to new releases, for the next month, aggregated from select theaters.",
+                    "tagline": "Films around Boston, Cambridge, and Somerville, from repertory screenings to new "
+                               "releases, aggregated from select theaters."},
+           "art": {"description": "Artist talks, lectures, exhibition openings and museum nights around Boston, "
+                                  "Cambridge and Somerville for the next month, aggregated from select venues."}})
+
+WESTERN_MASS = city_texts(
+    "westernma", "Pushpin Western Mass", "Western Mass", "the Pioneer Valley and the Berkshires",
+    who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I grew up in Western Mass, and I love "
+        "supporting its theaters and concert venues. I wanted an easier way to track what’s coming up than "
+        "relying on Google or visiting each venue’s website.",
+    kinds={"film": {"description": "Showtimes at Amherst Cinema, Images Cinema, the Triplex and the Beacon, for the "
+                                   "next month, aggregated from select theaters."}})
+
+
 # Each city's Pushpin, at pushpin.city/<its slug>/, from sources-<its slug>.txt (Boston's, sources.txt).
 CITIES = [BOSTON_CITY, WESTERN_MASS]
 
@@ -2326,6 +2304,9 @@ def use_city(city):
     PUBLIC_URL = f"{PUBLIC_SITE}{city.slug}/"
     PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
     CITY_DIR = PUBLIC_DIR / city.slug
+
+
+use_city(BOSTON_CITY)  # The names above start at Boston's, until a build points them at each city in turn.
 
 
 def render_about(sources, built_at, events=()):
@@ -3127,7 +3108,8 @@ INDEX_JS = """
 # The pin before the site's name, and the line under the header: a city's pages and pushpin.city's own share them.
 PIN_CSS = """
   .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
-  h1.tagline { margin: -1rem 0 1.25rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+  h1.tagline { margin: -1rem 0 1.6rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+  h1.tagline + .filter { margin-top: 0; }  /* The filter's own pull-up would leave the line on top of it. */
 """
 
 PUBLIC_CSS = """
