@@ -3260,13 +3260,16 @@ INDEX_JS = """
         for (const [event, on] of [["pointerenter", true], ["pointerleave", false], ["focusin", true], ["focusout", false]]) {
           banner.closest(".fresh").addEventListener(event, () => { held = on; });
         }
-        // The next one is put up and faded in, rather than the last one faded out and waited on: a page in the
-        // background stops animating, and waiting on one there would leave the turn half made.
+        // One turn: out over most of a second, the next one put up while nothing is showing, then back in.
+        // The swap is on a timer of its own rather than waiting on the fade, because a page in the background
+        // stops animating and a turn waiting there would never finish. However it's interrupted, the fade
+        // ends where it began, so the banner is never left faint.
         setInterval(() => {
           if (held || document.hidden) return;
-          show(FRESH[at = (at + 1) % FRESH.length]);
-          banner.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: "ease-out" });
-        }, 6000);
+          banner.animate([{ opacity: 1 }, { opacity: 0, offset: .45 }, { opacity: 1 }],
+                         { duration: 1400, easing: "ease-in-out" });
+          setTimeout(() => show(FRESH[at = (at + 1) % FRESH.length]), 620);
+        }, 7000);
       }
     }
   }
