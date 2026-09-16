@@ -2840,9 +2840,10 @@ INDEX_JS = """
     const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     const onPage = new Set(rows.slice((page - 1) * EVENTS_PER_PAGE, page * EVENTS_PER_PAGE));
+    const passing = new Set(rows);
     for (const day of document.querySelectorAll(".day")) {
       const lis = day.querySelectorAll(":scope > ul > li");
-      for (const li of lis) li.hidden = !onPage.has(li);
+      for (const li of lis) { li.hidden = !onPage.has(li); li.classList.toggle("passes", passing.has(li)); }
       day.hidden = ![...lis].some(li => !li.hidden);
     }
     const link = (n, text) => `<a href="${address(n)}">${text}</a>`;
@@ -3033,14 +3034,19 @@ INDEX_JS = """
     for (const [i, a] of part("also").querySelectorAll("a").entries()) a.addEventListener("click", event => {
       event.preventDefault();
       history.replaceState(null, "", withEvent(others[i].dataset.id));
-      fill(others[i]);
+      openEvent(others[i], false);
     });
     copySays("Copy link");
     part("body").scrollTop = 0;
   }
-  // The listings either side of the one shown, as the page has them: the rows still on screen, whatever the
-  // filters, the search and the pager have left, across the days.
-  const rowsShown = () => [...document.querySelectorAll(".day:not([hidden]) > ul > li.row")].filter(li => !li.hidden);
+  // The listings either side of the one shown: what the filters and the search allow, across the days, in the
+  // order the page has them — whichever page they fall on, the view having no pages. Until the script has
+  // divided them up, what's on screen.
+  const rowsShown = () => {
+    const passing = [...document.querySelectorAll(".day > ul > li.row.passes")];
+    return passing.length ? passing
+      : [...document.querySelectorAll(".day:not([hidden]) > ul > li.row")].filter(li => !li.hidden);
+  };
   const beside = step => {
     const rows = rowsShown();
     const at = rows.indexOf(shown);
