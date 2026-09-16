@@ -2933,8 +2933,11 @@ INDEX_JS = """
   const view = document.querySelector("dialog.event");
   const part = name => view.querySelector(".event-" + name);
   const rowWith = id => [...document.querySelectorAll(".day > ul > li[data-id]")].find(li => li.dataset.id === id);
-  const dayName = date => date === today ? "Today" : date === tomorrow ? "Tomorrow"
-    : new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const dated = date => new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const dayName = date => date === today ? "Today" : date === tomorrow ? "Tomorrow" : dated(date);
+  // Over the name, where the day is the listing's own and worth saying in full: Today, and which day that is,
+  // as the list heads its days. Among its other dates, where a run of them is read at a glance, the short way.
+  const dayFull = date => date === today || date === tomorrow ? dayName(date) + " · " + dated(date) : dated(date);
   const eventInAddress = () => new URLSearchParams(location.search).get("event");
   const withEvent = id => {
     const url = new URL(location.href);
@@ -2988,7 +2991,7 @@ INDEX_JS = """
     const venue = li.querySelector(".source > span").textContent;
     view.dataset.category = li.dataset.category;
     part("icon").replaceChildren(li.querySelector(".icon").cloneNode(true));
-    part("day").textContent = dayName(li.dataset.id.slice(0, 10));  // Its own day, which its heading isn't on Just announced.
+    part("day").textContent = dayFull(li.dataset.id.slice(0, 10));  // Its own day, which its heading isn't on Just announced.
     part("name").textContent = title;
     // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
     // poster or a square flyer shown whole, not cropped to the frame.
