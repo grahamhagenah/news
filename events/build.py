@@ -2098,7 +2098,7 @@ def public_footer(path, notes="", names=""):
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]
          + [("Just announced", PUBLIC_NEW[0])]),
         ("When", [("Tonight", PUBLIC_TONIGHT[0])] + [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
-        (PUBLIC_NAME, [("About", "about/"), ("Calendars", "about/#calendars"), ("Contact", "contact/")]
+        (PUBLIC_NAME, [("About", "about/"), ("Calendars", "about/#calendars"), ("Contact", "/contact/")]
          + [("All cities", "/")] * (len(CITIES) > 1)),  # pushpin.city itself, which lists them.
     ]
     marked = ' aria-current="page"'
@@ -2173,12 +2173,12 @@ FAQS = [
      "to find a way around this. The same goes for the Capitol Theatre in Arlington."),
     ("Why isn’t my favorite venue here?",
      "It may not publish its calendar in a way that can be read automatically, or I may not have found it yet. "
-     "<a href=\"{root}contact/\">Tell me about it</a> and I’ll take a look."),
+     "<a href=\"/contact/\">Tell me about it</a> and I’ll take a look."),
     ("Will you make this for my city?",
      "I’d rather keep it to places I know well. I add every venue one by one, and curating a list of cool spots "
      "would be challenging if I’m not a local. But if there’s enough interest in another city or area, I’ll look into "
      "starting one there, and it would go much faster with help from someone who knows its venues. If that’s you, "
-     "<a href=\"{root}contact/\">get in touch</a>."),
+     "<a href=\"/contact/\">get in touch</a>."),
     ("How often is it updated?",
      "Every few hours, from each venue’s own calendar. Shows added or changed since then appear with the next "
      "update, so check the venue’s page before you go."),
@@ -2375,7 +2375,7 @@ to it.</li>
 <div class="faq">
 {faq}
 </div>
-<p>Know a venue that should be here, or spotted a mistake? <a href="{root}contact/">Get in touch</a>.</p>
+<p>Know a venue that should be here, or spotted a mistake? <a href="/contact/">Get in touch</a>.</p>
 </div>"""
     # The questions, for search engines too, which can show them in their results.
     answers = [(question, answer.replace("{root}", root)) for question, answer in FAQS]
@@ -2408,6 +2408,47 @@ def render_redirect(address, paths=False):
             f'<p><a href="{link}">{html.escape(PUBLIC_NAME)}</a></p>\n</html>\n')
 
 
+def site_page(path, title, description, said, body, styles=""):
+    """A page of the site itself, outside any city (its cities, and the contact form they share): the same
+    header as a city's pages, its name a way back to the cities."""
+    here = f' <span class="here">{html.escape(PAGE_NAMES[path])}</span>' if path in PAGE_NAMES else ""
+    address = PUBLIC_SITE + path
+    return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>{html.escape(title)}</title>\n<meta name="description" content="{html.escape(description)}">\n'
+            f'<link rel="canonical" href="{address}">\n<link rel="icon" href="/favicon.svg?pin3" type="image/svg+xml">\n'
+            f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?pin3">\n'
+            f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Pushpin">\n'
+            f'<meta property="og:title" content="{html.escape(title)}">\n<meta property="og:description" content="{html.escape(description)}">\n'
+            f'<meta property="og:url" content="{address}">\n<meta property="og:image" content="{PUBLIC_SITE}share/home.png?pin">\n'
+            f'<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n'
+            f'<meta name="twitter:card" content="summary_large_image">\n<meta name="color-scheme" content="dark">\n'
+            f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>\n'
+            # Its header as a city's pages have it: their own styles for it (its name is the page you're on,
+            # so it's white, as a marked one is).
+            '<style>' + shared.HEADER_CSS + PIN_CSS + CONTACT_CSS +
+            '  .sites a, .sites a:visited { color: #fff; }\n'
+            '  .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }\n'
+            '  .sites .here::before { content: "/"; margin-right: .5em; color: #444; font-weight: 400; }\n'
+            '  .prose { max-width: 34rem; color: #ccc; }\n'
+            '  .prose p { margin: 0 0 1em; }\n' + styles + '</style>\n'
+            f'<main>\n<header><nav class="sites" aria-label="Sites"><a href="/">{PIN_MARK}Pushpin</a>{here}</nav></header>\n'
+            f'<h1 class="tagline">{html.escape(said)}</h1>\n{body}</main>\n</html>\n')
+
+
+CITIES_CSS = ('  section { margin-bottom: 2rem; }\n'
+              '  h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }\n'
+              '  ul { margin: 0; padding: 0; list-style: none; }\n'
+              '  li { padding: .9rem 0; border-top: 1px solid #1c1c1c; }\n'
+              '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
+              '  li a { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
+              '  li a::after { content: " →"; color: #555; font-weight: 400; }\n'
+              '  .soon { color: #777; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }\n'
+              '  .ask { margin: 2.25rem 0 0; color: #8c8c8c; font-size: .9rem; }\n'
+              '  .ask a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
+              '  li a:hover { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
+              '  li p { margin: .2rem 0 0; color: #8c8c8c; font-size: .9rem; }\n')
+
+
 def render_cities(cities):
     """pushpin.city itself: each city's Pushpin, a link to it with what it covers, under the state it's in;
     then the ones being worked on, and a way to ask for another."""
@@ -2418,46 +2459,17 @@ def render_cities(cities):
         states.setdefault(city.state, []).append((city.name.partition(" ")[2], covers, f"/{city.slug}/"))
     for state, (name, note) in COMING_SOON.items():
         states.setdefault(state, []).append((name, note, ""))
-    links = "".join(
+    body = "".join(
         f'<section><h2>{html.escape(state)}</h2>\n<ul>' + "".join(
             f'<li>' + (f'<a href="{where}">{html.escape(name)}</a>' if where else f'<span class="soon">{html.escape(name)}</span>')
             + f'<p>{html.escape(note)}</p></li>\n' for name, note, where in theirs)
         + "</ul></section>\n"
         for state, theirs in states.items())
-    # Where to ask for a city: the first city's contact form, which every city's messages go through.
-    links += (f'<p class="ask">Want your city on Pushpin? <a href="/{cities[0].slug}/contact/">Let us know</a>, '
-              f'and tell us the venues worth following.</p>\n')
+    body += '<p class="ask">Want your city on Pushpin? <a href="/contact/">Let us know</a>, and tell us the venues worth following.</p>\n'
     description = f"Concerts, films, and talks, aggregated from select venues: {', '.join(city.name.partition(' ')[2] for city in cities)}."
-    return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-            f'<title>Pushpin</title>\n<meta name="description" content="{html.escape(description)}">\n'
-            f'<link rel="canonical" href="{PUBLIC_SITE}">\n<link rel="icon" href="/favicon.svg?pin3" type="image/svg+xml">\n'
-            f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?pin3">\n'
-            f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Pushpin">\n'
-            f'<meta property="og:title" content="Pushpin">\n<meta property="og:description" content="{html.escape(description)}">\n'
-            f'<meta property="og:url" content="{PUBLIC_SITE}">\n<meta property="og:image" content="{PUBLIC_SITE}share/home.png?pin">\n'
-            f'<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n'
-            f'<meta name="twitter:card" content="summary_large_image">\n<meta name="color-scheme" content="dark">\n'
-            f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>\n'
-            # Its header as a city's pages have it: their own styles for it (its name is the page you're on,
-            # so it's white, as a marked one is).
-            '<style>' + shared.HEADER_CSS + PIN_CSS +
-            '  .sites a, .sites a:visited { color: #fff; }\n'
-            '  section { margin-bottom: 2rem; }\n'
-            '  h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }\n'
-            '  ul { margin: 0; padding: 0; list-style: none; }\n'
-            '  li { padding: .9rem 0; border-top: 1px solid #1c1c1c; }\n'
-            '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
-            '  li a { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
-            '  li a::after { content: " →"; color: #555; font-weight: 400; }\n'
-            '  .soon { color: #777; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }\n'
-            '  .ask { margin: 2.25rem 0 0; color: #8c8c8c; font-size: .9rem; }\n'
-            '  .ask a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
-            '  li a:hover { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
-            '  li p { margin: .2rem 0 0; color: #8c8c8c; font-size: .9rem; }\n'
-            '</style>\n'
-            f'<main>\n<header><nav class="sites" aria-label="Sites"><a href="/">{PIN_MARK}Pushpin</a></nav></header>\n'
-            '<h1 class="tagline">Concerts, films, and talks, aggregated from select venues. No algorithms, no ads, no accounts.</h1>\n'
-            f'{links}</main>\n</html>\n')
+    return site_page("", "Pushpin", description,
+                     "Concerts, films, and talks, aggregated from select venues. No algorithms, no ads, no accounts.",
+                     body, CITIES_CSS)
 
 
 def render_not_found(cities):
@@ -2620,25 +2632,37 @@ def event_pages(sources, events):
     return pages
 
 
-def render_sitemap(built_at):
-    """The public site's pages for search engines: the listings, changing every few hours, and the others."""
-    pages = ([("", "hourly", "1.0"), (PUBLIC_TONIGHT[0], "hourly", "0.9"), (PUBLIC_NEW[0], "daily", "0.8")] + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS] + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()]
-             + [("about/", "monthly", "0.5"), ("contact/", "yearly", "0.3")])
+def sitemap(pages, built_at):
+    """Pages for search engines, each an address with how often it changes and how much it matters."""
     urls = "".join(
-        f"  <url><loc>{PUBLIC_URL}{path}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
+        f"  <url><loc>{address}</loc><lastmod>{built_at:%Y-%m-%d}</lastmod>"
         f"<changefreq>{often}</changefreq><priority>{priority}</priority></url>\n"
-        for path, often, priority in pages
+        for address, often, priority in pages
     )
     return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}</urlset>\n'
 
 
+def render_site_sitemap(built_at):
+    """The site's own pages: its cities, and the form they share."""
+    return sitemap([(PUBLIC_SITE, "weekly", "0.9"), (f"{PUBLIC_SITE}contact/", "yearly", "0.3")], built_at)
+
+
+def render_sitemap(built_at):
+    """A city's pages for search engines: the listings, changing every few hours, and the others."""
+    pages = ([("", "hourly", "1.0"), (PUBLIC_TONIGHT[0], "hourly", "0.9"), (PUBLIC_NEW[0], "daily", "0.8")]
+             + [(path, "hourly", "0.9") for path, *_ in PUBLIC_WEEKENDS]
+             + [(f"{slug}/", "hourly", "0.9") for slug, *_ in PUBLIC_PAGES.values()] + [("about/", "monthly", "0.5")])
+    return sitemap([(PUBLIC_URL + path, often, priority) for path, often, priority in pages], built_at)
+
+
 def render_contact():
-    """A form whose messages FormSubmit emails on; its first one asks the address's owner to confirm it."""
+    """The form every city's pages point to, whose messages FormSubmit emails on; its first one asks the
+    address's owner to confirm it."""
     body = f"""<div class="prose">
 <p class="intro">A venue to add, a listing that’s wrong, or anything else: send a note.</p>
 <form class="contact" action="https://formsubmit.co/{PUBLIC_CONTACT}" method="POST">
-<input type="hidden" name="_subject" value="{PUBLIC_NAME}: a message">
-<input type="hidden" name="_next" value="{PUBLIC_URL}contact/?sent">
+<input type="hidden" name="_subject" value="Pushpin: a message">
+<input type="hidden" name="_next" value="{PUBLIC_SITE}contact/?sent">
 <input type="hidden" name="_template" value="box">
 <input type="text" name="_honey" class="honey" tabindex="-1" autocomplete="off" aria-hidden="true">
 <label>Your email, for a reply <input type="email" name="email" required></label>
@@ -2647,7 +2671,7 @@ def render_contact():
 </form>
 <div class="sent" hidden>
 <p>Thanks, your message is on its way. We’ll do our best to respond in a timely manner.</p>
-<a class="home" href="{PUBLIC_ROOT}">Back to home</a>
+<a class="home" href="/">Back to home</a>
 </div>
 </div>
 <script>
@@ -2658,8 +2682,8 @@ def render_contact():
     document.querySelector(".sent").hidden = false;
   }}
 </script>"""
-    return public_page("contact/", f"Contact · {PUBLIC_NAME}", body,
-                       description=f"Suggest a venue for {PUBLIC_NAME}, or tell us about a listing that’s wrong.")
+    return site_page("contact/", "Contact · Pushpin", "Suggest a venue for Pushpin, or tell us about a listing that’s wrong.",
+                     "A note to Pushpin, for any of its cities.", body)
 
 
 INDEX_JS = """
@@ -3128,6 +3152,25 @@ INDEX_JS = """
 
 
 # The public site's About and Contact pages: plain text, and a form as quiet as the search.
+# The contact form, which the site's own page holds (every city's pages point to it), styled the same wherever
+# it's shown.
+CONTACT_CSS = """
+  .contact { display: grid; gap: 1.1rem; margin-top: 1.5rem; }
+  .contact label { display: grid; gap: .35rem; color: #888; font-size: .8rem; }
+  .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
+                                      color: #fff; font: inherit; font-size: .95rem; }
+  .contact input:focus, .contact textarea:focus { border-color: #777; outline: none; }
+  /* The form's button, and after sending, the way home, which looks the same. */
+  .contact button, .sent .home { justify-self: start; padding: .45rem 1.2rem; border: 1px solid #555; border-radius: 999px;
+                    background: none; color: #ddd; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
+                    transition: border-color .15s, color .15s, background-color .15s; }
+  .contact button:hover, .contact button:focus-visible, .sent .home:hover, .sent .home:focus-visible {
+    border-color: #ccc; background: #151515; color: #fff; text-decoration: none; outline: none; }
+  .contact button:active, .sent .home:active { background: #222; }
+  .sent .home { display: inline-block; margin-top: .6rem; text-decoration: none; }
+  .contact .honey { display: none; }
+"""
+
 # The pin before the site's name, and the line under the header: a city's pages and pushpin.city's own share them.
 PIN_CSS = """
   .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
@@ -3184,20 +3227,7 @@ PUBLIC_CSS = """
   .prose .venues a { text-decoration: none; }
   .prose .venues a:hover { text-decoration: underline; text-decoration-color: #555; }
   .venues .count { margin-left: .35em; color: #666; font-size: .8em; }
-  .contact { display: grid; gap: 1.1rem; margin-top: 1.5rem; }
-  .contact label { display: grid; gap: .35rem; color: #888; font-size: .8rem; }
-  .contact input, .contact textarea { padding: .5rem .6rem; border: 1px solid #333; border-radius: 4px; background: #0a0a0a;
-                                      color: #fff; font: inherit; font-size: .95rem; }
-  .contact input:focus, .contact textarea:focus { border-color: #777; outline: none; }
-  /* The form's button, and after sending, the way home, which looks the same. */
-  .contact button, .sent .home { justify-self: start; padding: .45rem 1.2rem; border: 1px solid #555; border-radius: 999px;
-                    background: none; color: #ddd; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
-                    transition: border-color .15s, color .15s, background-color .15s; }
-  .contact button:hover, .contact button:focus-visible, .sent .home:hover, .sent .home:focus-visible {
-    border-color: #ccc; background: #151515; color: #fff; text-decoration: none; outline: none; }
-  .contact button:active, .sent .home:active { background: #222; }
-  .sent .home { display: inline-block; margin-top: .6rem; text-decoration: none; }
-  .contact .honey { display: none; }
+""" + CONTACT_CSS + """
   /* The footer, set off from the page by a faint line. */
   footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
   /* The footer's lists of the site's pages: three short columns (two on a phone), under small, faint headings. */
@@ -3514,11 +3544,14 @@ def main():
     shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
     shutil.copytree(ROOT / "share" / "site", PUBLIC_DIR / "share", dirs_exist_ok=True)
     (PUBLIC_DIR / "index.html").write_text(render_cities(CITIES))
+    (PUBLIC_DIR / "contact").mkdir(exist_ok=True)
+    (PUBLIC_DIR / "contact" / "index.html").write_text(render_contact())
+    (PUBLIC_DIR / "sitemap.xml").write_text(render_site_sitemap(built_at))
     (PUBLIC_DIR / "404.html").write_text(render_not_found(CITIES))
     # robots.txt, which only works at the site's root: each city's sitemap.
-    (PUBLIC_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n\n" + "".join(
+    (PUBLIC_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n\n" + f"Sitemap: {PUBLIC_SITE}sitemap.xml\n" + "".join(
         f"Sitemap: {PUBLIC_SITE}{city.slug}/sitemap.xml\n" for city in CITIES))
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: the cities, robots.txt and 404.html")
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: the cities, contact/, sitemap.xml, robots.txt and 404.html")
 
 
 def by_city(city, events, sources, failed, stale):
@@ -3535,11 +3568,14 @@ def write_city(city, events, sources, failed, stale, built_at):
     shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
     shutil.copytree(ROOT / "share" / city.slug, CITY_DIR / "share", dirs_exist_ok=True)
     (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
-    for page, render in (("about", lambda: render_about(sources, built_at, events)), ("contact", render_contact)):
-        (CITY_DIR / page).mkdir(exist_ok=True)
-        (CITY_DIR / page / "index.html").write_text(render())
-        if city is BOSTON_CITY:  # Where they were first, as about.html and contact.html, on to where they are.
-            (CITY_DIR / f"{page}.html").write_text(render_redirect(f"{PUBLIC_URL}{page}/"))
+    (CITY_DIR / "about").mkdir(exist_ok=True)
+    (CITY_DIR / "about" / "index.html").write_text(render_about(sources, built_at, events))
+    # Its own contact page, before the site had one for all its cities, on to that.
+    (CITY_DIR / "contact").mkdir(exist_ok=True)
+    (CITY_DIR / "contact" / "index.html").write_text(render_redirect(f"{PUBLIC_SITE}contact/"))
+    if city is BOSTON_CITY:  # Where they were first, as about.html and contact.html, on to where they are.
+        (CITY_DIR / "about.html").write_text(render_redirect(f"{PUBLIC_URL}about/"))
+        (CITY_DIR / "contact.html").write_text(render_redirect(f"{PUBLIC_SITE}contact/"))
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (CITY_DIR / slug).mkdir(exist_ok=True)
         (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))

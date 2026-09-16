@@ -458,7 +458,11 @@ class Cities(unittest.TestCase):
         self.assertIn("<h2>Massachusetts</h2>", home, "its cities under the state they're in")
         self.assertIn('<h2>New York</h2>', home)
         self.assertIn('<span class="soon">New York City</span><p>Coming soon.</p>', home, "one being worked on, not a link")
-        self.assertIn('<a href="/boston/contact/">Let us know</a>', home, "a way to ask for another")
+        self.assertIn('<a href="/contact/">Let us know</a>', home, "a way to ask for another")
+        contact = build.render_contact()
+        self.assertIn("https://formsubmit.co/", contact)
+        self.assertIn('value="Pushpin: a message"', contact, "one form for every city")
+        self.assertIn('value="https://pushpin.city/contact/?sent"', contact)
         missing = build.render_not_found(build.CITIES)
         self.assertIn('["boston", "westernma"]', missing)
         self.assertIn('"/boston/" + path.slice(1)', missing, "addresses from before there were cities, Boston's")
@@ -994,7 +998,7 @@ class Page(unittest.TestCase):
         self.assertNotIn("Newsfeed", public)
         footer = public.split("<footer>")[1]
         for label, href in [("All events", R), ("Music", R + "music/"), ("Film", R + "film/"), ("Art &amp; talks", R + "talks/"),
-                            ("This weekend", R + "weekend/"), ("Next weekend", R + "weekend/next/"), ("About", R + "about/"), ("Contact", R + "contact/")]:
+                            ("This weekend", R + "weekend/"), ("Next weekend", R + "weekend/next/"), ("About", R + "about/"), ("Contact", "/contact/")]:
             self.assertIn(f'<a href="{href}"', footer, label)
         self.assertIn(f'<a href="{R}" aria-current="page">All events</a>', footer, "this page marked")
         self.assertIn("Listings from Roadrunner, aggregated", footer)
@@ -1009,9 +1013,8 @@ class Page(unittest.TestCase):
         about = build.render_about(sources, built)
         self.assertIn("Roadrunner", about)
         self.assertNotIn("Private Theater", about)
-        self.assertIn("https://formsubmit.co/", build.render_contact())
-        self.assertIn(f'<a href="{R}contact/">Contact</a>', about.split("<footer>")[1])
-        self.assertIn(f'<a href="{R}contact/">Get in touch</a>', about, "from the About page's folder too")
+        self.assertIn('<a href="/contact/">Contact</a>', about.split("<footer>")[1], "the site's own form, shared by its cities")
+        self.assertIn('<a href="/contact/">Get in touch</a>', about)
         self.assertIn(f'content="{build.PUBLIC_URL}share/home.png?pin"', about, "the home page's card: About has none")
 
     def test_public_page_tells_search_engines_what_it_is(self):
@@ -1155,9 +1158,14 @@ class Page(unittest.TestCase):
         self.assertNotIn("<a", json.dumps(data), "answers as plain text there")
 
     def test_sitemap(self):
-        sitemap = build.render_sitemap(datetime(2026, 9, 13, tzinfo=timezone.utc))
-        for path in ("", "about/", "contact/"):
+        built = datetime(2026, 9, 13, tzinfo=timezone.utc)
+        sitemap = build.render_sitemap(built)
+        for path in ("", "about/", "new/", "tonight/"):
             self.assertIn(f"<loc>{build.PUBLIC_URL}{path}</loc>", sitemap)
+        self.assertNotIn("contact/", sitemap, "the site's own, in its own sitemap")
+        site = build.render_site_sitemap(built)
+        self.assertIn(f"<loc>{build.PUBLIC_SITE}</loc>", site)
+        self.assertIn(f"<loc>{build.PUBLIC_SITE}contact/</loc>", site)
 
     def test_notices_come_last_with_their_mark(self):
         venue = dict(source("tribe", "x", name="Lizard Lounge"), public=True)
