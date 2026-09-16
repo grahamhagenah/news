@@ -99,6 +99,7 @@ VENUE_ADDRESSES = {
     "Coolidge Corner": ("290 Harvard St", "Brookline", "02446"),
     "Harvard Film Archive": ("24 Quincy St", "Cambridge", "02138"),
     "West Newton Cinema": ("1296 Washington St", "Newton", "02465"),
+    "Lexington Venue": ("1794 Massachusetts Ave", "Lexington", "02420"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
     "Alamo Drafthouse": ("60 Seaport Blvd", "Boston", "02210"),
     # Western Mass.
@@ -1643,6 +1644,58 @@ def read_harvard_art(source):
     return events
 
 
+TAPOS_BOX = re.compile(r'<div class="[^"]*start-performance-box.*?(?=<div class="[^"]*start-performance-box|\Z)', re.S)
+TAPOS_DAY = re.compile(r'<div class="col-md-4 row">\s*([A-Z][a-z]+ [A-Z][a-z]+ \d{1,2})(?:st|nd|rd|th)\s*</div>')
+# A film with no certificate to show says so where the certificate would go.
+TAPOS_UNRATED = re.compile(r"\s*[-–]\s*Rating N/?A\s*$", re.I)
+TAPOS_TIME = re.compile(r'<span class="showtime-button-time">\s*(\d{1,2}):(\d{2})\s*([ap])m\s*</span>', re.I)
+
+
+def tapos_day(text, today):
+    """"Thursday September 17th", which carries no year: the next such date from today, so a January showing
+    read in December falls in the year it's in, not the one just gone."""
+    _, month, day = text.split()
+    for year in (today.year, today.year + 1):
+        try:
+            found = datetime.strptime(f"{month} {day} {year}", "%B %d %Y").date()
+        except ValueError:
+            return None
+        if found >= today - timedelta(days=1):
+            return found
+    return None
+
+
+def read_tapos(source):
+    """A cinema booking through Jacro's TaPoS web sales (the Lexington Venue), from the schedule its start page
+    lists: each film with its poster and synopsis, and each day it plays with that day's times."""
+    page = fetch(source["url"])
+    today = datetime.now(BOSTON).date()
+    events = []
+    for box in TAPOS_BOX.findall(page):
+        name = text(re.search(r"<h3>(.*?)(?:<img|</h3>)", box, re.S).group(1)) if "<h3>" in box else ""
+        name = TAPOS_UNRATED.sub("", name)
+        if not name:
+            continue
+        synopsis = re.search(r'<div class="film-synopsis">(.*?)</div>', box, re.S)
+        # The poster is a full-size still from TMDB; its 780-wide copy is the one to show.
+        poster = re.search(r'src="(https://image\.tmdb\.org/t/p/)original(/[^"]+)"', box)
+        # Each day heading owns the times between it and the next one: the block after it is nested divs, with
+        # no end of its own to match on.
+        days = list(TAPOS_DAY.finditer(box))
+        for at, heading in enumerate(days):
+            day = tapos_day(heading.group(1), today)
+            if not day:
+                continue
+            until = days[at + 1].start() if at + 1 < len(days) else len(box)
+            for hour, minute, half in TAPOS_TIME.findall(box[heading.end():until]):
+                events.append(event(source, name, day,
+                                    datetime.min.time().replace(hour=int(hour) % 12 + (12 if half.lower() == "p" else 0),
+                                                                minute=int(minute)),
+                                    link=source["url"], about=about(text(synopsis.group(1)) if synopsis else ""),
+                                    image=f"{poster.group(1)}w780{poster.group(2)}" if poster else ""))
+    return events
+
+
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
@@ -1671,6 +1724,7 @@ READERS = {
     "frenchlibrary": read_french_library,
     "ica": read_ica,
     "veezi": read_veezi_site,
+    "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
     "mfa": read_mfa,

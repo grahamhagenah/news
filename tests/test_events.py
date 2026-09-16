@@ -50,6 +50,7 @@ ROUTES = [
     ("frenchlibrary.org", "frenchlibrary.html"),
     ("icaboston.org/calendar", "ica.html"),
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
+    ("internet-ticketing.com/websales/sales/LEXLEX/start", "tapos.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
     ("massmoca.org/wp-json", "massmoca.json"),
@@ -250,6 +251,17 @@ class Readers(unittest.TestCase):
         self.assertEqual((rebel["date"], rebel["times"]), (date(2026, 9, 24), [time(19, 0)]))
         self.assertEqual(rebel["link"], "https://www.westnewtoncinema.com/movie/rebel-with-a-clause")
         self.assertEqual(rebel["about"][-1], "Directed by Brandt Johnson · 1h 26m")
+
+    def test_tapos_gives_each_day_its_own_times(self):
+        found = self.read("tapos", "https://www.internet-ticketing.com/websales/sales/LEXLEX/start", "film")
+        coyote = sorted((item["date"], item["times"]) for item in found if item["title"] == "Coyote vs. Acme")
+        # Three days, a showing each: the times run on in the page under headings with no end of their own.
+        self.assertEqual(coyote, [(date(2026, 9, 17), [time(18, 45)]), (date(2026, 9, 18), [time(19, 15)]),
+                                  (date(2026, 9, 19), [time(17, 0)])])
+        self.assertEqual(found[0]["image"], "https://image.tmdb.org/t/p/w780/vhv7lBWYM0DUuNU2a0V7Rhq21dD.jpg")
+        self.assertTrue(any("billboard lawyer" in line for line in found[0]["about"]))
+        # A film with no certificate says "Rating N/A" where one would go; that isn't part of its name.
+        self.assertIn("National Theatre Live The Misanthrope", [item["title"] for item in found])
 
     def test_tribe_skips_what_isnt_a_show(self):
         found = self.read("tribe", "https://lizardloungeclub.com/wp-json/tribe/events/v1/events")

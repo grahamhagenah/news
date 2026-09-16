@@ -17,6 +17,7 @@
 #   frenchlibrary  the French Library's upcoming events page: its screenings, talks and exhibitions
 #   ica        the ICA's calendar page: its concerts, screenings, talks, dance and First Fridays
 #   veezi      a theater site hosted by Veezi, from the showtimes its pages load (West Newton Cinema)
+#   tapos      a cinema booking through Jacro's TaPoS web sales, from its start page (the Lexington Venue)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings
 #   squarespace  a Squarespace site's events page, from the data it gives with ?format=json (The Lilypad)
@@ -61,6 +62,7 @@ jsonld     https://brattlefilm.org/coming-soon/   film   Brattle
 coolidge   https://coolidge.org/showtimes   film   Coolidge Corner
 hfa        https://harvardfilmarchive.org/calendar   film   Harvard Film Archive
 veezi      https://www.westnewtoncinema.com/   film   West Newton Cinema
+tapos      https://www.internet-ticketing.com/websales/sales/LEXLEX/start   film   Lexington Venue
 # Not the Somerville and Capitol theaters' screenings: their sites turn away anything that says it's a bot,
 # and they've been asked (September 2026) for a feed or permission. Only from them, not from a site that
 # gathers them, which could stop or change without either theater knowing.
