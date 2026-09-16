@@ -1906,22 +1906,16 @@ def address_attribute(item):
     return f' data-address="{html.escape(written(item["address"]))}"' if item.get("address") else ""
 
 
-def open_to_all(ages):
-    """An age limit that turns nobody grown away: "All ages", and the 18+ and 19+ that only repeat it."""
-    least = re.search(r"\d+", ages)
-    return not least or int(least.group()) < 21
-
-
 def facts_attributes(item):
-    """What the listing's view shows that the row doesn't: its picture, price and ages, when known; that
+    """What the listing's view shows that the row doesn't: its picture and its price, when known; that
     there's more of what it's about on its own page (data-more); and that it's sold out altogether (data-sold),
     which its times, struck through, don't say where it has none.
 
-    Not a film's price: a cinema sells a seat at several prices at once — matinee, child, senior, member — and
-    whichever of them a listing happens to name is as likely to mislead as to help. And an age only where it
-    turns someone away: "All ages" and "18+" say a show is open, which is what a show is."""
-    facts = [key for key in ("image", "price", "ages") if not (key == "price" and item["category"] == "film")]
-    return ("".join(f' data-{key}="{html.escape(item[key])}"' for key in facts if item.get(key) and not (key == "ages" and open_to_all(item[key])))
+    Not who a show is for, which is the venue's to say and worth reading there, where it's the door's rule
+    rather than a word in a listing. Nor a film's price: a cinema sells a seat at several prices at once —
+    matinee, child, senior, member — and whichever of them a listing names misleads as often as it helps."""
+    facts = [key for key in ("image", "price") if not (key == "price" and item["category"] == "film")]
+    return ("".join(f' data-{key}="{html.escape(item[key])}"' for key in facts if item.get(key))
             + ' data-more=""' * bool(item.get("more")) + ' data-sold=""' * bool(item.get("sold_out") and not item["times"]))
 
 
@@ -2438,7 +2432,7 @@ tickets.</p>
 <p>No algorithms, no ads, no accounts.</p>
 <h2>How to use it</h2>
 <ul class="tips">
-<li>Tap a listing for more: a picture, the price and ages, every showtime, what it’s about, the address, its other
+<li>Tap a listing for more: a picture, the price, every showtime, what it’s about, the address, its other
 dates, and a link to copy and send.</li>
 <li><a href="{root}tonight/">Tonight</a> and <a href="{root}weekend/">This weekend</a> filter the list down to just
 those days.</li>

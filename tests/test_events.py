@@ -592,7 +592,9 @@ class Facts(unittest.TestCase):
         show = build.event(sinclair, "A show", date(2026, 9, 13), time(20, 0), image="https://example.com/a.jpg?w=1&h=2",
                            price="$18–$20", ages="21+")
         page = build.render_index([show], [sinclair], [], [], datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
-        self.assertIn('data-image="https://example.com/a.jpg?w=1&amp;h=2" data-price="$18–$20" data-ages="21+"', page)
+        # Its picture and price; not who it's for, which is the door's rule and the venue's to give.
+        self.assertIn('data-image="https://example.com/a.jpg?w=1&amp;h=2" data-price="$18–$20"', page)
+        self.assertNotIn("data-ages", page)
         self.assertIn('<div class="event-image" hidden><img alt=""', page)
         self.assertIn('<p class="event-facts"></p>', page)
         films = [build.event(dict(sinclair, name=name), "Hope", date(2026, 9, 13), image=image) for name, image in (("A", ""), ("B", "https://b/1.jpg"))]
