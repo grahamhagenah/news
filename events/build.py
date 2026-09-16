@@ -1926,7 +1926,7 @@ def render_combined(item):
         f'data-sources="{html.escape(sources)}"{facts_attributes(item)}><details><summary>'
         f'{icon(item["category"])}'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
-        f'<span class="tail">{start}<span class="more" aria-hidden="true">›</span></span>'
+        f'<span class="tail">{start}</span>'
         f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div>'
         f'<span class="source"><span>{places} theaters</span></span></summary>'
         f'<ul class="showings">{showings}</ul></details></li>'
@@ -3377,12 +3377,17 @@ CSS = """
   .row > .icon, .combined > details > summary > .icon { align-self: center; }
   .row .source { justify-content: flex-end; max-width: 14rem; text-align: right; }
   @media (max-width: 34rem) {
-    /* Too narrow for three columns: the title wraps in full, its times and venue on the line under it, and
-       the icon keeps a slot at the left edge beside the title's first line (half a line down, less half of it). */
-    .row, .combined > details > summary { grid-template-columns: 1fr; gap: 0; }
+    /* Too narrow for columns, so the row reads as a line instead — The Odyssey from 11:15am at 2 theaters —
+       wrapping where a sentence would, with the icon in a slot at the left edge beside its first line (half a
+       line down, less half of the icon). */
+    .row, .combined > details > summary { display: block; }
     .row { padding-left: calc(12px + .5em); }
     .row > .icon, .combined > details > summary > .icon { position: absolute; left: 0; top: calc(.4rem + .72em - 6px); }
-    .row .source { justify-content: flex-start; max-width: none; text-align: left; }
+    .headline, .headline .title, .tail { display: inline; }
+    .headline .title { white-space: normal; }
+    .row .source { display: inline; max-width: none; margin-left: .45em; color: #666; }
+    .row .source::before { content: "at "; }
+    .row .source > span { display: inline; overflow: visible; white-space: normal; }
   }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }
@@ -3543,8 +3548,6 @@ CSS = """
   .day .preview { display: none; }
   /* The first time and the ›, together, so a narrow screen never leaves the › alone on a line. */
   .tail, .tail .times { flex: none; white-space: nowrap; }
-  .more { display: inline-block; margin-left: .5em; color: #666; font-size: .8em; transition: transform .15s; }
-  .combined details[open] .more { transform: rotate(90deg); }
   .showings { margin: .35rem 0 .2rem calc(10rem + 1.25rem); }
   .showings li { display: flex; align-items: baseline; gap: .6em; padding: .15rem 0; font-size: .9em; }
   .showings a { flex: none; color: #ccc; }
