@@ -2290,6 +2290,8 @@ WESTERN_MASS = city_texts(
                                    "next month, aggregated from select theaters."}})
 
 
+# What's being worked on, listed after the cities under the same state, with what to say about it.
+COMING_SOON = {"New York": ("New York City", "Coming soon.")}
 # Each city's Pushpin, at pushpin.city/<its slug>/, from sources-<its slug>.txt (Boston's, sources.txt).
 CITIES = [BOSTON_CITY, WESTERN_MASS]
 
@@ -2407,16 +2409,24 @@ def render_redirect(address, paths=False):
 
 
 def render_cities(cities):
-    """pushpin.city itself: each city's Pushpin, a link to it with what it covers, under the state it's in."""
+    """pushpin.city itself: each city's Pushpin, a link to it with what it covers, under the state it's in;
+    then the ones being worked on, and a way to ask for another."""
     states = {}
     for city in cities:
-        states.setdefault(city.state, []).append(city)
+        # Where it covers, not what it is: the line above says that already, once.
+        covers = city.around[0].upper() + city.around[1:]
+        states.setdefault(city.state, []).append((city.name.partition(" ")[2], covers, f"/{city.slug}/"))
+    for state, (name, note) in COMING_SOON.items():
+        states.setdefault(state, []).append((name, note, ""))
     links = "".join(
         f'<section><h2>{html.escape(state)}</h2>\n<ul>' + "".join(
-            f'<li><a href="/{city.slug}/">{html.escape(city.name.partition(" ")[2])}</a>'
-            f'<p>{html.escape(city.tagline)}</p></li>\n' for city in theirs)
+            f'<li>' + (f'<a href="{where}">{html.escape(name)}</a>' if where else f'<span class="soon">{html.escape(name)}</span>')
+            + f'<p>{html.escape(note)}</p></li>\n' for name, note, where in theirs)
         + "</ul></section>\n"
         for state, theirs in states.items())
+    # Where to ask for a city: the first city's contact form, which every city's messages go through.
+    links += (f'<p class="ask">Want your city on Pushpin? <a href="/{cities[0].slug}/contact/">Let us know</a>, '
+              f'and tell us the venues worth following.</p>\n')
     description = f"Concerts, films, and talks, aggregated from select venues: {', '.join(city.name.partition(' ')[2] for city in cities)}."
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<title>Pushpin</title>\n<meta name="description" content="{html.escape(description)}">\n'
@@ -2439,6 +2449,9 @@ def render_cities(cities):
             '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
             '  li a { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }\n'
             '  li a::after { content: " →"; color: #555; font-weight: 400; }\n'
+            '  .soon { color: #777; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }\n'
+            '  .ask { margin: 2.25rem 0 0; color: #8c8c8c; font-size: .9rem; }\n'
+            '  .ask a { color: #fff; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
             '  li a:hover { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }\n'
             '  li p { margin: .2rem 0 0; color: #8c8c8c; font-size: .9rem; }\n'
             '</style>\n'
