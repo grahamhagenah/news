@@ -1918,17 +1918,18 @@ def newly_added(events, built_at):
 
 def fresh_banner(events, built_at):
     """The home page's Just announced line: one of the newest few, and the way to the rest. The page's script
-    picks which, so a different one shows each visit; without it, the first. Nothing, when nothing's turned up
-    this week."""
+    picks which, so a different one shows each visit; without it, the first. The line stays when nothing's
+    turned up this week, saying so."""
     fresh = [{"id": listing_id(item["date"], item["title"], item["venue"])[0], "title": item["title"],
               "venue": item["venue"], "when": f"{item['date']:%b} {item['date'].day}"}
              for item in newly_added(events, built_at)[:FRESH_SHOWN]]
-    if not fresh:
-        return "", "[]"
-    first = fresh[0]
-    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Just announced</span>'
-              f'<a class="fresh-one" href="{PUBLIC_ROOT}?{urlencode({"event": first["id"]})}">'
-              f'<b>{html.escape(first["title"])}</b> at {html.escape(first["venue"])} · {html.escape(first["when"])}</a>'
+    if fresh:
+        first = fresh[0]
+        one = (f'<a class="fresh-one" href="{PUBLIC_ROOT}?{urlencode({"event": first["id"]})}">'
+               f'<b>{html.escape(first["title"])}</b> at {html.escape(first["venue"])} · {html.escape(first["when"])}</a>')
+    else:
+        one = '<span class="fresh-one fresh-none">No new events this week</span>'
+    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Just announced</span>{one}'
               f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></p>\n')
     return banner, json.dumps(fresh, ensure_ascii=False)
 
@@ -3234,6 +3235,7 @@ CSS = """
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
   .fresh-one b { color: #fff; font-weight: 500; }
+  .fresh-none { color: #666; }
   .fresh-more { flex: none; margin-left: auto; color: #888; }
   .fresh-more:hover, .fresh-one:hover { color: #fff; text-decoration: none; }
   .fresh-one:hover b { text-decoration: underline; }
