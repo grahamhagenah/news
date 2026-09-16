@@ -3062,10 +3062,10 @@ INDEX_JS = """
     part("day").textContent = dayFull(li.dataset.id.slice(0, 10));  // Its own day, which its heading isn't on Just announced.
     part("name").textContent = title;
     // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
-    // poster or a square flyer shown whole, not cropped to the frame.
+    // poster or a square flyer filling the frame from the top, the foot of it cropped.
     const picture = part("image"), img = picture.firstElementChild;
     img.removeAttribute("src");
-    picture.classList.remove("whole", "loaded");
+    picture.classList.remove("tall", "loaded");
     picture.hidden = !li.dataset.image;
     view.classList.toggle("shows-picture", !picture.hidden);
     if (li.dataset.image) img.src = li.dataset.image;
@@ -3203,9 +3203,10 @@ INDEX_JS = """
     part("more").textContent = open ? "Show less" : "Read more";
     part("more").setAttribute("aria-expanded", open);
   });
-  // A poster or a square flyer whole, not cropped to the frame; a wide one across it.
+  // A poster or a square flyer held to the top of the frame, so what it loses is its foot; a wide one
+  // across the middle, as it was framed.
   function showPicture(img) {
-    part("image").classList.toggle("whole", img.naturalWidth / img.naturalHeight < 1.3);
+    part("image").classList.toggle("tall", img.naturalWidth / img.naturalHeight < 1.3);
     part("image").classList.add("loaded");
   }
   // It fades in once it's all there and decoded, rather than drawing itself top to bottom.
@@ -3538,7 +3539,8 @@ CSS = """
   .event-tools button:disabled:hover { background: none; }
   .step-mark { width: 16px; height: 16px; }
   .close-mark { width: 14px; height: 14px; }
-  /* Its picture across the top, edge to edge; a tall or square one whole, on grey. */
+  /* Its picture across the top, edge to edge, filling it: a poster is cut off at the foot rather than set
+     on grey between two black bars, a title and a face being the top of one. */
   .event-image { aspect-ratio: 16 / 9; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; background: #151515; }
   .event-image img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease-out; }
   .event-image.loaded img { opacity: 1; }
@@ -3549,7 +3551,7 @@ CSS = """
     .event-image img { transition: none; }
     .event-image:not(.loaded) { animation: none; }
   }
-  .event-image.whole img { object-fit: contain; }
+  .event-image.tall img { object-position: top; }
   dialog.event.shows-picture .event-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
   dialog.event.shows-picture .event-tools button:disabled { color: #777; }
   dialog.event.shows-picture .event-tools button:hover:not(:disabled),
