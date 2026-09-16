@@ -58,6 +58,8 @@ PUBLIC_ABOUT_CHARS = 240  # Of the venue's own words in a preview.
 PUBLIC_TITLE = f"{PUBLIC_NAME} · Concerts, films and talks around Boston"
 PUBLIC_TAGLINE = "Concerts, films, and talks around Boston, Cambridge, and Somerville, aggregated from select venues."
 PUBLIC_AROUND = "Boston, Cambridge, and Somerville"  # Where it covers, as its pages say: "… around Boston, Cambridge, and Somerville".
+# What the site is, in a line over every page, for a first visitor; the tagline at the foot says it in full.
+PUBLIC_SHORT = "Concerts, films, and talks around Boston."
 # The public site's tonight page: what's still to come today. It holds tomorrow's too, and shows only the day it
 # is where it's read, so it rolls over at midnight, before the next build.
 PUBLIC_TONIGHT = ("tonight/", f"Things to do in Boston tonight · {PUBLIC_NAME}",
@@ -2093,7 +2095,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
-        return public_page(path, title, banner + body, built_at, description=description,
+        said = f'<h1 class="tagline">{html.escape(PUBLIC_SHORT)}</h1>\n'
+        return public_page(path, title, said + banner + body, built_at, description=description,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
 
@@ -2157,7 +2160,7 @@ def public_footer(path, notes="", names="", tagline=""):
         for heading, links in groups
     )
     where = f"<p>Listings from {names}, aggregated from their own calendars every few hours.</p>\n" if names else ""
-    said = f'<h1 class="tagline">{html.escape(tagline)}</h1>\n' if tagline else ""
+    said = f'<p class="tagline">{html.escape(tagline)}</p>\n' if tagline else ""
     return (f'<footer>\n{said}<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n'
             f'{where}{notes}</footer>\n')
 
@@ -2250,6 +2253,7 @@ class City:
     tagline: str
     description: str
     around: str
+    short: str
     tonight: tuple
     new: tuple
     weekends: list
@@ -2261,7 +2265,7 @@ class City:
         return SOURCES_FILE if self.slug == "boston" else ROOT / f"sources-{self.slug}.txt"
 
 
-BOSTON_CITY = City("boston", PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_TONIGHT,
+BOSTON_CITY = City("boston", PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_SHORT, PUBLIC_TONIGHT,
                    PUBLIC_NEW, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS)
 
 
@@ -2275,6 +2279,7 @@ def city_texts(slug, name, place, around, film_description, who):
         f"Concerts for the next two months, and film screenings and art talks for the next month, around {around}, "
         f"on one page, from select venues.",
         around,
+        f"Concerts, films, and talks around {place}.",
         ("tonight/", f"Things to do in {place} tonight · {name}",
          f"Concerts, films and talks still to come today around {around}, aggregated from select venues.",
          f"Tonight around {around}: everything still to come today, aggregated from select venues."),
@@ -2311,10 +2316,10 @@ CITIES = [BOSTON_CITY, WESTERN_MASS]
 def use_city(city):
     """Point the public site's names (PUBLIC_NAME, PUBLIC_URL, and the rest) at a city's: its pages are written
     one city at a time, and read these as they go."""
-    global PUBLIC_NAME, PUBLIC_URL, PUBLIC_ROOT, CITY_DIR, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND
+    global PUBLIC_NAME, PUBLIC_URL, PUBLIC_ROOT, CITY_DIR, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_SHORT
     global PUBLIC_TONIGHT, PUBLIC_NEW, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS
-    PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND = (
-        city.name, city.title, city.tagline, city.description, city.around)
+    PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_SHORT = (
+        city.name, city.title, city.tagline, city.description, city.around, city.short)
     PUBLIC_TONIGHT, PUBLIC_NEW = city.tonight, city.new
     PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS = city.weekends, city.pages, city.faqs
     PUBLIC_URL = f"{PUBLIC_SITE}{city.slug}/"
@@ -3133,8 +3138,10 @@ PUBLIC_CSS = """
   .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
   .sites a[aria-current] .city { color: #8c8c8c; }
   /* What the site is, in a line under its name, as quiet as the rest. */
-  /* What the page is, at the foot of it: over the site's own links, where a repeat visitor won't have to read it. */
-  footer .tagline { margin: 0 0 1.4rem; max-width: 34rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+  /* What the site is, in a line over each page for a first visitor; and what the page is, in full at the foot
+     of it, where a repeat visitor won't have to read it. */
+  h1.tagline { margin: -1rem 0 1.25rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+  footer .tagline { margin: 0 0 1.4rem; max-width: 34rem; color: #888; font-size: .9rem; line-height: 1.45; }
   /* A weekend page's way to the other weekend, where the pager goes on the others: next on the right, back on the left. */
   .weekends { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
   .weekends a, .weekends a:visited { color: #999; }
@@ -3228,7 +3235,7 @@ CSS = """
   .sold-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* Just announced, a line above the list on the home page: one of the newest, and the way to the rest. */
-  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: -1.25rem 0 2rem; padding: .5rem 0; font-size: .85rem;
+  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 2rem; padding: .5rem 0; font-size: .85rem;
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
   .fresh + .filter { margin-top: 0; }
   .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
