@@ -2995,6 +2995,7 @@ INDEX_JS = """
     img.removeAttribute("src");
     picture.classList.remove("whole", "loaded");
     picture.hidden = !li.dataset.image;
+    view.classList.toggle("shows-picture", !picture.hidden);
     if (li.dataset.image) img.src = li.dataset.image;
     if (li.dataset.image && img.complete && img.naturalWidth) showPicture(img);
     // Sold out, all of it or some of its times, before its price and ages.
@@ -3082,7 +3083,7 @@ INDEX_JS = """
   function openEvent(li, push, note) {
     fill(li, note);
     if (push) { history.pushState(null, "", withEvent(li.dataset.id)); pushed = true; }
-    if (!view.open) view.showModal();
+    if (!view.open) { view.showModal(); document.body.classList.add("viewing"); }
     markSteps();
     tally("open/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), shown.querySelector(".title").textContent);
   }
@@ -3100,7 +3101,12 @@ INDEX_JS = """
     view.close();
     restore();
   }
-  view.addEventListener("close", () => { if (closing) closing = false; else restore(); });
+  view.addEventListener("close", () => {
+    // The close event comes a moment after the closing, by which time a view shown again in between (put back
+    // over the page) is open once more, and the page is still being viewed.
+    if (!view.open) document.body.classList.remove("viewing");
+    if (closing) closing = false; else restore();
+  });
   // Chrome can leave the view open but out of the top layer it was shown in — coming back to the page from
   // its cache, say. It keeps its place on the screen and loses everything that made it a view over the page:
   // no backdrop dimming the list, the day headings painting across it, and nothing outside it to click,
@@ -3151,7 +3157,11 @@ INDEX_JS = """
     if (li.dataset.image) Object.assign(new Image(), { referrerPolicy: "no-referrer", src: li.dataset.image });
     aboutOf(li);
   });
-  part("image").firstElementChild.addEventListener("error", event => { if (event.target.getAttribute("src")) part("image").hidden = true; });
+  part("image").firstElementChild.addEventListener("error", event => {
+    if (!event.target.getAttribute("src")) return;
+    part("image").hidden = true;
+    view.classList.remove("shows-picture");
+  });
   // Outside it, on the backdrop — but not where the press began inside it. A press that starts on a button and
   // drifts off arrives as a click on the dialog itself, the same as a click on the backdrop does, and would
   // close the view from under a slip of the hand. Asked the other way round on purpose: a press it doesn't
@@ -3355,7 +3365,7 @@ CSS = """
      under it to hide, and where Chrome draws the view as an ordinary element rather than over the page, a
      heading standing above it covers the way out — it sits across the top of the view, where × is, and takes
      the press meant for it. Level with the page, the view wins on its own, coming after it. */
-  body:has(dialog.event[open]) .day > h2 { background: none; z-index: auto; }
+  body.viewing .day > h2 { background: none; z-index: auto; }
   .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000;
               transition: box-shadow .15s; }
   /* While it's pinned there, a faint line under it (the same as above the footer), marking where the events
@@ -3420,7 +3430,7 @@ CSS = """
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
      way to the venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
-  body:has(dialog.event[open]) { overflow: hidden; }
+  body.viewing { overflow: hidden; }
   /* Down the side of the screen, so it's the same size whatever's in it and stepping through the list doesn't
      move it around; what doesn't fit scrolls inside it, under the buttons at its top. */
   dialog.event { width: min(32rem, 100%); height: 100dvh; max-height: none; margin: 0 0 0 auto; box-sizing: border-box;
@@ -3429,7 +3439,7 @@ CSS = """
                  box-shadow: -1px 0 40px rgba(0, 0, 0, .5); font-size: .95rem; line-height: 1.5; }
   .event-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 1.4rem 1.5rem 1.5rem; }
   /* With no picture for the buttons to lie over, they need the top of the view to themselves. */
-  dialog.event:not(:has(.event-image:not([hidden]))) .event-body { padding-top: 3.4rem; }
+  dialog.event:not(.shows-picture) .event-body { padding-top: 3.4rem; }
   /* What's in it keeps its size and the body scrolls past it: a column squashes what it can to fit otherwise,
      and the picture, sized by its shape rather than its content, is squashed to nothing. */
   .event-body > * { flex: none; }
@@ -3467,10 +3477,10 @@ CSS = """
     .event-image:not(.loaded) { animation: none; }
   }
   .event-image.whole img { object-fit: contain; }
-  dialog.event:has(.event-image:not([hidden])) .event-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
-  dialog.event:has(.event-image:not([hidden])) .event-tools button:disabled { color: #777; }
-  dialog.event:has(.event-image:not([hidden])) .event-tools button:hover:not(:disabled),
-  dialog.event:has(.event-image:not([hidden])) .event-tools button:focus-visible { background: rgba(0, 0, 0, .9); }
+  dialog.event.shows-picture .event-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
+  dialog.event.shows-picture .event-tools button:disabled { color: #777; }
+  dialog.event.shows-picture .event-tools button:hover:not(:disabled),
+  dialog.event.shows-picture .event-tools button:focus-visible { background: rgba(0, 0, 0, .9); }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
   .event-facts:empty { display: none; }
   .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
