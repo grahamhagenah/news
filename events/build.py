@@ -3504,6 +3504,12 @@ CSS = """
   .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 2rem; padding: .5rem 0; font-size: .85rem;
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
   .fresh + .filter { margin-top: 0; }
+  @media (max-width: 34rem) {
+    /* A thumb's targets: the kinds a size up, with a little more to press above and below each than shows, and
+       the venue menu and search set further off under them, so a press meant for one doesn't land on the other. */
+    .filter button, .filter a { font-size: 1.05rem; padding: .2rem 0; }
+    .finders { margin-top: 1rem; }
+  }
   .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
