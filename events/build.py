@@ -1858,7 +1858,7 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <div class="event-tools"><div class="event-steps"><button class="event-back" type="button" aria-label="Previous listing">{STEP_MARKS["back"]}</button><button class="event-on" type="button" aria-label="Next listing">{STEP_MARKS["on"]}</button></div><button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button></div>
 <p class="event-said" role="status" aria-live="polite" aria-atomic="true"></p>
 <div class="event-body">
-<div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
+<div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"><img class="event-backdrop" alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer"></div>
 <p class="event-where"><span class="event-day"></span></p>
 <h2 class="event-title" id="event-title"><span class="event-icon"></span><span class="event-name"></span></h2>
 <p class="event-facts"></p>
@@ -3062,9 +3062,10 @@ INDEX_JS = """
     part("day").textContent = dayFull(li.dataset.id.slice(0, 10));  // Its own day, which its heading isn't on Just announced.
     part("name").textContent = title;
     // Its picture, in a frame kept its size while it loads, faintly shimmering, and gone if it doesn't; a
-    // poster or a square flyer shown whole, not cropped to the frame.
+    // poster or a square flyer shown whole, not cropped to the frame, its own colours blurred out to the edges.
     const picture = part("image"), img = picture.firstElementChild;
     img.removeAttribute("src");
+    part("backdrop").removeAttribute("src");
     picture.classList.remove("whole", "loaded");
     picture.hidden = !li.dataset.image;
     view.classList.toggle("shows-picture", !picture.hidden);
@@ -3205,7 +3206,10 @@ INDEX_JS = """
   });
   // A poster or a square flyer whole, not cropped to the frame; a wide one across it.
   function showPicture(img) {
-    part("image").classList.toggle("whole", img.naturalWidth / img.naturalHeight < 1.3);
+    const whole = img.naturalWidth / img.naturalHeight < 1.3;
+    part("image").classList.toggle("whole", whole);
+    // The same picture, already in hand, so the copy costs nothing to load.
+    if (whole) part("backdrop").src = img.src;
     part("image").classList.add("loaded");
   }
   // It fades in once it's all there and decoded, rather than drawing itself top to bottom.
@@ -3583,7 +3587,14 @@ CSS = """
     .event-image img { transition: none; }
     .event-image:not(.loaded) { animation: none; }
   }
-  .event-image.whole img { object-fit: contain; }
+  /* A poster or a square flyer whole, and either side of it, the same picture blown up, blurred and darkened:
+     its own colours carried out to the edges of the frame rather than grey bars, and dark enough that the
+     picture itself stays what you look at. */
+  .event-image { position: relative; }
+  .event-image .event-backdrop { display: none; }
+  .event-image.whole img:first-child { position: relative; z-index: 1; object-fit: contain; }
+  .event-image.whole .event-backdrop { display: block; position: absolute; inset: 0; object-fit: cover;
+                                       filter: blur(24px) brightness(.45) saturate(1.15); transform: scale(1.3); }
   dialog.event.shows-picture .event-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
   dialog.event.shows-picture .event-tools button:hover:not(:disabled),
   dialog.event.shows-picture .event-tools button:focus-visible { background: rgba(0, 0, 0, .9); }
