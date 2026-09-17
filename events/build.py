@@ -3482,7 +3482,7 @@ CSS = """
     .row, .combined > details > summary { display: block; }
     .row { padding-left: calc(14px + .7em); }
     .row > .icon, .combined > details > summary > .icon { position: absolute; left: 0; width: 14px; height: 14px;
-                                                          top: calc(.4rem + .72em - 8px); }
+                                                          top: calc(.4rem + .72em - 7px); }
     .headline, .headline .title, .tail { display: inline; }
     .headline .title { white-space: normal; }
     .row .source { display: inline; max-width: none; margin-left: .45em; color: #666; }
