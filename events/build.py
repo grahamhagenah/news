@@ -3625,16 +3625,16 @@ CSS = """
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
   .event-detail:empty, .event-note:empty, .event-place:empty, .event-also:empty, .event-places:empty { display: none; }
   .event-note { color: #bbb; }
-  /* Each place it's at, a link to its page (for tickets), with its times to the right, going on to another line
-     there, not under it, when there are more than fit. */
+  /* Each place it's at, a link to its page (for tickets), with its times to the right when they all fit there.
+     When they don't, the times go under the name together, starting from the left, rather than breaking into a
+     ragged right-hand stack: the name's line keeps its space, and a long day reads as a run of times. */
   .event-time { color: #ddd; font-size: .9rem; font-variant-numeric: tabular-nums; }
   .event-time.sold { color: #666; text-decoration: line-through; }
   .event-fact.sold { background: none; box-shadow: inset 0 0 0 1px #3a3a3a; color: #bbb; }
   .event-places { margin: 1.1rem 0 1rem; }
   .event-group { display: flex; flex-wrap: wrap; gap: .2rem .9rem; }
-  .event-places li { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .75rem; padding: .55rem 0;
-                     border-top: 1px solid #1c1c1c; }
-  .event-places .event-group { justify-content: flex-end; }
+  .event-places li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .4rem .75rem;
+                     padding: .55rem 0; border-top: 1px solid #1c1c1c; }
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
   .event-places a { color: #fff; font-weight: 600; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
