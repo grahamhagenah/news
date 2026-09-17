@@ -3468,31 +3468,17 @@ CSS = """
   /* A source that didn't load, at the foot of the page, marked by a small circled exclamation point. */
   .notice { display: flex; align-items: baseline; gap: .45em; }
   .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
-  /* A row reads as what's on, then when, then where: the title first, led by its kind's icon, its times after
-     it, and the venue at the end of the row, where they line up down the page to be scanned. */
-  .row, .combined > details > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .6rem;
-                                        align-items: baseline; }
-  .row > .icon, .combined > details > summary > .icon { align-self: center; }
-  .row .source { justify-content: flex-end; max-width: 14rem; text-align: right; }
+  /* A film at several theaters lays out its summary as a row does (shared/site.py): the same columns, and on a
+     phone the same line, which reads The Odyssey from 11:15am at 2 theaters. */
+  .combined > details > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .6rem;
+                                  align-items: baseline; }
+  .combined > details > summary > .icon { align-self: center; }
   @media (max-width: 34rem) {
-    /* Too narrow for columns, so the row reads as a line instead — The Odyssey from 11:15am at 2 theaters —
-       wrapping where a sentence would, with the icon in a slot at the left edge beside its first line.
-       It stands against the name here rather than the small grey line it used to lead, so it takes the name's
-       measure: a size that holds its own beside it, a clear space after it, and set by the middle of the
-       letters rather than the middle of the line, which sits low by the depth of a descender. */
-    .row, .combined > details > summary { display: block; }
-    .row { padding-left: calc(14px + .7em); }
-    .row > .icon, .combined > details > summary > .icon { position: absolute; left: 0; width: 14px; height: 14px;
-                                                          top: calc(.4rem + .72em - 7px); }
-    .headline, .headline .title, .tail { display: inline; }
-    .headline .title { white-space: normal; }
-    /* The spaces between its parts are where it breaks, and the room between them goes after each part rather
-       than before the next: at the end of a line it's out of sight, where at the start of one it would indent it. */
-    .row .source { display: inline; max-width: none; margin-left: 0; color: #666; }
+    .combined > details > summary { display: block; }
+    .combined > details > summary > .icon { position: absolute; left: 0; width: 14px; height: 14px; top: calc(.4rem + .72em - 7px); }
+    .tail { display: inline; }
     .headline > .when, .headline > .times, .headline > .detail, .headline .tail .times { margin-left: 0; }
-    .headline > .title { margin-right: .3em; }  /* The small grey parts after it are spaced by their spaces alone. */
     .row .source::before { content: "at "; }
-    .row .source > span { display: inline; overflow: visible; white-space: normal; }
   }
   .times, .detail { margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .times { flex: none; }

@@ -482,10 +482,13 @@ def render_index(feeds, posts, failed, stale, built_at):
             count = post["comment_count"]
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
+        # As Pushpin's rows are: the kind's icon, the headline and how long ago with its comments, and the source
+        # at the end of the row; spaces between the parts, for a phone's line to break at.
         items.append(
-            f'<li class="row" data-from="{html.escape(post["source"])}"{marked}><span class="source">{mark}<span>{html.escape(post["source"])}</span></span>'
-            f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a>'
-            f"{when}{comments}{preview}</div></li>"
+            f'<li class="row" data-from="{html.escape(post["source"])}"{marked}>{mark}'
+            f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a> '
+            + " ".join(part for part in (when, comments) if part)
+            + f'{preview}</div> <span class="source"><span>{html.escape(post["source"])}</span></span></li>'
         )
 
     # Feeds that failed; a feed that just hasn't posted lately isn't one.
@@ -837,10 +840,15 @@ CSS = """
   .note, time { color: #666; font-size: .8em; }
   .headline time, .headline .comments { flex: none; }
   /* Each post's icon: in its kind's color while the post is unread, gray once it's read. */
-  .source .icon { color: #555; }
-  .unread .source .icon { color: var(--article); }
-  .row[data-podcast].unread .source .icon { color: var(--podcast); }
-  .row[data-video].unread .source .icon { color: var(--video); }
+  .row > .icon { color: #555; }
+  .unread > .icon { color: var(--article); }
+  .row[data-podcast].unread > .icon { color: var(--podcast); }
+  .row[data-video].unread > .icon { color: var(--video); }
+  @media (max-width: 34rem) {
+    /* A phone's line: the headline, how long ago, its comments, and who it's from. */
+    .headline > time, .headline > .comments { margin-left: 0; }
+    .row .source::before { content: "from "; }
+  }
   /* The video player: the video at the width of the window, up to a large laptop's, alone on black. */
   .player { width: min(64rem, 100vw - 2.5rem); max-width: none; max-height: none; padding: 0; border: 0;
             background: none; color: #fff; overflow: visible; }

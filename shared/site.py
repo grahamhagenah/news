@@ -161,11 +161,16 @@ BASE_CSS = HEADER_CSS + """
   /* Whatever the filter and pager hide stays hidden, however specific the rules that lay it out. */
   [hidden] { display: none !important; }
   ul { margin: 0; padding: 0; list-style: none; }
-  /* Rows: the source on the left, led by its icon, then the headline, one line tall, with its details after. */
-  .row { position: relative; display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline; padding: .4rem 0; }
+  /* Rows: the headline first, led by its kind's icon and one line tall, with its details after it, and where it's
+     from at the end of the row, where those line up down the page to be scanned. The parts are set down with
+     spaces between them, which the columns ignore and a phone's line of text breaks at. */
+  .row { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .6rem; align-items: baseline;
+         padding: .4rem 0; }
+  .row > .icon { align-self: center; }
   .symbols { position: absolute; width: 0; height: 0; overflow: hidden; }
   .icon { flex: none; width: 12px; height: 12px; }
-  .source { display: flex; align-items: center; gap: .5em; min-width: 0; color: #666; font-size: .8em; }
+  .source { display: flex; justify-content: flex-end; align-items: center; min-width: 0; max-width: 14rem; color: #666;
+            font-size: .8em; text-align: right; }
   .source > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .headline { display: flex; align-items: baseline; min-width: 0; position: relative; }
   .headline .title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -228,14 +233,19 @@ BASE_CSS = HEADER_CSS + """
   footer p { margin: .4rem 0; }
   footer a, footer a:visited { color: #999; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   @media (max-width: 34rem) {
-    /* On a phone one line is too few words, so headlines wrap in full, below the source. The icon moves
-       beside the headline's first line, into a slot at the left edge that both start after. Its top: the
-       row's padding, then (in the source's text size) 1.45em for the source's line and .9em for half the
-       headline's, less half the icon. */
-    .row { grid-template-columns: 1fr; gap: 0; padding-left: calc(12px + .5em); }
-    .headline { display: block; }
+    /* Too narrow for columns, so a row reads as a line instead, wrapping where a sentence would, with the icon
+       in a slot at the left edge beside its first line: a size that holds its own beside the headline, a clear
+       space after it, and set by the middle of the letters rather than the middle of the line, which sits low
+       by the depth of a descender. The spaces between the parts are where the line breaks, so the room after the
+       headline goes at its end, out of sight when the line breaks there; the small grey parts after it are
+       spaced by their spaces alone. */
+    .row { display: block; padding-left: calc(14px + .7em); }
+    .row > .icon { position: absolute; left: 0; width: 14px; height: 14px; top: calc(.4rem + .72em - 7px); }
+    .headline, .headline .title { display: inline; }
     .headline .title { white-space: normal; }
-    .source .icon { position: absolute; left: 0; top: calc(.4rem + 2.35em - 6px); }
+    .headline > .title { margin-right: .3em; }
+    .source { display: inline; max-width: none; text-align: left; }
+    .source > span { display: inline; overflow: visible; white-space: normal; }
   }
 """
 
