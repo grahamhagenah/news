@@ -3490,7 +3490,7 @@ CSS = """
        than before the next: at the end of a line it's out of sight, where at the start of one it would indent it. */
     .row .source { display: inline; max-width: none; margin-left: 0; color: #666; }
     .headline > .when, .headline > .times, .headline > .detail, .headline .tail .times { margin-left: 0; }
-    .headline > .title, .headline > .when, .headline > .times, .headline > .detail, .headline > .tail { margin-right: .3em; }
+    .headline > .title { margin-right: .3em; }  /* The small grey parts after it are spaced by their spaces alone. */
     .row .source::before { content: "at "; }
     .row .source > span { display: inline; overflow: visible; white-space: normal; }
   }
