@@ -1970,8 +1970,9 @@ def render_row(item):
         f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
         f'{icon(item["category"])}'
-        f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a>'
-        f'{when}{render_times(item["times"], sold_times(item))}{detail}{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div>'
+        f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a> '
+        + " ".join(part for part in (when, render_times(item["times"], sold_times(item)), detail) if part)
+        + f'{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div> '
         f'<span class="source"><span>{html.escape(item["venue"])}</span></span></li>'
     )
 
@@ -1993,9 +1994,9 @@ def render_combined(item):
         f'<li class="row combined" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(sources)}"{facts_attributes(item)}><details><summary>'
         f'{icon(item["category"])}'
-        f'<div class="headline"><span class="title">{html.escape(item["title"])}</span>'
+        f'<div class="headline"><span class="title">{html.escape(item["title"])}</span> '
         f'<span class="tail">{start}</span>'
-        f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div>'
+        f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div> '
         f'<span class="source"><span>{places} theaters</span></span></summary>'
         f'<ul class="showings">{showings}</ul></details></li>'
     )
@@ -3485,7 +3486,11 @@ CSS = """
                                                           top: calc(.4rem + .72em - 7px); }
     .headline, .headline .title, .tail { display: inline; }
     .headline .title { white-space: normal; }
-    .row .source { display: inline; max-width: none; margin-left: .45em; color: #666; }
+    /* The spaces between its parts are where it breaks, and the room between them goes after each part rather
+       than before the next: at the end of a line it's out of sight, where at the start of one it would indent it. */
+    .row .source { display: inline; max-width: none; margin-left: 0; color: #666; }
+    .headline > .when, .headline > .times, .headline > .detail, .headline .tail .times { margin-left: 0; }
+    .headline > .title, .headline > .when, .headline > .times, .headline > .detail, .headline > .tail { margin-right: .3em; }
     .row .source::before { content: "at "; }
     .row .source > span { display: inline; overflow: visible; white-space: normal; }
   }
