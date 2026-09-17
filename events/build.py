@@ -3601,7 +3601,9 @@ CSS = """
   /* A poster or a square flyer whole, and either side of it, the same picture blown up, blurred and darkened:
      its own colours carried out to the edges of the frame rather than grey bars, and dark enough that the
      picture itself stays what you look at. */
-  .event-image { position: relative; }
+  /* Its own stacking context, so the picture lifted over its blurred copy stays inside the frame's layer, rather
+     than rising over the view's buttons, which sit at the same level on top of it. */
+  .event-image { position: relative; isolation: isolate; }
   .event-image .event-backdrop { display: none; }
   .event-image.whole img:first-child { position: relative; z-index: 1; object-fit: contain; }
   .event-image.whole .event-backdrop { display: block; position: absolute; inset: 0; object-fit: cover;
