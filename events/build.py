@@ -96,7 +96,7 @@ VENUE_ADDRESSES = {
     "SoWa": ("450 Harrison Ave", "Boston", "02118"),
     "French Library": ("53 Marlborough St", "Boston", "02116"),
     "ArtsEmerson": ("559 Washington St", "Boston", "02111"),
-    "Brattle": ("40 Brattle St", "Cambridge", "02138"),
+    "The Brattle": ("40 Brattle St", "Cambridge", "02138"),
     "Coolidge Corner": ("290 Harvard St", "Brookline", "02446"),
     "Harvard Film Archive": ("24 Quincy St", "Cambridge", "02138"),
     "West Newton Cinema": ("1296 Washington St", "Newton", "02465"),

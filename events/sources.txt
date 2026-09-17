@@ -60,7 +60,7 @@ frenchlibrary  https://frenchlibrary.org/upcoming-events/   art   French Library
 tribe      https://artsemerson.org/wp-json/tribe/events/v1/events   art   ArtsEmerson
 
 # Film
-jsonld     https://brattlefilm.org/coming-soon/   film   Brattle
+jsonld     https://brattlefilm.org/coming-soon/   film   The Brattle
 coolidge   https://coolidge.org/showtimes   film   Coolidge Corner
 hfa        https://harvardfilmarchive.org/calendar   film   Harvard Film Archive
 veezi      https://www.westnewtoncinema.com/   film   West Newton Cinema
