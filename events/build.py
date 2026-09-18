@@ -103,7 +103,7 @@ VENUE_ADDRESSES = {
     "Lexington Venue": ("1794 Massachusetts Ave", "Lexington", "02420"),
     # The Bay Area's, which give their state, being outside Massachusetts.
     "Roxie": ("3117 16th St", "San Francisco", "CA", "94103"),
-    "Alamo Drafthouse New Mission": ("2550 Mission St", "San Francisco", "CA", "94110"),
+    "Alamo New Mission": ("2550 Mission St", "San Francisco", "CA", "94110"),
     "The Independent": ("628 Divisadero St", "San Francisco", "CA", "94117"),
     "Bimbo's 365 Club": ("1025 Columbus Ave", "San Francisco", "CA", "94133"),
     "Rickshaw Stop": ("155 Fell St", "San Francisco", "CA", "94102"),
@@ -111,6 +111,7 @@ VENUE_ADDRESSES = {
     "Yoshi's": ("510 Embarcadero West", "Oakland", "CA", "94607"),
     "The Chapel": ("777 Valencia St", "San Francisco", "CA", "94110"),
     "SFMOMA": ("151 Third St", "San Francisco", "CA", "94103"),
+    "Exploratorium": ("Pier 15", "San Francisco", "CA", "94111"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "BAMPFA": ("2155 Center St", "Berkeley", "CA", "94704"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
@@ -2026,6 +2027,36 @@ def read_sfmoma(source):
     return events
 
 
+# The Exploratorium's calendar: a card for each thing on, with its dates as machine-readable times (start then
+# end, and again for each later day it repeats), its picture in several widths, and its name in the card's label.
+EXPLORATORIUM_CARD = 'data-component-id="oppenheimer:card"'
+EXPLORATORIUM_WHEN = re.compile(r'datetime="([\dT:+-]+)"')
+EXPLORATORIUM_SAID = re.compile(r'class="card__description[^"]*".*?field__item">(.*?)</div>', re.S)
+
+
+def read_exploratorium(source):
+    """The Exploratorium's calendar: After Dark and the rest of what's on, each on every day it runs. Its cards
+    give the start and the end of each day, so every other time is a start."""
+    events = []
+    for card in fetch(source["url"]).split(EXPLORATORIUM_CARD)[1:]:
+        name = re.search(r'aria-label="([^"]+)"', card)
+        link = re.search(r'href="([^"]+)"', card)
+        if not name or not link:
+            continue
+        said = EXPLORATORIUM_SAID.search(card)
+        # Its widest copy of the picture, from the set of widths it offers.
+        widths = re.findall(r'(/sites/default/files/styles/responsive_16_9_(\d+)w/[^\s",]+)', card)
+        picture = max(widths, key=lambda found: int(found[1]))[0] if widths else ""
+        for start in EXPLORATORIUM_WHEN.findall(card)[::2]:
+            day, moment = at_venue(datetime.fromisoformat(start), source.get("zone", BOSTON))
+            # Midnight is how it dates a run rather than an hour to turn up at: the day alone, then.
+            events.append(event(source, text(name.group(1)), day, None if moment == datetime.min.time() else moment,
+                                link=urljoin(source["url"], link.group(1)),
+                                about=about(text(said.group(1))) if said else "",
+                                image=urljoin(source["url"], html.unescape(picture)) if picture else ""))
+    return events
+
+
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
@@ -2059,6 +2090,7 @@ READERS = {
     "seetickets": read_seetickets,
     "yoshis": read_yoshis,
     "sfmoma": read_sfmoma,
+    "exploratorium": read_exploratorium,
     "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
@@ -2717,7 +2749,7 @@ BAY_AREA = city_texts(
     who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I work in the Bay Area at the University "
         "of California, and I wanted an easier way to track what’s coming up than relying on Google or visiting "
         "each venue’s website.",
-    kinds={"film": {"description": "Showtimes at the Roxie and the Alamo Drafthouse New Mission, from repertory "
+    kinds={"film": {"description": "Showtimes at the Roxie, the Alamo New Mission and BAMPFA, from repertory "
                                    "screenings to new releases, for the next month, aggregated from select theaters."}})
 
 

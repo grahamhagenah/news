@@ -2,7 +2,7 @@
 # how to read it, its URL, a category (music, film or art), and a name. Its venues' times are Pacific, which
 # the city's line in events/build.py gives them (City.zone).
 roxie      https://roxie.com/calendar/   film   Roxie
-alamo      https://drafthouse.com/s/mother/v2/schedule/market/sf#new-mission   film   Alamo Drafthouse New Mission
+alamo      https://drafthouse.com/s/mother/v2/schedule/market/sf#new-mission   film   Alamo New Mission
 ticketweb  https://www.theindependentsf.com/   music   The Independent
 ticketweb  https://bimbos365club.com/   music   Bimbo's 365 Club
 seetickets https://rickshawstop.com/   music   Rickshaw Stop
@@ -10,5 +10,6 @@ seetickets https://gamh.com/calendar/   music   Great American Music Hall
 yoshis     https://yoshis.com/   music   Yoshi's
 seetickets https://thechapelsf.com/calendar/   music   The Chapel
 sfmoma     https://www.sfmoma.org/events/   art   SFMOMA
+exploratorium https://www.exploratorium.edu/visit/calendar   art   Exploratorium
 tribe      https://museumca.org/wp-json/tribe/events/v1/events   art   Oakland Museum
 bampfa     https://bampfa.org/calendar   art   BAMPFA

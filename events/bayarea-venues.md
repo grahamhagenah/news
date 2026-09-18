@@ -2,14 +2,14 @@
 
 What Pushpin Bay Area reads now, and what could be added. Each line says how its listings would be read: a
 reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's, BAMPFA, Rickshaw Stop, the Great American Music Hall, Yoshi's, The
-Chapel and SFMOMA added the same day.
+Chapel, SFMOMA and the Exploratorium added the same day.
 
 ## Reading now
 
 | Venue | Where | Kind | How |
 | --- | --- | --- | --- |
 | Roxie | San Francisco (Mission) | Film | `roxie` — its calendar, a table for each month |
-| Alamo Drafthouse New Mission | San Francisco (Mission) | Film | `alamo` — the SF market's schedule, narrowed to New Mission |
+| Alamo New Mission | San Francisco (Mission) | Film | `alamo` — the SF market's schedule, narrowed to New Mission |
 | The Independent | San Francisco (Divisadero) | Music | `ticketweb` — its TicketWeb listing |
 | Bimbo's 365 Club | San Francisco (North Beach) | Music | `ticketweb` — the same listing, in a third template |
 | Rickshaw Stop | San Francisco (Hayes Valley) | Music | `seetickets` — See Tickets' listing in its own site |
@@ -17,6 +17,7 @@ Chapel and SFMOMA added the same day.
 | Yoshi's | Oakland (Jack London Square) | Music | `yoshis` — its upcoming events, with the day in its links' labels |
 | The Chapel | San Francisco (Valencia) | Music | `seetickets` — the same listing again, no new reader |
 | SFMOMA | San Francisco (SoMa) | Art, film | `sfmoma` — the data behind its events page; a screening goes with the films |
+| Exploratorium | San Francisco (Pier 15) | Art | `exploratorium` — its calendar, After Dark and the rest |
 | Oakland Museum of California | Oakland | Art | `tribe` — its WordPress calendar's API |
 | BAMPFA | Berkeley | Film, art | `bampfa` — its calendar, a month at a time; its labels sort films from talks |
 
@@ -40,7 +41,6 @@ nothing structured.
 | The New Parish | Oakland | Music | Its homepage carries no listing to read; tickets are elsewhere |
 | The UC Theatre | Berkeley | Music | Nothing structured on its site |
 | Freight & Salvage | Berkeley | Music | Turns a plain reader away (403) |
-| Exploratorium | San Francisco (After Dark) | Art | Its own calendar |
 | Grand Lake Theatre | Oakland | Film | A plain page, hand-kept; no feed found |
 | Fine Arts Museums (de Young, Legion of Honor) | San Francisco | Art | Blocks a plain reader (403); would need asking them |
 
