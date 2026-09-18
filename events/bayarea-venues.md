@@ -1,8 +1,8 @@
 # Bay Area venues to consider
 
 What Pushpin Bay Area reads now, and what could be added. Each line says how its listings would be read: a
-reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's, BAMPFA, Rickshaw Stop, the Great American Music Hall and Yoshi's added
-the same day.
+reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's, BAMPFA, Rickshaw Stop, the Great American Music Hall, Yoshi's, The
+Chapel and SFMOMA added the same day.
 
 ## Reading now
 
@@ -15,6 +15,8 @@ the same day.
 | Rickshaw Stop | San Francisco (Hayes Valley) | Music | `seetickets` — See Tickets' listing in its own site |
 | Great American Music Hall | San Francisco (Tenderloin) | Music | `seetickets` — the same |
 | Yoshi's | Oakland (Jack London Square) | Music | `yoshis` — its upcoming events, with the day in its links' labels |
+| The Chapel | San Francisco (Valencia) | Music | `seetickets` — the same listing again, no new reader |
+| SFMOMA | San Francisco (SoMa) | Art, film | `sfmoma` — the data behind its events page; a screening goes with the films |
 | Oakland Museum of California | Oakland | Art | `tribe` — its WordPress calendar's API |
 | BAMPFA | Berkeley | Film, art | `bampfa` — its calendar, a month at a time; its labels sort films from talks |
 
@@ -36,10 +38,8 @@ nothing structured.
 | --- | --- | --- | --- |
 | Starline Social Club | Oakland | Music | Its listings aren't in the page it serves; a Rockhouse widget loads them |
 | The New Parish | Oakland | Music | Its homepage carries no listing to read; tickets are elsewhere |
-| The Chapel | San Francisco (Valencia) | Music | Tixr and See Tickets |
 | The UC Theatre | Berkeley | Music | Nothing structured on its site |
 | Freight & Salvage | Berkeley | Music | Turns a plain reader away (403) |
-| SFMOMA | San Francisco | Art | Its own events pages |
 | Exploratorium | San Francisco (After Dark) | Art | Its own calendar |
 | Grand Lake Theatre | Oakland | Film | A plain page, hand-kept; no feed found |
 | Fine Arts Museums (de Young, Legion of Honor) | San Francisco | Art | Blocks a plain reader (403); would need asking them |

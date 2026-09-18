@@ -8,5 +8,7 @@ ticketweb  https://bimbos365club.com/   music   Bimbo's 365 Club
 seetickets https://rickshawstop.com/   music   Rickshaw Stop
 seetickets https://gamh.com/calendar/   music   Great American Music Hall
 yoshis     https://yoshis.com/   music   Yoshi's
+seetickets https://thechapelsf.com/calendar/   music   The Chapel
+sfmoma     https://www.sfmoma.org/events/   art   SFMOMA
 tribe      https://museumca.org/wp-json/tribe/events/v1/events   art   Oakland Museum
 bampfa     https://bampfa.org/calendar   art   BAMPFA

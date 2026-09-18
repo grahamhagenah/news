@@ -54,6 +54,7 @@ ROUTES = [
     ("internet-ticketing.com/websales/sales/LEXLEX/start", "tapos.html"),
     ("rickshawstop.com", "seetickets.html"),
     ("yoshis.com", "yoshis.html"),
+    ("sfmoma.org/events", "sfmoma.html"),
     ("bampfa.org/calendar", "bampfa.html"),
     ("bampfa.org/event/", "bampfa_event.html"),
     ("roxie.com/calendar", "roxie.html"),
@@ -281,6 +282,15 @@ class Readers(unittest.TestCase):
         self.assertIn("DTSTART:20260919T030000Z", build.render_calendar("Bay Area", "x", [show], when))  # 8pm Pacific.
         here = build.event(source("ticketweb", "x", "music", "Middle East"), "A show", date(2026, 9, 18), time(20, 0))
         self.assertIn("DTSTART:20260919T000000Z", build.render_calendar("Boston", "x", [here], when))  # 8pm Eastern.
+
+    def test_sfmoma_takes_each_listing_its_own_name(self):
+        found = self.read("sfmoma", "https://www.sfmoma.org/events/", "art", "SFMOMA", sorts_its_own=True)
+        # The name written beside a listing's own line, not the record of the listing after it: each name
+        # belongs with the address it links to.
+        for item in found:
+            self.assertTrue(item["image"])
+            first = re.sub(r"[^a-z]+", "-", item["title"].casefold()).strip("-").split("-")[0]
+            self.assertIn(first, item["link"], item["title"])
 
     def test_yoshis_reads_the_day_from_the_label_its_links_carry(self):
         # Its rows head with "Fri 9.18" and no year; the label on its links has the day written out in full.

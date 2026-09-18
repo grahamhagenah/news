@@ -109,6 +109,8 @@ VENUE_ADDRESSES = {
     "Rickshaw Stop": ("155 Fell St", "San Francisco", "CA", "94102"),
     "Great American Music Hall": ("859 O’Farrell St", "San Francisco", "CA", "94109"),
     "Yoshi's": ("510 Embarcadero West", "Oakland", "CA", "94607"),
+    "The Chapel": ("777 Valencia St", "San Francisco", "CA", "94110"),
+    "SFMOMA": ("151 Third St", "San Francisco", "CA", "94103"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "BAMPFA": ("2155 Center St", "Berkeley", "CA", "94704"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
@@ -1979,6 +1981,51 @@ def read_yoshis(source):
     return events
 
 
+# SFMOMA's events page carries its listings as data behind the page: each with the day and time it starts, the
+# kind of thing it is, and a picture. The page's own escaping (\/ for /) is undone before any of it is read.
+SFMOMA_ITEM = '"permalink":"https:\\/\\/www.sfmoma.org\\/event\\/'
+# Each listing's own name is the one written just before the line under it; the post_title further on belongs
+# to the record of the listing after it.
+SFMOMA_FIELD = {key: re.compile(rf'"{key}":"([^"]*)"') for key in ("StartDate", "StartTime", "url")}
+SFMOMA_NAME = re.compile(r'"supertitle":"([^"]*)","title":"([^"]*)"')
+
+
+def unescaped(value):
+    """A string as the page writes it in its data, with its escapes undone: \\/ for /, \\u2019 for an apostrophe."""
+    try:
+        return json.loads(f'"{value}"')
+    except ValueError:
+        return value.replace("\\/", "/")
+
+
+def read_sfmoma(source):
+    """SFMOMA's events: its talks, performances, workshops and screenings, each dated by the museum's own
+    fields rather than the line it prints ("Thursday, Oct 15, 2026 | 5:30-9 p.m."). A screening goes with the
+    films; the rest are talks."""
+    events = []
+    for chunk in fetch(source["url"]).split(SFMOMA_ITEM)[1:]:
+        chunk = chunk[:6000]
+        slug = chunk[:chunk.find('"')].replace("\\/", "/")
+        said = {key: unescaped(found.group(1)) if (found := pattern.search(chunk)) else ""
+                for key, pattern in SFMOMA_FIELD.items()}
+        name = SFMOMA_NAME.search(chunk)
+        if not said["StartDate"] or not name or not name.group(2):
+            continue
+        try:
+            day = date.fromisoformat(said["StartDate"])
+            start = datetime.strptime(said["StartTime"], "%H:%M:%S").time() if said["StartTime"] else None
+        except ValueError:
+            continue
+        billed = unescaped(name.group(1))
+        kind = "film" if "screening" in billed.casefold() else "art"
+        listing = event(source, text(unescaped(name.group(2))), day, start,
+                        link=urljoin(source["url"], "/event/" + slug),
+                        detail=text(billed) if billed.startswith(("Artist", "Family", "Member")) else "",
+                        image=said["url"])
+        events.append(dict(listing, category=kind))
+    return events
+
+
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
@@ -2011,6 +2058,7 @@ READERS = {
     "bampfa": read_bampfa,
     "seetickets": read_seetickets,
     "yoshis": read_yoshis,
+    "sfmoma": read_sfmoma,
     "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
