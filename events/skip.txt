@@ -9,6 +9,7 @@ comedy bakery
 improv
 karaoke
 private party
+private event
 improvised
 improvisation
 queeraoke

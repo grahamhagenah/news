@@ -106,6 +106,8 @@ VENUE_ADDRESSES = {
     "Alamo Drafthouse New Mission": ("2550 Mission St", "San Francisco", "CA", "94110"),
     "The Independent": ("628 Divisadero St", "San Francisco", "CA", "94117"),
     "Bimbo's 365 Club": ("1025 Columbus Ave", "San Francisco", "CA", "94133"),
+    "Rickshaw Stop": ("155 Fell St", "San Francisco", "CA", "94102"),
+    "Great American Music Hall": ("859 O’Farrell St", "San Francisco", "CA", "94109"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "BAMPFA": ("2155 Center St", "Berkeley", "CA", "94704"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
@@ -1863,6 +1865,85 @@ def read_bampfa(source):
     return [dict(listing, image=pictures.get(listing["link"], "")) for listing in events]
 
 
+# See Tickets' listing, which venues embed in their own sites (Rickshaw Stop, the Great American Music Hall).
+# Its parts carry the same classes wherever it's embedded, give or take an "event-" before them.
+SEE_ENTRY = 'class="seetickets-list-view-event-image-container"'
+SEE_TITLE = re.compile(r'class="[^"]*\b(?:event-)?title"[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+SEE_DAY = re.compile(r'class="[^"]*\b(?:event-)?date"[^>]*>\s*(?:[A-Za-z]{3},?\s+)?([A-Za-z]{3})\s+(\d{1,2})')
+SEE_SHOW = re.compile(r'class="see-showtime[^"]*"[^>]*>\s*(\d{1,2}):(\d{2})\s*([AP])M', re.I)
+SEE_DOORS = re.compile(r'class="see-doortime[^"]*"[^>]*>\s*(\d{1,2}:\d{2}\s*[AP]M)', re.I)
+SEE_PAGES = re.compile(r'data-see-ajax-page="(\d+)"')
+
+
+def seetickets_pages(source, page):
+    """The rest of a listing that pages: the site asks its own WordPress for each page, with the nonce the page
+    it came from carries, and gets the same markup back."""
+    ajax = re.search(r'seetickets_ajax_obj\s*=\s*\{[^}]*"ajax_url":"([^"]+)"[^}]*"nonce":"([^"]+)"', page)
+    last = max((int(number) for number in SEE_PAGES.findall(page)), default=1)
+    if not ajax or last < 2:
+        return []
+    url, nonce = ajax.group(1).replace("\\/", "/"), ajax.group(2)
+    asking = [f"{url}?action=get_seetickets_events&seeAjaxPage={number}&listType=list&nonce={nonce}"
+              for number in range(2, min(last, SEE_PAGE_LIMIT) + 1)]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return [found for found in pool.map(lambda each: fetch_quietly(each), asking) if found]
+
+
+SEE_PAGE_LIMIT = 6  # Two months of shows, at a dozen or so a page.
+
+
+def fetch_quietly(url):
+    try:
+        return fetch(url)
+    except Exception:
+        return ""
+
+
+def read_seetickets(source):
+    """A venue site with See Tickets' listing in it (Rickshaw Stop, the Great American Music Hall): each show
+    with who's supporting, its doors, its price and its picture. Dates there leave out the year."""
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    first = fetch(source["url"])
+    events = []
+    for page in [first] + seetickets_pages(source, first):
+        for entry in page.split(SEE_ENTRY)[1:]:
+            name, when = SEE_TITLE.search(entry), SEE_DAY.search(entry)
+            if not name or not when:
+                continue
+            try:
+                day = datetime.strptime(f"{when.group(1)} {when.group(2)} {today.year}", "%b %d %Y").date()
+            except ValueError:
+                continue
+            if day < today - timedelta(days=60):  # A January show listed in December.
+                day = day.replace(year=today.year + 1)
+            show = SEE_SHOW.search(entry)
+            doors = SEE_DOORS.search(entry)
+            # "Supporting Talent: Fake Fruit" at one venue, "with Low Hum" at another; either way, just the names.
+            support = re.search(r'class="[^"]*supporting-talent"[^>]*>\s*(?:Supporting Talent:|with)?\s*(.*?)</p>', entry, re.S)
+            ages = re.search(r'class="ages">(.*?)</span>', entry, re.S)
+            price = re.search(r'class="price">(.*?)</span>', entry, re.S)
+            picture = re.search(r'class="seetickets-list-view-event-image"', entry)
+            source_image = re.search(r'<img[^>]+src="([^"]+)"', entry)
+            events.append(event(
+                source, text(name.group(2)), day,
+                datetime.min.time().replace(hour=int(show.group(1)) % 12 + (12 if show.group(3).upper() == "P" else 0),
+                                            minute=int(show.group(2))) if show else None,
+                link=html.unescape(name.group(1)),
+                detail=f"with {text(support.group(1))}" if support and text(support.group(1)) else "",
+                about=[f"Doors {clock_text(doors.group(1))}"] if doors else [],
+                image=html.unescape(source_image.group(1)) if picture and source_image else "",
+                price=price_from(text(price.group(1))) if price else "",
+                ages=text(ages.group(1)) if ages else "",
+            ))
+    return events
+
+
+def clock_text(said):
+    """"8:00PM" as this page writes a time: 8pm."""
+    moment = datetime.strptime(re.sub(r"\s+", "", said).upper(), "%I:%M%p")
+    return clock(moment.time())
+
+
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
@@ -1893,6 +1974,7 @@ READERS = {
     "veezi": read_veezi_site,
     "roxie": read_roxie,
     "bampfa": read_bampfa,
+    "seetickets": read_seetickets,
     "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,

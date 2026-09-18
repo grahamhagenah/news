@@ -52,6 +52,7 @@ ROUTES = [
     ("icaboston.org/calendar", "ica.html"),
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
     ("internet-ticketing.com/websales/sales/LEXLEX/start", "tapos.html"),
+    ("rickshawstop.com", "seetickets.html"),
     ("bampfa.org/calendar", "bampfa.html"),
     ("bampfa.org/event/", "bampfa_event.html"),
     ("roxie.com/calendar", "roxie.html"),
@@ -279,6 +280,13 @@ class Readers(unittest.TestCase):
         self.assertIn("DTSTART:20260919T030000Z", build.render_calendar("Bay Area", "x", [show], when))  # 8pm Pacific.
         here = build.event(source("ticketweb", "x", "music", "Middle East"), "A show", date(2026, 9, 18), time(20, 0))
         self.assertIn("DTSTART:20260919T000000Z", build.render_calendar("Boston", "x", [here], when))  # 8pm Eastern.
+
+    def test_seetickets_reads_a_venue_site_listing(self):
+        found = self.read("seetickets", "https://rickshawstop.com/", "music", "Rickshaw Stop")
+        self.assertTrue(all(item["times"] and item["image"] for item in found))
+        self.assertTrue(any(item["detail"].startswith("with ") for item in found))
+        self.assertTrue(any(item["price"].startswith("$") for item in found))
+        self.assertTrue(any(line.startswith("Doors ") for item in found for line in item["about"]))
 
     def test_bampfa_sorts_its_films_from_its_talks(self):
         found = self.read("bampfa", "https://bampfa.org/calendar", "art", "BAMPFA", sorts_its_own=True)
