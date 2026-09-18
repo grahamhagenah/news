@@ -2466,8 +2466,9 @@ WESTERN_MASS = city_texts(
 BAY_AREA = city_texts(
     "bayarea", "Pushpin Bay Area", "the Bay Area", "San Francisco and Oakland", state="California",
     zone="America/Los_Angeles",
-    who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I keep this for the Bay Area the way I "
-        "keep the others: a venue at a time, by hand, so what’s here is worth going to.",
+    who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I work in the Bay Area at the University "
+        "of California, and I wanted an easier way to track what’s coming up than relying on Google or visiting "
+        "each venue’s website.",
     kinds={"film": {"description": "Showtimes at the Roxie and the Alamo Drafthouse New Mission, from repertory "
                                    "screenings to new releases, for the next month, aggregated from select theaters."}})
 
