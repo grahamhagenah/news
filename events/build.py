@@ -112,6 +112,7 @@ VENUE_ADDRESSES = {
     "The Chapel": ("777 Valencia St", "San Francisco", "CA", "94110"),
     "SFMOMA": ("151 Third St", "San Francisco", "CA", "94103"),
     "Exploratorium": ("Pier 15", "San Francisco", "CA", "94111"),
+    "YBCA": ("701 Mission St", "San Francisco", "CA", "94103"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "BAMPFA": ("2155 Center St", "Berkeley", "CA", "94704"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
@@ -2057,6 +2058,36 @@ def read_exploratorium(source):
     return events
 
 
+# YBCA's calendar: an entry for each thing on, labelled with what kind it is, and dated either on one day
+# ("Saturday, September 19, 2026, 2 PM") or across a run ("August 7, 2026-January 3, 2027"), which is how it
+# writes an exhibition. Only the days are listed; a run has no day to put it on.
+YBCA_ENTRY = 'class="feature-event-wrap"'
+YBCA_KIND = re.compile(r'<p class="type">([^<]*)</p>')
+YBCA_NAME = re.compile(r'<h[13][^>]*>\s*<a href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+YBCA_DAY = re.compile(r'<p class="date">\s*[A-Za-z]+day, ([A-Za-z]+ \d{1,2}, \d{4}),\s*(\d{1,2})(?::(\d{2}))?\s*(?:[-–—][^<]*?)?\s*([AP])M')
+YBCA_SAID = re.compile(r'<div class="copy">.*?<p><p>(.*?)</p>', re.S)
+YBCA_PICTURE = re.compile(r'class="img"[^>]*>\s*<a[^>]*>\s*<img src="([^"]+)"', re.S)
+
+
+def read_ybca(source):
+    """Yerba Buena Center for the Arts: the days on its calendar — performances, screenings, talks, tours and
+    workshops. Its exhibitions run for months rather than falling on a day, so they aren't listed."""
+    events = []
+    for entry in fetch(source["url"]).split(YBCA_ENTRY)[1:]:
+        name, when = YBCA_NAME.search(entry), YBCA_DAY.search(entry)
+        if not name or not when:
+            continue
+        kind, said = YBCA_KIND.search(entry), YBCA_SAID.search(entry)
+        picture = YBCA_PICTURE.search(entry)
+        listing = event(source, text(name.group(2)), datetime.strptime(when.group(1), "%B %d, %Y").date(),
+                        datetime.min.time().replace(hour=int(when.group(2)) % 12 + (12 if when.group(4) == "P" else 0),
+                                                    minute=int(when.group(3) or 0)),
+                        link=name.group(1), about=about(text(said.group(1))) if said else "",
+                        image=html.unescape(picture.group(1)) if picture else "")
+        events.append(dict(listing, category="film" if kind and kind.group(1).strip() == "Films" else "art"))
+    return events
+
+
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
@@ -2091,6 +2122,7 @@ READERS = {
     "yoshis": read_yoshis,
     "sfmoma": read_sfmoma,
     "exploratorium": read_exploratorium,
+    "ybca": read_ybca,
     "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,

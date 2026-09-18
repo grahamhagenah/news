@@ -26,6 +26,7 @@
 #   yoshis     Yoshi's upcoming events, the day read from the label its links carry
 #   sfmoma     SFMOMA's events, from the data behind its events page; a screening goes with the films
 #   exploratorium  the Exploratorium's calendar: each card on every day it runs
+#   ybca       YBCA's calendar: the days on it, not the exhibitions that run for months
 #   tapos      a cinema booking through Jacro's TaPoS web sales, from its start page (the Lexington Venue)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings

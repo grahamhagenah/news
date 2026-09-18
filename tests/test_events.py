@@ -56,6 +56,7 @@ ROUTES = [
     ("yoshis.com", "yoshis.html"),
     ("sfmoma.org/events", "sfmoma.html"),
     ("exploratorium.edu/visit/calendar", "exploratorium.html"),
+    ("ybca.org/calendar", "ybca.html"),
     ("bampfa.org/calendar", "bampfa.html"),
     ("bampfa.org/event/", "bampfa_event.html"),
     ("roxie.com/calendar", "roxie.html"),
@@ -283,6 +284,12 @@ class Readers(unittest.TestCase):
         self.assertIn("DTSTART:20260919T030000Z", build.render_calendar("Bay Area", "x", [show], when))  # 8pm Pacific.
         here = build.event(source("ticketweb", "x", "music", "Middle East"), "A show", date(2026, 9, 18), time(20, 0))
         self.assertIn("DTSTART:20260919T000000Z", build.render_calendar("Boston", "x", [here], when))  # 8pm Eastern.
+
+    def test_ybca_lists_its_days_and_not_its_runs(self):
+        # The sample holds an exhibition, dated across months, and two things happening on a day.
+        found = self.read("ybca", "https://ybca.org/calendar/", "art", "YBCA", sorts_its_own=True)
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all(item["times"] and item["image"] for item in found))
 
     def test_exploratorium_lists_a_card_on_every_day_it_runs(self):
         found = self.read("exploratorium", "https://www.exploratorium.edu/visit/calendar", "art", "Exploratorium")

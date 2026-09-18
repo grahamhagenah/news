@@ -2,7 +2,7 @@
 
 What Pushpin Bay Area reads now, and what could be added. Each line says how its listings would be read: a
 reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's, BAMPFA, Rickshaw Stop, the Great American Music Hall, Yoshi's, The
-Chapel, SFMOMA and the Exploratorium added the same day.
+Chapel, SFMOMA, the Exploratorium and YBCA added the same day.
 
 ## Reading now
 
@@ -18,6 +18,7 @@ Chapel, SFMOMA and the Exploratorium added the same day.
 | The Chapel | San Francisco (Valencia) | Music | `seetickets` — the same listing again, no new reader |
 | SFMOMA | San Francisco (SoMa) | Art, film | `sfmoma` — the data behind its events page; a screening goes with the films |
 | Exploratorium | San Francisco (Pier 15) | Art | `exploratorium` — its calendar, After Dark and the rest |
+| YBCA | San Francisco (SoMa) | Art, film | `ybca` — its calendar's days; its screenings go with the films |
 | Oakland Museum of California | Oakland | Art | `tribe` — its WordPress calendar's API |
 | BAMPFA | Berkeley | Film, art | `bampfa` — its calendar, a month at a time; its labels sort films from talks |
 
