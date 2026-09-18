@@ -7,6 +7,7 @@ events/pushpin/apple-touch-icon.png, which the build copies to the public site."
 import html
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 from pathlib import Path
@@ -82,13 +83,25 @@ def card(heading, line, kinds, path):
 """
 
 
-def touch_icon():
-    """The icon an iPhone puts on its home screen (180×180), which it won't take as SVG: the favicon's pin in
-    white, on black to the edges (the phone rounds the corners itself, and fills any transparency with black)."""
+def pin_on_black(size, margin=1 / 6):
+    """The favicon's pin in white on black, filling a square: what a phone puts on its home screen, and what a
+    search engine shows beside a result, neither of which takes the SVG — and where the outline on nothing it
+    draws in a browser tab would be a few grey strokes on white."""
     pin = re.search(r"<g .*?</g>", (PUSHPIN / "favicon.svg").read_text()).group().replace("<g ", '<g stroke="#fff" ', 1)
-    return (f'<!doctype html><style>html, body {{ margin: 0; width: 180px; height: 180px; background: #000; }}</style>'
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">'
-            f'<svg x="30" y="30" width="120" height="120" viewBox="0 0 24 24">{pin}</svg></svg>')
+    inset = round(size * margin)
+    return (f'<!doctype html><style>html, body {{ margin: 0; width: {size}px; height: {size}px; background: #000; }}</style>'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
+            f'<svg x="{inset}" y="{inset}" width="{size - 2 * inset}" height="{size - 2 * inset}" viewBox="0 0 24 24">{pin}</svg></svg>')
+
+
+def icon_file(png, destination):
+    """A .ico holding that PNG, which is what a search engine asks for at /favicon.ico. An icon file may carry
+    a PNG whole: a header saying it holds one image, then where that image is and how big."""
+    data = png.read_bytes()
+    header = struct.pack("<HHH", 0, 1, 1)
+    entry = struct.pack("<BBBBHHII", 48, 48, 0, 0, 1, 32, len(data), len(header) + 16)
+    destination.write_bytes(header + entry + data)
+    print(f"Wrote {destination.relative_to(Path.cwd()) if destination.is_relative_to(Path.cwd()) else destination}")
 
 
 def shoot(html_page, size, destination, scratch):
@@ -112,7 +125,10 @@ def main():
         build.use_city(build.BOSTON_CITY)
         name, heading, line, kinds, path = SITE_CARD
         shoot(card(heading, line, kinds, path), (1200, 630), OUT / "site" / f"{name}.png", scratch)
-        shoot(touch_icon(), (180, 180), PUSHPIN / "apple-touch-icon.png", scratch)
+        shoot(pin_on_black(180), (180, 180), PUSHPIN / "apple-touch-icon.png", scratch)
+        # For search results: a 48-pixel square, the size Google asks for, and the .ico it looks for by name.
+        shoot(pin_on_black(48, margin=1 / 8), (48, 48), PUSHPIN / "favicon-48.png", scratch)  # Larger: it's shown small.
+        icon_file(PUSHPIN / "favicon-48.png", PUSHPIN / "favicon.ico")
 
 
 if __name__ == "__main__":

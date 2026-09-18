@@ -2614,7 +2614,9 @@ def public_page(path, title, body, built_at=None, description=None, data=None):
         body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
     head = "\n".join([
-        # The pin (events/pushpin). ?pin3, since browsers keep a site's old icon long after it changes.
+        # The pin (events/pushpin). ?pin3, since browsers keep a site's old icon long after it changes; the
+        # .ico keeps a plain address, being the one a search engine asks for by name and shows beside a result.
+        f'<link rel="icon" href="{root}favicon.ico" sizes="48x48">',
         f'<link rel="icon" href="{root}favicon.svg?pin3" type="image/svg+xml">',
         f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?pin3">',
         f'<link rel="canonical" href="{address}">',
@@ -2911,7 +2913,8 @@ def site_page(path, title, description, said, body, styles=""):
     address = PUBLIC_SITE + path
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<title>{html.escape(title)}</title>\n<meta name="description" content="{html.escape(description)}">\n'
-            f'<link rel="canonical" href="{address}">\n<link rel="icon" href="/favicon.svg?pin3" type="image/svg+xml">\n'
+            f'<link rel="canonical" href="{address}">\n<link rel="icon" href="/favicon.ico" sizes="48x48">\n'
+            f'<link rel="icon" href="/favicon.svg?pin3" type="image/svg+xml">\n'
             f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?pin3">\n'
             f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Pushpin">\n'
             f'<meta property="og:title" content="{html.escape(title)}">\n<meta property="og:description" content="{html.escape(description)}">\n'
