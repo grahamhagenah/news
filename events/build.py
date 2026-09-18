@@ -107,6 +107,7 @@ VENUE_ADDRESSES = {
     "The Independent": ("628 Divisadero St", "San Francisco", "CA", "94117"),
     "Bimbo's 365 Club": ("1025 Columbus Ave", "San Francisco", "CA", "94133"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
+    "BAMPFA": ("2155 Center St", "Berkeley", "CA", "94704"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
     "Alamo Drafthouse": ("60 Seaport Blvd", "Boston", "02210"),
     # Western Mass.
@@ -1775,8 +1776,8 @@ def read_roxie(source):
     """The Roxie's calendar: a table for each month, each day holding the films playing and their times. What
     each is about, and its picture, are on its own page, which is read once however many days it plays."""
     page = fetch(source["url"])
+    today = datetime.now(source.get("zone", BOSTON)).date()
     months = [(int(m.group(1)), int(m.group(2)), m.end()) for m in ROXIE_MONTH.finditer(page)]
-    told = {}
     events = []
     for at, (year, month, start) in enumerate(months):
         until = months[at + 1][2] if at + 1 < len(months) else len(page)
@@ -1787,15 +1788,79 @@ def read_roxie(source):
                 continue
             # Days gone by are in the page too; what's coming up is the build's to pick (gather).
             for link, title, rest in ROXIE_FILM.findall(cell):
-                if link not in told:
-                    told[link] = roxie_film(link)
-                said, picture = told[link]
                 for hour, minute, half in ROXIE_TIME.findall(rest):
                     events.append(event(source, text(title), day,
                                         datetime.min.time().replace(hour=int(hour) % 12 + (12 if half.lower() == "p" else 0),
                                                                     minute=int(minute)),
-                                        link=link, about=said, image=picture))
-    return events
+                                        link=link))
+    # What each film's page says about it and its picture, for the films coming up, four pages at a time.
+    wanted = sorted({listing["link"] for listing in events
+                     if today <= listing["date"] <= today + timedelta(days=days_ahead(listing["category"]))})
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        told = dict(zip(wanted, pool.map(roxie_film, wanted)))
+    return [dict(listing, **dict(zip(("about", "image"), told.get(listing["link"], ([], ""))))) for listing in events]
+
+
+# BAMPFA's calendar: a month at a time (?date=2026-10), each listing a block in the day it falls on and a
+# fuller one behind it (the pop-up), which carries the date written out, its picture and what it's about.
+BAMPFA_KINDS = {"Film": "film", "Performance": "art", "Art": "art", "Tours": "art", "Workshop": "art"}
+BAMPFA_SKIP = {"Families"}
+BAMPFA_LISTED = re.compile(r'data-id="([^"]+)".*?<a href="(/event/[^"]+)">(.*?)</a>.*?<ul class="calendar_filter">(.*?)</ul>', re.S)
+BAMPFA_POPUP = re.compile(r'<div class="popupboxthing" data-popup="([^"]+)">(.*?)(?=<div class="popupboxthing"|<div class="views-row">\s*<div class="views-field)', re.S)
+BAMPFA_WHEN = re.compile(r'class="popupboxthing-date">\s*(?:[A-Za-z]+, )?([A-Za-z]+ \d{1,2}, \d{4})\s*<.*?'
+                         r'class="popupboxthing-time">\s*(\d{1,2})(?::(\d{2}))?\s*([AP])M', re.S)
+
+
+def bampfa_picture(link):
+    """The wide picture from a listing's own page: the calendar gives a thumbnail 170 pixels across, too small
+    for the view to show. Read once however many times the listing plays."""
+    try:
+        page = fetch(link)
+    except Exception:
+        return ""
+    found = re.search(r'<meta property="og:image" content="([^"]+)"', page)
+    return found.group(1) if found else ""
+
+
+def read_bampfa(source):
+    """BAMPFA's calendar, this month and the next two: its films, talks, tours and performances, each with what
+    its pop-up says about it and its picture. A listing's kind comes from the calendar's own labels, so its
+    films go with the films and the rest with the talks."""
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    month = today.replace(day=1)
+    events, seen = [], set()
+    for ahead in range(3):
+        when = (month + timedelta(days=32 * ahead)).replace(day=1)
+        page = fetch(f"{source['url']}?date={when:%Y-%m}")
+        labels = {found.group(1): (found.group(2), text(found.group(3)),
+                                   {text(tag) for tag in re.findall(r"<li>(.*?)</li>", found.group(4))})
+                  for found in BAMPFA_LISTED.finditer(page)}
+        for ident, block in BAMPFA_POPUP.findall(page):
+            listed = labels.get(ident)
+            moment = BAMPFA_WHEN.search(block)
+            if not listed or not moment:
+                continue
+            link, title, tags = listed
+            category = next((BAMPFA_KINDS[tag] for tag in tags if tag in BAMPFA_KINDS), None)
+            if not category or tags & BAMPFA_SKIP:
+                continue
+            day = datetime.strptime(moment.group(1), "%B %d, %Y").date()
+            if (title, day) in seen:  # A listing shows in both the month it starts and the one before.
+                continue
+            seen.add((title, day))
+            hour, minute, half = moment.group(2), moment.group(3) or "00", moment.group(4)
+            said = [text(part) for part in re.findall(r'class="event-(?:information|summary)">(.*?)</div>', block, re.S)]
+            listing = event(source, title, day,
+                            datetime.min.time().replace(hour=int(hour) % 12 + (12 if half == "P" else 0), minute=int(minute)),
+                            link=urljoin(source["url"], link), about=[part for part in said if part])
+            events.append(dict(listing, category=category))
+    # Its pictures, from the pages of the listings that will be shown: the calendar runs further ahead than the
+    # page does, and a page apiece is slow enough to be worth asking for only what's wanted, four at a time.
+    wanted = sorted({listing["link"] for listing in events
+                     if today <= listing["date"] <= today + timedelta(days=days_ahead(listing["category"]))})
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        pictures = dict(zip(wanted, pool.map(bampfa_picture, wanted)))
+    return [dict(listing, image=pictures.get(listing["link"], "")) for listing in events]
 
 
 READERS = {
@@ -1827,6 +1892,7 @@ READERS = {
     "ica": read_ica,
     "veezi": read_veezi_site,
     "roxie": read_roxie,
+    "bampfa": read_bampfa,
     "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,

@@ -6,3 +6,4 @@ alamo      https://drafthouse.com/s/mother/v2/schedule/market/sf#new-mission   f
 ticketweb  https://www.theindependentsf.com/   music   The Independent
 ticketweb  https://bimbos365club.com/   music   Bimbo's 365 Club
 tribe      https://museumca.org/wp-json/tribe/events/v1/events   art   Oakland Museum
+bampfa     https://bampfa.org/calendar   art   BAMPFA

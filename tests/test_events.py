@@ -52,6 +52,8 @@ ROUTES = [
     ("icaboston.org/calendar", "ica.html"),
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
     ("internet-ticketing.com/websales/sales/LEXLEX/start", "tapos.html"),
+    ("bampfa.org/calendar", "bampfa.html"),
+    ("bampfa.org/event/", "bampfa_event.html"),
     ("roxie.com/calendar", "roxie.html"),
     ("roxie.com/film/", "roxie_film.html"),
     ("theindependentsf.com", "ticketweb_set_out.html"),
@@ -94,7 +96,7 @@ class Readers(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def read(self, kind, url, category="music", name="Somewhere"):
+    def read(self, kind, url, category="music", name="Somewhere", sorts_its_own=False):
         found, error = build.READERS[kind](source(kind, url, category, name)), None
         self.assertTrue(found, f"{kind} read nothing from its sample")
         for item in found:
@@ -102,7 +104,8 @@ class Readers(unittest.TestCase):
             self.assertIsInstance(item["date"], date)
             self.assertTrue(all(isinstance(moment, time) for moment in item["times"]))
             self.assertTrue(item["link"].startswith("http"), item["link"])
-            self.assertEqual(item["category"], category)
+            if not sorts_its_own:
+                self.assertEqual(item["category"], category)
         return found
 
     def test_aeg_promoter_feed_is_taken_for_one_venue(self):
@@ -277,13 +280,23 @@ class Readers(unittest.TestCase):
         here = build.event(source("ticketweb", "x", "music", "Middle East"), "A show", date(2026, 9, 18), time(20, 0))
         self.assertIn("DTSTART:20260919T000000Z", build.render_calendar("Boston", "x", [here], when))  # 8pm Eastern.
 
+    def test_bampfa_sorts_its_films_from_its_talks(self):
+        found = self.read("bampfa", "https://bampfa.org/calendar", "art", "BAMPFA", sorts_its_own=True)
+        self.assertTrue(found)
+        # The calendar labels each listing, and a film goes with the films however the source line reads.
+        self.assertEqual({item["category"] for item in found} - {"film", "art"}, set())
+        self.assertTrue(all(item["times"] and item["link"].startswith("https://bampfa.org/event/") for item in found))
+        # The same three months are read, so a listing in two of them is kept once.
+        self.assertEqual(len(found), len({(item["title"], item["date"]) for item in found}))
+
     def test_roxie_reads_its_calendar_and_each_film_once(self):
         found = self.read("roxie", "https://roxie.com/calendar/", "film", "Roxie")
         self.assertTrue(found)
         self.assertTrue(all(item["times"] for item in found))
         self.assertTrue(all(item["link"].startswith("https://roxie.com/film/") for item in found))
-        # Every film's page is the one fixture, so each carries what that page says and its picture.
-        self.assertTrue(all(item["image"] for item in found))
+        # A film plays for days on end, so its own page — where its picture and what it's about are — is read
+        # once, and only for the days still to come, which this sample (September's first days) has none of.
+        self.assertEqual({item["image"] for item in found}, {""})
 
     def test_ticketweb_reads_the_template_that_sets_the_date_out(self):
         # The Independent's rows give the date as 9.18 and the time as "Show: 9:00 PM", where the Middle East's

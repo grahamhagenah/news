@@ -1,7 +1,7 @@
 # Bay Area venues to consider
 
 What Pushpin Bay Area reads now, and what could be added. Each line says how its listings would be read: a
-reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's added the same day.
+reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's and BAMPFA added the same day.
 
 ## Reading now
 
@@ -12,13 +12,13 @@ reader this build already has, or one that would have to be written. Checked 18 
 | The Independent | San Francisco (Divisadero) | Music | `ticketweb` — its TicketWeb listing |
 | Bimbo's 365 Club | San Francisco (North Beach) | Music | `ticketweb` — the same listing, in a third template |
 | Oakland Museum of California | Oakland | Art | `tribe` — its WordPress calendar's API |
+| BAMPFA | Berkeley | Film, art | `bampfa` — its calendar, a month at a time; its labels sort films from talks |
 
-## Berkeley, which the pages now say this covers
+## Berkeley
 
-Nothing in Berkeley reads yet. BAMPFA (film and exhibitions both), the UC Theatre, Freight & Salvage and
-Berkeley Rep are the ones worth having, and each needs work: BAMPFA keeps its own calendar, Freight &
-Salvage and SFJAZZ turn a plain reader away (403), and the UC Theatre and Berkeley Rep publish nothing
-structured. Until one of them lands, the Bay Area's listings are San Francisco and Oakland only.
+BAMPFA reads, which is Berkeley's films and its talks both. The UC Theatre, Freight & Salvage and Berkeley Rep
+are the ones left worth having: Freight & Salvage turns a plain reader away (403), and the other two publish
+nothing structured.
 
 ## Ready to add, with a reader this build already has
 
@@ -34,7 +34,6 @@ structured. Until one of them lands, the Bay Area's listings are San Francisco a
 | Starline Social Club, Yoshi's | Oakland | Music | Etix — likewise, one reader for both |
 | The New Parish | Oakland | Music | Its homepage carries no listing to read; tickets are elsewhere |
 | The Chapel | San Francisco (Valencia) | Music | Tixr and See Tickets |
-| BAMPFA | Berkeley | Film, art | Its own calendar; films and exhibitions both, and Eventbrite for some |
 | The UC Theatre | Berkeley | Music | Nothing structured on its site |
 | Freight & Salvage | Berkeley | Music | Turns a plain reader away (403) |
 | SFMOMA | San Francisco | Art | Its own events pages |

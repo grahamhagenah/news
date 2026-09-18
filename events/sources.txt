@@ -20,6 +20,7 @@
 #   ica        the ICA's calendar page: its concerts, screenings, talks, dance and First Fridays
 #   veezi      a theater site hosted by Veezi, from the showtimes its pages load (West Newton Cinema)
 #   roxie      the Roxie's calendar: a table for each month, and each film's own page for what it's about
+#   bampfa     BAMPFA's calendar, a month at a time; its own labels sort its films from its talks
 #   tapos      a cinema booking through Jacro's TaPoS web sales, from its start page (the Lexington Venue)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings
