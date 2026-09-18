@@ -53,6 +53,7 @@ ROUTES = [
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
     ("internet-ticketing.com/websales/sales/LEXLEX/start", "tapos.html"),
     ("rickshawstop.com", "seetickets.html"),
+    ("yoshis.com", "yoshis.html"),
     ("bampfa.org/calendar", "bampfa.html"),
     ("bampfa.org/event/", "bampfa_event.html"),
     ("roxie.com/calendar", "roxie.html"),
@@ -280,6 +281,13 @@ class Readers(unittest.TestCase):
         self.assertIn("DTSTART:20260919T030000Z", build.render_calendar("Bay Area", "x", [show], when))  # 8pm Pacific.
         here = build.event(source("ticketweb", "x", "music", "Middle East"), "A show", date(2026, 9, 18), time(20, 0))
         self.assertIn("DTSTART:20260919T000000Z", build.render_calendar("Boston", "x", [here], when))  # 8pm Eastern.
+
+    def test_yoshis_reads_the_day_from_the_label_its_links_carry(self):
+        # Its rows head with "Fri 9.18" and no year; the label on its links has the day written out in full.
+        found = self.read("yoshis", "https://yoshis.com/", "music", "Yoshi's")
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all(item["times"] and item["price"] and item["image"] for item in found))
+        self.assertTrue(all("/thumb_" not in item["image"] for item in found))  # The picture, not the thumbnail.
 
     def test_seetickets_reads_a_venue_site_listing(self):
         found = self.read("seetickets", "https://rickshawstop.com/", "music", "Rickshaw Stop")

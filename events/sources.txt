@@ -23,6 +23,7 @@
 #   bampfa     BAMPFA's calendar, a month at a time; its own labels sort its films from its talks
 #   seetickets a venue site with See Tickets' listing in it, and its own pages after the first
 #              (Rickshaw Stop, the Great American Music Hall)
+#   yoshis     Yoshi's upcoming events, the day read from the label its links carry
 #   tapos      a cinema booking through Jacro's TaPoS web sales, from its start page (the Lexington Venue)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings

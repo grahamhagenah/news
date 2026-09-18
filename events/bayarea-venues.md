@@ -1,7 +1,8 @@
 # Bay Area venues to consider
 
 What Pushpin Bay Area reads now, and what could be added. Each line says how its listings would be read: a
-reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's, BAMPFA, Rickshaw Stop and the Great American Music Hall added the same day.
+reader this build already has, or one that would have to be written. Checked 18 September 2026; Bimbo's, BAMPFA, Rickshaw Stop, the Great American Music Hall and Yoshi's added
+the same day.
 
 ## Reading now
 
@@ -13,6 +14,7 @@ reader this build already has, or one that would have to be written. Checked 18 
 | Bimbo's 365 Club | San Francisco (North Beach) | Music | `ticketweb` — the same listing, in a third template |
 | Rickshaw Stop | San Francisco (Hayes Valley) | Music | `seetickets` — See Tickets' listing in its own site |
 | Great American Music Hall | San Francisco (Tenderloin) | Music | `seetickets` — the same |
+| Yoshi's | Oakland (Jack London Square) | Music | `yoshis` — its upcoming events, with the day in its links' labels |
 | Oakland Museum of California | Oakland | Art | `tribe` — its WordPress calendar's API |
 | BAMPFA | Berkeley | Film, art | `bampfa` — its calendar, a month at a time; its labels sort films from talks |
 
@@ -32,7 +34,7 @@ nothing structured.
 
 | Venue | Where | Kind | What it publishes |
 | --- | --- | --- | --- |
-| Starline Social Club, Yoshi's | Oakland | Music | Etix — one reader would cover both, as See Tickets did |
+| Starline Social Club | Oakland | Music | Its listings aren't in the page it serves; a Rockhouse widget loads them |
 | The New Parish | Oakland | Music | Its homepage carries no listing to read; tickets are elsewhere |
 | The Chapel | San Francisco (Valencia) | Music | Tixr and See Tickets |
 | The UC Theatre | Berkeley | Music | Nothing structured on its site |

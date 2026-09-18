@@ -108,6 +108,7 @@ VENUE_ADDRESSES = {
     "Bimbo's 365 Club": ("1025 Columbus Ave", "San Francisco", "CA", "94133"),
     "Rickshaw Stop": ("155 Fell St", "San Francisco", "CA", "94102"),
     "Great American Music Hall": ("859 O’Farrell St", "San Francisco", "CA", "94109"),
+    "Yoshi's": ("510 Embarcadero West", "Oakland", "CA", "94607"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "BAMPFA": ("2155 Center St", "Berkeley", "CA", "94704"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
@@ -1944,6 +1945,40 @@ def clock_text(said):
     return clock(moment.time())
 
 
+# Yoshi's upcoming events: each a row with the date over its picture, and the day and time written out in the
+# label its links carry ("BIG DADDY KANE September 18, 2026 - 7:30PM"), which is where they're read from.
+YOSHIS_WHEN = re.compile(r'aria-label="(?:Buy Tickets|Tickets) .*?([A-Z][a-z]+ \d{1,2}, \d{4}) - (\d{1,2}):(\d{2})([AP])M"', re.S)
+YOSHIS_NAME = re.compile(r'class="event-cell etitle">.*?<h3><a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+# Its markup breaks lines inside tags, so nothing here may count on a space between a tag and its attributes.
+YOSHIS_TOPLINE = re.compile(r'<p\s+class="topline">(.*?)</p>', re.S)
+YOSHIS_PICTURE = re.compile(r'class="event-cell eimage">.*?<img[^>]+src="([^"]+)"', re.S)
+YOSHIS_PRICE = re.compile(r'<p\s+class="price">(.*?)</p>', re.S)
+
+
+def read_yoshis(source):
+    """Yoshi's upcoming events, each with the line it bills itself by, its price and its picture. Its shows sell
+    through Etix, but its own page is the one that lists them."""
+    events = []
+    for entry in fetch(source["url"]).split('class="event-indv"')[1:]:
+        name, when = YOSHIS_NAME.search(entry), YOSHIS_WHEN.search(entry)
+        if not name or not when:
+            continue
+        day = datetime.strptime(when.group(1), "%B %d, %Y").date()
+        topline, price = YOSHIS_TOPLINE.search(entry), YOSHIS_PRICE.search(entry)
+        picture = YOSHIS_PICTURE.search(entry)
+        events.append(event(
+            source, text(name.group(2)), day,
+            datetime.min.time().replace(hour=int(when.group(2)) % 12 + (12 if when.group(4) == "P" else 0),
+                                        minute=int(when.group(3))),
+            link=urljoin(source["url"], name.group(1)),
+            about=about(text(topline.group(1))) if topline else [],
+            # Its rows show a thumbnail; the picture behind it is the same file without the thumb_.
+            image=urljoin(source["url"], picture.group(1).replace("/thumb_", "/")) if picture else "",
+            price=price_from(text(price.group(1))) if price else "",
+        ))
+    return events
+
+
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
@@ -1975,6 +2010,7 @@ READERS = {
     "roxie": read_roxie,
     "bampfa": read_bampfa,
     "seetickets": read_seetickets,
+    "yoshis": read_yoshis,
     "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
