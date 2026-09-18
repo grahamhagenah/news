@@ -105,6 +105,7 @@ VENUE_ADDRESSES = {
     "Roxie": ("3117 16th St", "San Francisco", "CA", "94103"),
     "Alamo Drafthouse New Mission": ("2550 Mission St", "San Francisco", "CA", "94110"),
     "The Independent": ("628 Divisadero St", "San Francisco", "CA", "94117"),
+    "Bimbo's 365 Club": ("1025 Columbus Ave", "San Francisco", "CA", "94133"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
     "Alamo Drafthouse": ("60 Seaport Blvd", "Boston", "02210"),
@@ -427,43 +428,58 @@ def axs_show_time(link):
     return datetime.strptime(found.group(1), "%I:%M %p").time() if found else None
 
 
-# TicketWeb's listing comes in two templates: one naming the show and when in the link's title ("Event Name -
-# Bodega | 18 September 8:00 PM"), the other setting the date and time out in the row (9.18, Show: 9:00 PM).
-TW_TITLED = re.compile(r'class="tw-name">\s*<a[^>]*href="([^"]+)"[^>]*title="Event Name - (.*?) \| (\d{1,2} [A-Za-z]+) (\d{1,2}:\d{2} [AP]M)"')
-TW_SET_OUT = re.compile(r'class="tw-event-date">\s*(\d{1,2})\.(\d{1,2})\s*<.*?class="tw-name">\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?'
-                        r'class="tw-event-time">[^<]*?(\d{1,2}:\d{2} [AP]M)', re.S)
+# TicketWeb's listing comes in three templates, differing in where they put the date and time: in the link's
+# title ("Event Name - Bodega | 18 September 8:00 PM"), set out as 9.18 with "Show: 9:00 PM" beside the name,
+# or as a month and a day over the picture. The rest — the name, who's supporting, the picture — is the same.
+TW_TITLED = re.compile(r'class="tw-name">\s*<a[^>]*title="Event Name - (.*?) \| (\d{1,2} [A-Za-z]+) (\d{1,2}:\d{2} [AP]M)"')
+TW_LINK = re.compile(r'class="tw-name">\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+TW_NUMBERED = re.compile(r'class="tw-event-date">\s*(\d{1,2})\.(\d{1,2})\s*<')
+TW_MONTH_DAY = re.compile(r'class="tw-event-month">\s*([A-Za-z]+)\s*</span>\s*<span class="tw-event-date">\s*(\d{1,2})\s*<', re.S)
+TW_TIME = re.compile(r'class="tw-event-time">[^<]*?(\d{1,2}):(\d{2})\s*([ap])m', re.I)  # "Show: 9:00 PM", or just the time.
+TW_SUPPORT = re.compile(r'class="tw-attractions">\s*with\s*<span>(.*?)</span>', re.S)
 
 
 def read_ticketweb(source):
-    """Venue sites using TicketWeb's WordPress listing (The Middle East, The Independent). Dates there leave
-    out the year."""
+    """Venue sites using TicketWeb's WordPress listing (The Middle East, The Independent, Bimbo's). Dates there
+    leave out the year: a show listed months back is next year's."""
     today = datetime.now(source.get("zone", BOSTON)).date()
     events = []
     for section in fetch(source["url"]).split('class="tw-section"')[1:]:
-        name, set_out = TW_TITLED.search(section), TW_SET_OUT.search(section)
-        if name:
-            link, title, day_month, clock = name.groups()
-            day = datetime.strptime(f"{day_month} {today.year}", "%d %B %Y").date()
-        elif set_out:
-            month, number, link, title, clock = set_out.groups()
-            try:
-                day = date(today.year, int(month), int(number))
-            except ValueError:
+        link = TW_LINK.search(section)
+        titled, numbered, month_day = TW_TITLED.search(section), TW_NUMBERED.search(section), TW_MONTH_DAY.search(section)
+        clock_text = TW_TIME.search(section)
+        if not link:
+            continue
+        title = text(link.group(2))
+        try:
+            if numbered:
+                day = date(today.year, int(numbered.group(1)), int(numbered.group(2)))
+            elif month_day:
+                day = datetime.strptime(f"{month_day.group(2)} {month_day.group(1)} {today.year}", "%d %B %Y").date()
+            elif titled:
+                day = datetime.strptime(f"{titled.group(2)} {today.year}", "%d %B %Y").date()
+            else:
                 continue
-            title = text(title)
-        else:
+        except ValueError:
             continue
         if day < today - timedelta(days=60):  # A January show listed in December.
             day = day.replace(year=today.year + 1)
-        support = re.search(r'class="tw-attractions">\s*with\s*<span>(.*?)</span>', section, re.S)
+        if clock_text:
+            hour, minute, half = clock_text.groups()
+            start = datetime.min.time().replace(hour=int(hour) % 12 + (12 if half.lower() == "p" else 0), minute=int(minute))
+        elif titled:
+            start = datetime.strptime(titled.group(3), "%I:%M %p").time()
+        else:
+            start = None
+        support = TW_SUPPORT.search(section)
         room = re.search(r'class="tw-venue-name">(.*?)</span>', section, re.S)
         picture = re.search(r'<img[^>]+class="event-img[^"]*"[^>]+src="([^"]+)"', section)
         events.append(event(
             source,
-            html.unescape(title),
+            html.unescape(titled.group(1)) if titled else title,
             day,
-            datetime.strptime(clock, "%I:%M %p").time(),
-            link=html.unescape(link),
+            start,
+            link=html.unescape(link.group(1)),
             detail=f"with {text(support.group(1))}" if support else "",
             # "@ Middle East - Zuzu": just the venue, not the room; Sonia, next door, stays Sonia.
             venue=text(room.group(1)).lstrip("@ ").split(" - ")[0] if room else "",
@@ -2464,7 +2480,7 @@ WESTERN_MASS = city_texts(
 
 
 BAY_AREA = city_texts(
-    "bayarea", "Pushpin Bay Area", "the Bay Area", "San Francisco and Oakland", state="California",
+    "bayarea", "Pushpin Bay Area", "the Bay Area", "San Francisco, Oakland and Berkeley", state="California",
     zone="America/Los_Angeles",
     who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I work in the Bay Area at the University "
         "of California, and I wanted an easier way to track what’s coming up than relying on Google or visiting "

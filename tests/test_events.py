@@ -55,6 +55,7 @@ ROUTES = [
     ("roxie.com/calendar", "roxie.html"),
     ("roxie.com/film/", "roxie_film.html"),
     ("theindependentsf.com", "ticketweb_set_out.html"),
+    ("bimbos365club.com", "ticketweb_month_day.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
     ("massmoca.org/wp-json", "massmoca.json"),
@@ -291,6 +292,13 @@ class Readers(unittest.TestCase):
         self.assertEqual(len(found), 2)
         self.assertTrue(all(item["times"] and item["title"] for item in found))
         self.assertTrue(any(item["detail"].startswith("with ") for item in found))
+
+    def test_ticketweb_reads_the_template_that_heads_the_row_with_a_month(self):
+        # Bimbo's puts September over 18 by the picture, and the time as "Show: 8:00 pm" in lower case.
+        found = self.read("ticketweb", "https://bimbos365club.com/", "music", "Bimbo's 365 Club")
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all(item["times"] for item in found))
+        self.assertTrue(all(item["image"] for item in found))
 
     def test_tapos_gives_each_day_its_own_times(self):
         found = self.read("tapos", "https://www.internet-ticketing.com/websales/sales/LEXLEX/start", "film")
