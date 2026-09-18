@@ -52,6 +52,9 @@ ROUTES = [
     ("icaboston.org/calendar", "ica.html"),
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
     ("internet-ticketing.com/websales/sales/LEXLEX/start", "tapos.html"),
+    ("roxie.com/calendar", "roxie.html"),
+    ("roxie.com/film/", "roxie_film.html"),
+    ("theindependentsf.com", "ticketweb_set_out.html"),
     ("westnewtoncinema.com/api/movie/playing-now", "veezi_now.json"),
     ("westnewtoncinema.com/api/movie/coming-soon", "veezi_soon.json"),
     ("massmoca.org/wp-json", "massmoca.json"),
@@ -262,6 +265,33 @@ class Readers(unittest.TestCase):
         self.assertEqual(rebel["link"], "https://www.westnewtoncinema.com/movie/rebel-with-a-clause")
         self.assertEqual(rebel["about"][-1], "Directed by Brandt Johnson · 1h 26m")
 
+    def test_a_city_keeps_its_own_clock(self):
+        from zoneinfo import ZoneInfo
+        pacific = dict(source("ticketweb", "x", "music", "The Independent"), zone=ZoneInfo("America/Los_Angeles"))
+        # An 8pm show in San Francisco is 8pm there, not 11pm here; its calendar entry says so too.
+        show = build.event(pacific, "A show", date(2026, 9, 18), time(20, 0))
+        self.assertEqual(show["zone"], "America/Los_Angeles")
+        when = datetime(2026, 9, 18, tzinfo=timezone.utc)
+        self.assertIn("DTSTART:20260919T030000Z", build.render_calendar("Bay Area", "x", [show], when))  # 8pm Pacific.
+        here = build.event(source("ticketweb", "x", "music", "Middle East"), "A show", date(2026, 9, 18), time(20, 0))
+        self.assertIn("DTSTART:20260919T000000Z", build.render_calendar("Boston", "x", [here], when))  # 8pm Eastern.
+
+    def test_roxie_reads_its_calendar_and_each_film_once(self):
+        found = self.read("roxie", "https://roxie.com/calendar/", "film", "Roxie")
+        self.assertTrue(found)
+        self.assertTrue(all(item["times"] for item in found))
+        self.assertTrue(all(item["link"].startswith("https://roxie.com/film/") for item in found))
+        # Every film's page is the one fixture, so each carries what that page says and its picture.
+        self.assertTrue(all(item["image"] for item in found))
+
+    def test_ticketweb_reads_the_template_that_sets_the_date_out(self):
+        # The Independent's rows give the date as 9.18 and the time as "Show: 9:00 PM", where the Middle East's
+        # put both in the link's title; the support act is the row's own line.
+        found = self.read("ticketweb", "https://www.theindependentsf.com/", "music", "The Independent")
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all(item["times"] and item["title"] for item in found))
+        self.assertTrue(any(item["detail"].startswith("with ") for item in found))
+
     def test_tapos_gives_each_day_its_own_times(self):
         found = self.read("tapos", "https://www.internet-ticketing.com/websales/sales/LEXLEX/start", "film")
         coyote = sorted((item["date"], item["times"]) for item in found if item["title"] == "Coyote vs. Acme")
@@ -445,7 +475,7 @@ class Cities(unittest.TestCase):
         build.use_city(build.BOSTON_CITY)
 
     def test_each_city_its_own_site(self):
-        self.assertEqual([city.slug for city in build.CITIES], ["boston", "westernma"])
+        self.assertEqual([city.slug for city in build.CITIES], ["boston", "westernma", "bayarea"])
         self.assertEqual(build.BOSTON_CITY.sources, build.SOURCES_FILE)
         build.use_city(build.WESTERN_MASS)
         self.assertEqual((build.PUBLIC_URL, build.PUBLIC_ROOT, build.PUBLIC_NAME), ("https://pushpin.city/westernma/", "/westernma/", "Pushpin Western Mass"))
@@ -486,7 +516,7 @@ class Cities(unittest.TestCase):
         self.assertIn('value="Pushpin: a message"', contact, "one form for every city")
         self.assertIn('value="https://pushpin.city/contact/?sent"', contact)
         missing = build.render_not_found(build.CITIES)
-        self.assertIn('["boston", "westernma"]', missing)
+        self.assertIn('["boston", "westernma", "bayarea"]', missing)
         self.assertIn('"/boston/" + path.slice(1)', missing, "addresses from before there were cities, Boston's")
 
 

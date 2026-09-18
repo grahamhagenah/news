@@ -6,18 +6,20 @@
 #              taken for the one the line names (Royale, in Bowery Presents' Boston feed)
 #   axs        an AXS venue site's full listing page, /events/all, and each show's page for its start time
 #              (The Sinclair)
-#   ticketweb  a venue page with TicketWeb's event listing (The Middle East)
+#   ticketweb  a venue page with TicketWeb's event listing (The Middle East, The Independent)
 #   jsonld     a page with schema.org Event data in it (the Brattle's Coming Soon page, House of Blues, a
 #              venue's page on DICE)
 #   coolidge   the Coolidge Corner Theatre's showtimes page
 #   ticketmaster  a Ticketmaster venue id in place of the URL (the Paradise); needs the TICKETMASTER_KEY secret.
 #                 Find a venue's id with Actions → "Find a Ticketmaster venue" on GitHub.
-#   alamo      an Alamo Drafthouse market's schedule JSON (Boston, which is the Seaport)
+#   alamo      an Alamo Drafthouse market's schedule JSON (Boston, which is the Seaport); a market holding
+#              several theaters names the one it wants after a # (.../market/sf#new-mission)
 #   landmark   a Landmark Theatres theater id in place of the URL (Kendall Square)
 #   hfa        the Harvard Film Archive's calendar page
 #   frenchlibrary  the French Library's upcoming events page: its screenings, talks and exhibitions
 #   ica        the ICA's calendar page: its concerts, screenings, talks, dance and First Fridays
 #   veezi      a theater site hosted by Veezi, from the showtimes its pages load (West Newton Cinema)
+#   roxie      the Roxie's calendar: a table for each month, and each film's own page for what it's about
 #   tapos      a cinema booking through Jacro's TaPoS web sales, from its start page (the Lexington Venue)
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings

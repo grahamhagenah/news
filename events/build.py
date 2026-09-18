@@ -32,7 +32,7 @@ MUSIC_DAYS_AHEAD = 60  # and concerts, which venues announce (and people buy tic
 # there, if it's no older than this.
 LISTINGS_URL = "https://events.grahamhagenah.com/listings.json"
 FALLBACK_LIMIT = timedelta(days=2)
-BOSTON = ZoneInfo("America/New_York")
+BOSTON = ZoneInfo("America/New_York")  # Where this started; each city keeps its own clock (City.zone).
 USER_AGENT = "Mozilla/5.0 (compatible; events-feed/1.0)"
 CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 
@@ -101,6 +101,11 @@ VENUE_ADDRESSES = {
     "Harvard Film Archive": ("24 Quincy St", "Cambridge", "02138"),
     "West Newton Cinema": ("1296 Washington St", "Newton", "02465"),
     "Lexington Venue": ("1794 Massachusetts Ave", "Lexington", "02420"),
+    # The Bay Area's, which give their state, being outside Massachusetts.
+    "Roxie": ("3117 16th St", "San Francisco", "CA", "94103"),
+    "Alamo Drafthouse New Mission": ("2550 Mission St", "San Francisco", "CA", "94110"),
+    "The Independent": ("628 Divisadero St", "San Francisco", "CA", "94117"),
+    "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
     "Alamo Drafthouse": ("60 Seaport Blvd", "Boston", "02210"),
     # Western Mass.
@@ -125,16 +130,17 @@ def postal(line):
     return (found.group(1).strip(), found.group(2).strip().title(), found.group(3) or "") if found else None
 
 
-def read_sources(path=None, city="boston"):
+def read_sources(path=None, city="boston", zone=BOSTON):
     """A city's sources file's lines (sources.txt, Boston's): how to read the source, its URL, a category, a
-    name, and public=no for a source kept off the public page."""
+    name, and public=no for a source kept off the public page. Each carries its city's clock, which its reader
+    reads times by and its listings keep."""
     sources = []
     for line in (path or SOURCES_FILE).read_text().splitlines():
         if line.strip() and not line.lstrip().startswith("#"):
             kind, url, category, *words = line.split()
             name = [word for word in words if word != "public=no"]
             sources.append({"kind": kind, "url": url, "category": category, "name": " ".join(name),
-                            "public": len(name) == len(words), "city": city})
+                            "public": len(name) == len(words), "city": city, "zone": zone})
     return sources
 
 
@@ -258,6 +264,8 @@ def event(source, title, day, start=None, link="", detail="", venue="", about=()
         "venue": venue or source["name"],
         "category": source["category"],
         "source": source["name"],
+        # The clock its times are in: its city's, for the calendar entries and the pages search engines read.
+        "zone": str(source.get("zone", BOSTON)),
         # Not a line that only repeats the name.
         "about": [paragraph for paragraph in about if paragraph.casefold() != title.casefold()],
         # Where it is, (street, town, ZIP), when the source says and it isn't the venue's usual address.
@@ -316,9 +324,9 @@ def clip(paragraphs, budget, most=3, least=0):
     return kept
 
 
-def at_boston(moment):
-    """An aware datetime's date and time of day in Boston; a naive one is taken to be Boston time already."""
-    local = moment.astimezone(BOSTON) if moment.tzinfo else moment
+def at_venue(moment, zone=BOSTON):
+    """An aware datetime's date and time of day where the venue is; a naive one is taken to be that already."""
+    local = moment.astimezone(zone) if moment.tzinfo else moment
     return local.date(), local.time()
 
 
@@ -339,7 +347,7 @@ def read_aeg(source):
         listed = [item for item in listed if venue_of(item).strip().casefold() == source["name"].strip().casefold()]
     events = []
     for item in listed:
-        day, start = at_boston(datetime.fromisoformat(item["eventDateTimeISO"]))
+        day, start = at_venue(datetime.fromisoformat(item["eventDateTimeISO"]), source.get("zone", BOSTON))
         titles = item["title"]
         support = re.sub(r"\s*,\s*", ", ", titles.get("supportingText") or "").strip(" ,")
         events.append(event(
@@ -419,18 +427,35 @@ def axs_show_time(link):
     return datetime.strptime(found.group(1), "%I:%M %p").time() if found else None
 
 
+# TicketWeb's listing comes in two templates: one naming the show and when in the link's title ("Event Name -
+# Bodega | 18 September 8:00 PM"), the other setting the date and time out in the row (9.18, Show: 9:00 PM).
+TW_TITLED = re.compile(r'class="tw-name">\s*<a[^>]*href="([^"]+)"[^>]*title="Event Name - (.*?) \| (\d{1,2} [A-Za-z]+) (\d{1,2}:\d{2} [AP]M)"')
+TW_SET_OUT = re.compile(r'class="tw-event-date">\s*(\d{1,2})\.(\d{1,2})\s*<.*?class="tw-name">\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?'
+                        r'class="tw-event-time">[^<]*?(\d{1,2}:\d{2} [AP]M)', re.S)
+
+
 def read_ticketweb(source):
-    """Venue sites using TicketWeb's WordPress listing (The Middle East). Dates there leave out the year."""
-    today = datetime.now(BOSTON).date()
+    """Venue sites using TicketWeb's WordPress listing (The Middle East, The Independent). Dates there leave
+    out the year."""
+    today = datetime.now(source.get("zone", BOSTON)).date()
     events = []
     for section in fetch(source["url"]).split('class="tw-section"')[1:]:
-        name = re.search(r'class="tw-name">\s*<a[^>]*href="([^"]+)"[^>]*title="Event Name - (.*?) \| (\d{1,2} [A-Za-z]+) (\d{1,2}:\d{2} [AP]M)"', section)
-        if not name:
+        name, set_out = TW_TITLED.search(section), TW_SET_OUT.search(section)
+        if name:
+            link, title, day_month, clock = name.groups()
+            day = datetime.strptime(f"{day_month} {today.year}", "%d %B %Y").date()
+        elif set_out:
+            month, number, link, title, clock = set_out.groups()
+            try:
+                day = date(today.year, int(month), int(number))
+            except ValueError:
+                continue
+            title = text(title)
+        else:
             continue
-        link, title, day_month, clock = name.groups()
-        day = datetime.strptime(f"{day_month} {today.year}", "%d %B %Y").date()
         if day < today - timedelta(days=60):  # A January show listed in December.
             day = day.replace(year=today.year + 1)
+        support = re.search(r'class="tw-attractions">\s*with\s*<span>(.*?)</span>', section, re.S)
         room = re.search(r'class="tw-venue-name">(.*?)</span>', section, re.S)
         picture = re.search(r'<img[^>]+class="event-img[^"]*"[^>]+src="([^"]+)"', section)
         events.append(event(
@@ -439,6 +464,7 @@ def read_ticketweb(source):
             day,
             datetime.strptime(clock, "%I:%M %p").time(),
             link=html.unescape(link),
+            detail=f"with {text(support.group(1))}" if support else "",
             # "@ Middle East - Zuzu": just the venue, not the room; Sonia, next door, stays Sonia.
             venue=text(room.group(1)).lstrip("@ ").split(" - ")[0] if room else "",
             image=html.unescape(picture.group(1)).replace("_Original.", "_Edp.") if picture else "",  # 800 pixels, not 3000.
@@ -477,7 +503,7 @@ def read_jsonld(source):
     for item in found:
         if str(item.get("eventStatus", "")).endswith("EventCancelled"):
             continue
-        day, start = at_boston(datetime.fromisoformat(item["startDate"]))
+        day, start = at_venue(datetime.fromisoformat(item["startDate"]), source.get("zone", BOSTON))
         # The Brattle adds the showtime to each name: "Filipiñana - 9/12/26 @ 12:00 pm".
         title = re.sub(r"\s+-\s+\d{1,2}/\d{1,2}/\d{2,4}\s+@.*$", "", html.unescape(item.get("name", "")))
         work = item.get("workPresented") or {}
@@ -606,8 +632,13 @@ def coolidge_film_states(link):
 
 
 def read_alamo(source):
-    """Alamo Drafthouse loads a market's whole schedule (Boston: the Seaport) from one JSON file."""
+    """Alamo Drafthouse loads a market's whole schedule (Boston: the Seaport) from one JSON file. A market with
+    several theaters in it (San Francisco's, which reaches down to Mountain View) names the one it wants after
+    a # on its line: .../market/sf#new-mission."""
+    wanted = urlsplit(source["url"]).fragment
     data = json.loads(fetch(source["url"]))["data"]
+    here = {cinema["id"] for market in data.get("market") or [] for cinema in market.get("cinemas") or []
+            if not wanted or cinema.get("slug") == wanted}
     titles = {item["slug"]: (item.get("show") or {}).get("title") for item in data["presentations"]}
     headlines = {item["slug"]: (item.get("show") or {}).get("headline") or "" for item in data["presentations"]}
     pictures = {item["slug"]: alamo_image(item.get("show") or {}) for item in data["presentations"]}
@@ -616,6 +647,8 @@ def read_alamo(source):
     for session in data["sessions"]:
         title = titles.get(session["presentationSlug"])
         if session.get("isHidden") or session.get("status") in ("PAST", "CANCELED", "CANCELLED") or not title:
+            continue
+        if wanted and session.get("cinemaId") not in here:
             continue
         # The theater's local time; a midnight show is dated the night it starts, not the business day.
         start = datetime.fromisoformat(session["showTimeClt"])
@@ -807,7 +840,7 @@ LANDMARK_API = "https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi"
 
 def read_landmark(source):
     """Landmark theaters (Kendall Square), by theater id, through the schedule service their site uses."""
-    today = datetime.now(BOSTON).date()
+    today = datetime.now(source.get("zone", BOSTON)).date()
     theater = json.dumps({"id": source["url"], "timeZone": "America/New_York"}, separators=(",", ":"))
     query = urlencode({
         "from": f"{today}T03:00:00",
@@ -926,7 +959,7 @@ def read_ics(source, kinds=None):
                     moment = moment.replace(tzinfo=timezone.utc)
                 elif zone:
                     moment = moment.replace(tzinfo=ZoneInfo(zone.group(1)))
-                day, start = at_boston(moment)
+                day, start = at_venue(moment, source.get("zone", BOSTON))
             venue, _, place = unescape(fields.get("LOCATION", ("", ""))[1]).partition(",")
             summary = unescape(fields.get("SUMMARY", ("", ""))[1])
             description = re.sub(r"\\([,;\\])", r"\1", fields.get("DESCRIPTION", ("", ""))[1]).split("\\n")
@@ -978,7 +1011,7 @@ def read_squarespace(source):
         title = re.sub(r"\s+", " ", html.unescape(item["title"])).strip()
         if SQUARESPACE_SKIP & set(item.get("categories") or []) or re.search(r"private event", title, re.I):
             continue
-        day, start = at_boston(datetime.fromtimestamp(item["startDate"] // 1000, timezone.utc))
+        day, start = at_venue(datetime.fromtimestamp(item["startDate"] // 1000, timezone.utc), source.get("zone", BOSTON))
         described = re.sub(r"<(style|script)\b.*?</\1>", "", item.get("body") or item.get("excerpt") or "", flags=re.S)
         picture = item.get("assetUrl") or ""
         title, support = with_support(title)
@@ -1030,7 +1063,7 @@ def read_tribe(source, kinds=None):
     can pick a category, like ?categories=music for The Rockwell's music among its comedy and theater. With
     kinds, a map from the site's categories to ours, each event goes in the first of its categories there, and
     one in none of them is left out; and one spanning days, an exhibition, is listed on the day it opens."""
-    today = datetime.now(BOSTON).date()
+    today = datetime.now(source.get("zone", BOSTON)).date()
     end = today + timedelta(days=days_ahead("music" if kinds else source["category"]))
     window = {"start_date": today.isoformat(), "end_date": f"{end} 23:59:59", "per_page": 50}
     url = source["url"] + ("&" if "?" in source["url"] else "?") + urlencode(window)
@@ -1444,7 +1477,7 @@ def read_indy(source):
             film = showing.get("movie") or {}
             if not showing.get("published") or showing.get("private") or not film.get("name"):
                 continue
-            day, start = at_boston(datetime.fromisoformat(showing["time"].replace("Z", "+00:00")))
+            day, start = at_venue(datetime.fromisoformat(showing["time"].replace("Z", "+00:00")), source.get("zone", BOSTON))
             minutes = film.get("duration") or 0
             facts = " · ".join(filter(None, [f"Directed by {film['directedBy']}" if film.get("directedBy") else "",
                                              f"{minutes // 60}h {minutes % 60}m" if minutes else "", film.get("rating") or ""]))
@@ -1509,7 +1542,7 @@ def read_mit(source):
             # A listing per day an event happens; a talk is each of them, an exhibition just its opening.
             instance = entry["event"]["event_instances"][0]["event_instance"]
             moment = datetime.fromisoformat(instance["start"])
-            day, start = at_boston(moment)
+            day, start = at_venue(moment, source.get("zone", BOSTON))
             # Midnight is how an event with its time left off comes through.
             start = None if instance.get("all_day") or (start.hour, start.minute) == (0, 0) else start
             link = item.get("localist_url") or source["url"]
@@ -1553,7 +1586,7 @@ def read_bibliocommons(source):
                 return html.unescape(found.group(1).strip()) if found else ""
             tags = {html.unescape(tag) for tag in re.findall(r"<category>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</category>", item)}
             audiences = tags & LIBRARY_AUDIENCES
-            day, start = at_boston(datetime.fromisoformat(field("bc:start_date").replace("Z", "+00:00")))
+            day, start = at_venue(datetime.fromisoformat(field("bc:start_date").replace("Z", "+00:00")), source.get("zone", BOSTON))
             if (field("bc:is_cancelled") == "true" or field("bc:is_virtual") == "true" or tags & LIBRARY_SKIP
                     or (audiences and audiences <= LIBRARY_YOUNG)):
                 continue
@@ -1645,7 +1678,7 @@ def read_harvard_art(source):
         if not category or re.search(r"\bonline\b|\bcancel", title, re.I):
             continue
         moment = datetime.fromisoformat(item["date"].replace("Z", "+00:00")).replace(second=0, microsecond=0)
-        day, start = at_boston(moment)
+        day, start = at_venue(moment, source.get("zone", BOSTON))
         listing = event(source, title, day, start, link=item.get("event_link") or source["url"],
                         about=about(item.get("summary") or ""), image=(item.get("image_styles") or {}).get("list") or "")
         listing["category"] = category
@@ -1678,7 +1711,7 @@ def read_tapos(source):
     """A cinema booking through Jacro's TaPoS web sales (the Lexington Venue), from the schedule its start page
     lists: each film with its poster and synopsis, and each day it plays with that day's times."""
     page = fetch(source["url"])
-    today = datetime.now(BOSTON).date()
+    today = datetime.now(source.get("zone", BOSTON)).date()
     events = []
     for box in TAPOS_BOX.findall(page):
         name = text(re.search(r"<h3>(.*?)(?:<img|</h3>)", box, re.S).group(1)) if "<h3>" in box else ""
@@ -1702,6 +1735,50 @@ def read_tapos(source):
                                                                 minute=int(minute)),
                                     link=source["url"], about=about(text(synopsis.group(1)) if synopsis else ""),
                                     image=f"{poster.group(1)}w780{poster.group(2)}" if poster else ""))
+    return events
+
+
+ROXIE_MONTH = re.compile(r'id="full-month-(\d{4})-(\d{2})"')
+ROXIE_DAY = re.compile(r'<span class="calendar-day">(\d{1,2})</span>(.*?)(?=<div class="calendar-day-item"|</td>)', re.S)
+ROXIE_FILM = re.compile(r'<span class="film">\s*<a href="([^"]+)">\s*<p class="film-title">(.*?)</p>\s*</a>(.*?)</span>', re.S)
+ROXIE_TIME = re.compile(r'<span class="film-showtime[^"]*"[^>]*>\s*(\d{1,2}):(\d{2})\s*([ap])m', re.I)
+
+
+def roxie_film(link):
+    """What a film's own page says about it, and its picture; the calendar gives neither."""
+    try:
+        page = fetch(link)
+    except Exception:
+        return [], ""
+    said = re.search(r'<meta property="og:description" content="([^"]*)"', page)
+    picture = re.search(r'<meta property="og:image" content="([^"]+)"', page)
+    return about(text(said.group(1)) if said else ""), picture.group(1) if picture else ""
+
+
+def read_roxie(source):
+    """The Roxie's calendar: a table for each month, each day holding the films playing and their times. What
+    each is about, and its picture, are on its own page, which is read once however many days it plays."""
+    page = fetch(source["url"])
+    months = [(int(m.group(1)), int(m.group(2)), m.end()) for m in ROXIE_MONTH.finditer(page)]
+    told = {}
+    events = []
+    for at, (year, month, start) in enumerate(months):
+        until = months[at + 1][2] if at + 1 < len(months) else len(page)
+        for number, cell in ROXIE_DAY.findall(page[start:until]):
+            try:
+                day = date(year, month, int(number))
+            except ValueError:
+                continue
+            # Days gone by are in the page too; what's coming up is the build's to pick (gather).
+            for link, title, rest in ROXIE_FILM.findall(cell):
+                if link not in told:
+                    told[link] = roxie_film(link)
+                said, picture = told[link]
+                for hour, minute, half in ROXIE_TIME.findall(rest):
+                    events.append(event(source, text(title), day,
+                                        datetime.min.time().replace(hour=int(hour) % 12 + (12 if half.lower() == "p" else 0),
+                                                                    minute=int(minute)),
+                                        link=link, about=said, image=picture))
     return events
 
 
@@ -1733,6 +1810,7 @@ READERS = {
     "frenchlibrary": read_french_library,
     "ica": read_ica,
     "veezi": read_veezi_site,
+    "roxie": read_roxie,
     "tapos": read_tapos,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
@@ -1894,10 +1972,17 @@ def render_times(moments, sold=()):
     return f'<span class="times">{times}</span>' if times else ""
 
 
+def zone_of(item):
+    """The clock a listing's times are in: the one its city keeps, or Boston's for a listing saved before
+    the cities kept their own."""
+    return ZoneInfo(item.get("zone") or "America/New_York")
+
+
 def written(address):
-    """(street, town, ZIP) as one line, for a calendar event's location."""
-    street, town, zip_code = address
-    return f"{street}, {town}, MA {zip_code}".strip()
+    """(street, town, ZIP) as one line, for a calendar event's location; a venue outside Massachusetts gives
+    its state too, (street, town, state, ZIP)."""
+    street, town, state, zip_code = address if len(address) == 4 else (*address[:2], "MA", address[2])
+    return f"{street}, {town}, {state} {zip_code}".strip()
 
 
 def address_attribute(item):
@@ -1935,7 +2020,7 @@ FRESH_SHOWN = 8  # How many the home page's banner picks its one from, a differe
 
 def newly_added(events, built_at):
     """The listings first seen in the last NEW_DAYS days, newest first, then soonest."""
-    since = (built_at.astimezone(BOSTON).date() - timedelta(days=NEW_DAYS)).isoformat()
+    since = (built_at.astimezone(PUBLIC_ZONE).date() - timedelta(days=NEW_DAYS)).isoformat()
     fresh = [item for item in events if item["category"] in NEW_KINDS and item.get("added", "") > since]
     return sorted(fresh, key=lambda item: (item["added"], [-part for part in item["date"].timetuple()[:3]]), reverse=True)
 
@@ -2021,11 +2106,11 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             events = [item for item in events if item["category"] == category]
             shown = {item["source"] for item in events}
         if weekend is not None:
-            friday, sunday = weekend_days(built_at.astimezone(BOSTON).date(), weekend)
+            friday, sunday = weekend_days(built_at.astimezone(PUBLIC_ZONE).date(), weekend)
             events = [item for item in events if friday <= item["date"] <= sunday]
             shown = venues = {item["source"] for item in events}
         if tonight:
-            day = built_at.astimezone(BOSTON).date()
+            day = built_at.astimezone(PUBLIC_ZONE).date()
             events = [item for item in events if day <= item["date"] <= day + timedelta(days=1)]
             shown = venues = {item["source"] for item in events}
         if added:
@@ -2104,7 +2189,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     if public and weekend is not None:
         # To the other weekend's page, with its dates.
         other = 1 - weekend
-        days = weekend_span(*weekend_days(built_at.astimezone(BOSTON).date(), other))
+        days = weekend_span(*weekend_days(built_at.astimezone(PUBLIC_ZONE).date(), other))
         name, href = PUBLIC_WEEKENDS[other][1], root + PUBLIC_WEEKENDS[other][0]
         others = (f'<nav class="weekends"><span></span><a href="{href}">{name}, {days} →</a></nav>\n' if other else
                   f'<nav class="weekends"><a href="{href}">← {name}, {days}</a><span></span></nav>\n')
@@ -2146,9 +2231,10 @@ def event_data(item):
     where (the venue's address, or the event's own), and the venue's page for it."""
     start = item["date"].isoformat()
     if item["times"]:
-        start = datetime.combine(item["date"], item["times"][0], tzinfo=BOSTON).isoformat()
-    street, town, zip_code = item.get("address") or VENUE_ADDRESSES.get(item["venue"]) or ("", "", "")
-    address = {"@type": "PostalAddress", "streetAddress": street, "addressLocality": town, "addressRegion": "MA",
+        start = datetime.combine(item["date"], item["times"][0], tzinfo=zone_of(item)).isoformat()
+    place = item.get("address") or VENUE_ADDRESSES.get(item["venue"]) or ("", "", "")
+    street, town, state, zip_code = place if len(place) == 4 else (*place[:2], "MA", place[2])
+    address = {"@type": "PostalAddress", "streetAddress": street, "addressLocality": town, "addressRegion": state,
                "postalCode": zip_code, "addressCountry": "US"}
     data = {
         "@type": SCHEMA_TYPES.get(item["category"], "Event"),
@@ -2291,13 +2377,19 @@ class City:
     pages: dict
     faqs: list
     state: str = "Massachusetts"  # Which the cities page lists it under.
+    zone: str = "America/New_York"  # Its venues' clock: what time a listing's times are in.
+
+    @property
+    def clock(self):
+        return ZoneInfo(self.zone)
 
     @property
     def sources(self):
         return SOURCES_FILE if self.slug == "boston" else ROOT / f"sources-{self.slug}.txt"
 
 
-def city_texts(slug, name, place, around, *, state="Massachusetts", preposition="in", who=None, faqs=None, kinds=None):
+def city_texts(slug, name, place, around, *, state="Massachusetts", zone="America/New_York", preposition="in",
+               who=None, faqs=None, kinds=None):
     """A city's pages, in the words they all use: place in titles ("Concerts in Western Mass"), around in the
     rest ("around the Pioneer Valley and the Berkshires"), and preposition for a city whose pages say around
     ("Concerts around Boston"). kinds gives a kind's page its own title, description or tagline where the
@@ -2347,7 +2439,7 @@ def city_texts(slug, name, place, around, *, state="Massachusetts", preposition=
         # Boston's theaters.
         faqs or [(question, who if question == "Who makes this?" else answer)
                  for question, answer in FAQS if "Somerville Theatre" not in question],
-        state)
+        state, zone)
 
 
 BOSTON_CITY = city_texts(
@@ -2371,21 +2463,31 @@ WESTERN_MASS = city_texts(
                                    "next month, aggregated from select theaters."}})
 
 
+BAY_AREA = city_texts(
+    "bayarea", "Pushpin Bay Area", "the Bay Area", "San Francisco and Oakland", state="California",
+    zone="America/Los_Angeles",
+    who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I keep this for the Bay Area the way I "
+        "keep the others: a venue at a time, by hand, so what’s here is worth going to.",
+    kinds={"film": {"description": "Showtimes at the Roxie and the Alamo Drafthouse New Mission, from repertory "
+                                   "screenings to new releases, for the next month, aggregated from select theaters."}})
+
+
 # What's being worked on, listed after the cities under the same state, with what to say about it.
 COMING_SOON = {"New York": ("New York City", "Coming soon.")}
 # Each city's Pushpin, at pushpin.city/<its slug>/, from sources-<its slug>.txt (Boston's, sources.txt).
-CITIES = [BOSTON_CITY, WESTERN_MASS]
+CITIES = [BOSTON_CITY, WESTERN_MASS, BAY_AREA]
 
 
 def use_city(city):
     """Point the public site's names (PUBLIC_NAME, PUBLIC_URL, and the rest) at a city's: its pages are written
     one city at a time, and read these as they go."""
     global PUBLIC_NAME, PUBLIC_URL, PUBLIC_ROOT, CITY_DIR, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_SHORT
-    global PUBLIC_TONIGHT, PUBLIC_NEW, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS
+    global PUBLIC_TONIGHT, PUBLIC_NEW, PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS, PUBLIC_ZONE
     PUBLIC_NAME, PUBLIC_TITLE, PUBLIC_TAGLINE, PUBLIC_DESCRIPTION, PUBLIC_AROUND, PUBLIC_SHORT = (
         city.name, city.title, city.tagline, city.description, city.around, city.short)
     PUBLIC_TONIGHT, PUBLIC_NEW = city.tonight, city.new
     PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS = city.weekends, city.pages, city.faqs
+    PUBLIC_ZONE = city.clock  # Which day it is there: what "tonight" and "this weekend" mean on its pages.
     PUBLIC_URL = f"{PUBLIC_SITE}{city.slug}/"
     PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
     CITY_DIR = PUBLIC_DIR / city.slug
@@ -2610,12 +2712,12 @@ def render_calendar(name, description, items, built_at):
     stamp = f"{built_at.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}"
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//Pushpin//{PUBLIC_NAME}//EN", "CALSCALE:GREGORIAN",
              "METHOD:PUBLISH", f"X-WR-CALNAME:{ics_text(name)}", f"X-WR-CALDESC:{ics_text(description)}",
-             "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
+             f"X-WR-TIMEZONE:{PUBLIC_ZONE}", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
     for item in sorted(items, key=lambda item: (item["date"], item["times"][:1], item["title"].casefold())):
         key = "|".join([item["source"], item["venue"], item["title"], item["date"].isoformat()])
         lines += ["BEGIN:VEVENT", f"UID:{hashlib.sha1(key.encode()).hexdigest()}@pushpin.city", f"DTSTAMP:{stamp}"]
         if item["times"]:
-            start = datetime.combine(item["date"], item["times"][0], BOSTON).astimezone(timezone.utc)
+            start = datetime.combine(item["date"], item["times"][0], zone_of(item)).astimezone(timezone.utc)
             lines += [f"DTSTART:{start:%Y%m%dT%H%M%SZ}", f"DTEND:{start + timedelta(hours=2):%Y%m%dT%H%M%SZ}"]
         else:
             lines += [f"DTSTART;VALUE=DATE:{item['date']:%Y%m%d}", f"DTEND;VALUE=DATE:{item['date'] + timedelta(days=1):%Y%m%d}"]
@@ -3707,6 +3809,7 @@ def saved(item):
         "detail": item["detail"],
         "venue": item["venue"],
         "category": item["category"],
+        "zone": item.get("zone", ""),
         "about": item.get("about", []),
         "address": item.get("address"),
         "added": item.get("added", ""),
@@ -3724,6 +3827,7 @@ def restored(kept, source):
         date=date.fromisoformat(kept["date"]),
         times=[datetime.strptime(moment, "%H:%M").time() for moment in kept["times"]],
         source=source["name"],
+        zone=str(source.get("zone", BOSTON)),
     )
 
 
@@ -3803,7 +3907,7 @@ def main():
         print(f"Built at {previous['built']}; not due yet, so not rebuilding.")
         return
 
-    sources = [source for city in CITIES for source in read_sources(city.sources, city.slug)]
+    sources = [source for city in CITIES for source in read_sources(city.sources, city.slug, city.clock)]
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(load, sources))
 

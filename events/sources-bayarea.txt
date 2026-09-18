@@ -1,0 +1,7 @@
+# Pushpin Bay Area's sources: San Francisco and Oakland. One per line, as Boston's sources.txt explains —
+# how to read it, its URL, a category (music, film or art), and a name. Its venues' times are Pacific, which
+# the city's line in events/build.py gives them (City.zone).
+roxie      https://roxie.com/calendar/   film   Roxie
+alamo      https://drafthouse.com/s/mother/v2/schedule/market/sf#new-mission   film   Alamo Drafthouse New Mission
+ticketweb  https://www.theindependentsf.com/   music   The Independent
+tribe      https://museumca.org/wp-json/tribe/events/v1/events   art   Oakland Museum
