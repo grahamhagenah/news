@@ -526,7 +526,7 @@ def render_index(feeds, posts, failed, stale, built_at):
 
 # Where a video plays: over the list, with a way to close it, and nothing else. (The player shows its name.)
 PLAYER = """<dialog class="player" aria-label="Video">
-<button class="player-corner" aria-label="Play in the corner"><svg viewBox="0 0 16 16" aria-hidden="true"><rect class="corner-out" x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5"/><rect class="corner-in" x="8" y="8" width="5.5" height="4.5" rx="1"/><path class="corner-back" d="M6 10H3.5V7.5M3.5 10l4-4M10 6h2.5V3.5M12.5 6l-4 4"/></svg></button>
+<button class="player-corner" aria-label="Play over the page"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="to-corner"><rect x="2" y="3" width="12" height="10" rx="1.5"/><rect x="7.75" y="7.75" width="5" height="4" rx="1"/></g><g class="to-page"><path d="M6.5 3.5h-3v3M3.5 3.5l4 4M9.5 12.5h3v-3M12.5 12.5l-4-4"/></g></svg></button>
 <button class="player-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
 <div class="player-frame"></div>
 <p class="player-note" hidden>This video can’t be played here. <a href="">Watch it on YouTube</a></p>
@@ -570,6 +570,36 @@ INDEX_JS = """
     window.onYouTubeIframeAPIReady = resolve;
     document.head.append(Object.assign(document.createElement("script"), { src: "https://www.youtube.com/iframe_api" }));
   });
+  // The player itself, made afresh each time: whether it carries YouTube's own controls is settled when it's
+  // made, and the corner has no room for them. A video carries on from where it was when it moves.
+  function mount(videoId, { corner, from = 0 }) {
+    const holder = document.createElement("div");
+    dialog.querySelector(".player-frame").replaceChildren(holder);
+    let started = false;
+    return new YT.Player(holder, {
+      host: "https://www.youtube-nocookie.com",
+      videoId,
+      width: "100%",
+      height: "100%",
+      // Related videos from the same channel only, no annotations, and inline on phones until made full
+      // screen. In the corner, none of YouTube's own furniture, which would crowd a window that size; a click
+      // on the video still stops and starts it.
+      playerVars: { autoplay: 1, rel: 0, iv_load_policy: 3, playsinline: 1,
+                    controls: corner ? 0 : 1, start: Math.floor(from) },
+      events: {
+        onStateChange: event => {
+          // The player takes the keyboard when it starts; give it back once, so Esc closes the window.
+          if (event.data === YT.PlayerState.PLAYING && !started) {
+            started = true;
+            dialog.querySelector(".player-close").focus();
+          }
+          if (event.data === YT.PlayerState.ENDED) dialog.close();
+        },
+        onError: () => { note.hidden = false; }, // Its channel doesn't allow it to play elsewhere, most often.
+      },
+    });
+  }
+
   async function play(a) {
     // Another video, with one already playing (in the corner, most likely): the window closes on the old one
     // first, and the wait is for the closing to be done with — it takes the player apart a moment later, and
@@ -583,31 +613,14 @@ INDEX_JS = """
     dialog.setAttribute("aria-label", a.textContent);
     note.querySelector("a").href = a.href;
     note.hidden = true;
-    const holder = document.createElement("div");
-    dialog.querySelector(".player-frame").replaceChildren(holder);
-    dialog.showModal();
+    // In the corner to begin with: a video is something to have on while the list is read, and it's one
+    // button away from filling the window.
+    dialog.classList.add("corner");
+    document.body.classList.add("video-corner");
+    dialog.show();
     await loadYouTube();
     if (!dialog.open) return; // Closed while the player loaded.
-    let started = false;
-    player = new YT.Player(holder, {
-      host: "https://www.youtube-nocookie.com",
-      videoId: a.closest("li").dataset.video,
-      width: "100%",
-      height: "100%",
-      // Related videos from the same channel only, no annotations, and inline on phones until made full screen.
-      playerVars: { autoplay: 1, rel: 0, iv_load_policy: 3, playsinline: 1 },
-      events: {
-        onStateChange: event => {
-          // The player takes the keyboard when it starts; give it back once, so Esc closes the window.
-          if (event.data === YT.PlayerState.PLAYING && !started) {
-            started = true;
-            dialog.querySelector(".player-close").focus();
-          }
-          if (event.data === YT.PlayerState.ENDED) dialog.close();
-        },
-        onError: () => { note.hidden = false; }, // Its channel doesn't allow it to play elsewhere, most often.
-      },
-    });
+    player = mount(a.closest("li").dataset.video, { corner: true });
   }
   dialog.addEventListener("close", () => {
     // Moved to the corner, or back: the window is shown again in the same breath, and what's playing in it
@@ -624,11 +637,17 @@ INDEX_JS = """
   // same element, closed and shown again, rather than a frame moved somewhere else, which would reload it.
   const corner = dialog.querySelector(".player-corner");
   corner.addEventListener("click", () => {
+    const video = player?.getVideoData?.().video_id;
+    const from = player?.getCurrentTime?.() || 0;
     const tucked = dialog.classList.toggle("corner");
     document.body.classList.toggle("video-corner", tucked);  // The way back to the top steps over the video.
     dialog.close();
     if (tucked) dialog.show(); else dialog.showModal();
     corner.setAttribute("aria-label", tucked ? "Play over the page" : "Play in the corner");
+    if (video) {
+      player.destroy();
+      player = mount(video, { corner: tucked, from });
+    }
     if (!tucked) dialog.querySelector(".player-close").focus();
   });
   // Outside the video, which is the page itself only while the window is over it.
@@ -891,8 +910,11 @@ CSS = """
   .player-close { right: 1rem; }
   .player-corner { right: 3.5rem; }
   .player-close svg, .player-corner svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-  .player-corner .corner-in { fill: currentColor; stroke: none; }
-  .player-corner .corner-back { display: none; }  /* The way back, shown only once it's in the corner. */
+  .player-corner .to-corner rect + rect { fill: currentColor; stroke: none; }
+  /* Over the page it shows the way to the corner; in the corner, the way back over the page. */
+  .player-corner .to-page { display: none; }
+  .player.corner .player-corner .to-corner { display: none; }
+  .player.corner .player-corner .to-page { display: block; }
   .player-close:hover, .player-close:focus-visible,
   .player-corner:hover, .player-corner:focus-visible { background: #1a1a1a; color: #fff; }
   .player-close:focus, .player-corner:focus { outline: none; }
@@ -905,8 +927,7 @@ CSS = """
                    height: 1.9rem; background: rgba(0, 0, 0, .55); color: #fff; }
   .player.corner .player-close { right: .35rem; }
   .player.corner .player-corner { right: 2.5rem; }
-  .player.corner .corner-out, .player.corner .corner-in { display: none; }
-  .player.corner .corner-back { display: block; }
+
   .player.corner .player-note { padding: 0 .6rem .6rem; }
   /* The way back to the top sits where the video now is, so it steps up over it. */
   body.video-corner .to-top { bottom: calc(2rem + min(22rem, 100vw - 2rem) * 0.5625); }
