@@ -529,7 +529,6 @@ PLAYER = """<dialog class="player" aria-label="Video">
 <button class="player-corner" aria-label="Play over the page"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="to-corner"><rect x="2" y="3" width="12" height="10" rx="1.5"/><rect x="7.75" y="7.75" width="5" height="4" rx="1"/></g><g class="to-page"><path d="M6.5 3.5h-3v3M3.5 3.5l4 4M9.5 12.5h3v-3M12.5 12.5l-4-4"/></g></svg></button>
 <button class="player-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
 <div class="player-frame"></div>
-<div class="player-mask" aria-hidden="true"></div>
 <p class="player-note" hidden>This video can’t be played here. <a href="">Watch it on YouTube</a></p>
 </dialog>
 """
@@ -591,8 +590,6 @@ INDEX_JS = """
       events: {
         onReady: () => dialog.classList.add("ready"),
         onStateChange: event => {
-          // YouTube draws its title over the video whenever it isn't playing; the mask follows it.
-          dialog.classList.toggle("still", event.data !== YT.PlayerState.PLAYING);
           // The player takes the keyboard when it starts; give it back once, so Esc closes the window.
           if (event.data === YT.PlayerState.PLAYING && !started) {
             started = true;
@@ -934,15 +931,6 @@ CSS = """
   .player.corner .player-corner { right: 2.5rem; }
 
   .player.corner .player-note { padding: 0 .6rem .6rem; }
-  /* In the corner, YouTube's title over the video takes a fifth of a window that small, and the name of the
-     thing is already the line in the list that was clicked. It's covered where it's drawn — on hover, and
-     whenever the video isn't playing — leaving the channel's mark, which is small and says whose it is. The
-     cover takes no clicks: a click on the video still stops and starts it. */
-  .player-mask { display: none; }
-  .player.corner .player-mask { display: block; position: absolute; top: 0; left: 2.9rem; right: 0; height: 2.4rem;
-                                background: linear-gradient(#000 55%, rgba(0, 0, 0, 0)); opacity: 0;
-                                transition: opacity .15s; pointer-events: none; }
-  .player.corner:hover .player-mask, .player.corner.still .player-mask { opacity: 1; }
   /* Coming up in the corner: a short rise and fade, so a window appearing at the edge of the eye is a movement
      rather than a jump; and the video itself fades in when it's there, rather than snapping in over the dark. */
   .player.corner[open] { animation: corner-in .25s ease-out; }
