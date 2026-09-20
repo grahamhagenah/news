@@ -657,29 +657,38 @@ INDEX_JS = """
     }
   }
   corner.addEventListener("click", async () => {
+    // On the screen already: leave it, which puts it back in the corner.
     if (document.fullscreenElement) {
-      await document.exitFullscreen().catch(() => {});  // The leaving puts it back in the corner.
+      await document.exitFullscreen().catch(() => {});
       return;
     }
-    // The whole screen, in one step. Where a browser won't give it — iPhones don't, for anything but a video
-    // of their own, and a browser may refuse — the window over the page is what there is.
+    // Over the page, where it lands when the screen was refused: back to the corner.
+    if (!dialog.classList.contains("corner")) {
+      dialog.close();
+      moveTo(true);
+      return;
+    }
+    // In the corner: the whole screen, in one step. The frame is what's asked to fill it rather than the
+    // window around it, a plain element being surer of it than a dialog. Where a browser won't grant it —
+    // iPhones don't, for anything but a video of their own — the window over the page is what there is.
     moveTo(false);
-    const overThePage = () => {
+    const frame = dialog.querySelector(".player-frame");
+    try {
+      const asked = (frame.requestFullscreen ?? dialog.requestFullscreen)?.call(frame.requestFullscreen ? frame : dialog);
+      if (asked) await asked; else throw new Error("no full screen here");
+    } catch (refused) {
+      console.warn("Pushpin: the browser wouldn't give the screen —", refused?.message || refused);
       dialog.classList.remove("filling");
       dialog.close();
       dialog.showModal();
-    };
-    try {
-      const asked = dialog.requestFullscreen?.();
-      if (asked) await asked; else overThePage();
-    } catch {
-      overThePage();
     }
   });
   // Left by Esc, by the browser's own way out, or by the button: back to the corner, playing on.
   document.addEventListener("fullscreenchange", () => {
-    dialog.classList.toggle("filling", Boolean(document.fullscreenElement));
-    if (!document.fullscreenElement && dialog.open) moveTo(true);
+    const filling = Boolean(document.fullscreenElement);
+    dialog.classList.toggle("filling", filling);
+    corner.setAttribute("aria-label", filling ? "Play in the corner" : corner.getAttribute("aria-label"));
+    if (!filling && dialog.open) moveTo(true);
   });
   // Outside the video, which is the page itself only while the window is over it.
   dialog.addEventListener("click", event => {
@@ -975,10 +984,10 @@ CSS = """
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
   /* The whole screen: the video takes all of it, whatever shape the screen is, and the × and the way back to
      the corner sit over it. */
-  .player:fullscreen { width: 100vw; max-width: none; height: 100vh; background: #000; }
-  .player:fullscreen .player-frame { aspect-ratio: auto; height: 100%; }
-  .player:fullscreen .player-close, .player:fullscreen .player-corner { position: fixed; top: 1rem;
-                                    background: rgba(0, 0, 0, .55); color: #fff; }
+  .player-frame:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
+  .player.filling { width: 100vw; max-width: none; padding: 0; background: #000; }
+  .player.filling .player-close, .player.filling .player-corner { position: fixed; top: 1rem; z-index: 4;
+                                 background: rgba(0, 0, 0, .55); color: #fff; }
   .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
   .player-note { margin: .75rem 0 0; color: #999; font-size: .85rem; }
   .player-note a { color: #fff; text-decoration: underline; text-underline-offset: .2em; }
