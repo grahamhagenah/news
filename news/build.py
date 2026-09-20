@@ -960,9 +960,12 @@ CSS = """
   .player-close:focus, .player-corner:focus { outline: none; }
   /* In the corner: a small window of its own, over the page but out of the way, the page reading and scrolling
      behind it. Its buttons come along, on the video itself, where there's nowhere else to put them. */
-  .player.corner { position: fixed; z-index: 3; inset: auto 1rem 1rem auto; width: min(22rem, calc(100vw - 2rem));
-                   border-radius: 10px; overflow: hidden; box-shadow: 0 8px 40px rgba(0, 0, 0, .6); }
-  .player.corner .player-frame { border-radius: 10px; }
+  .player.corner { position: fixed; z-index: 3; inset: auto 1.25rem 1.25rem auto; width: min(26rem, calc(100vw - 2rem));
+                   border-radius: 12px; overflow: hidden;
+                   /* A window of its own, not a hole in the page: a hairline around it, a dark ground under it,
+                      and a shadow deep enough to lift it off a page that's black to begin with. */
+                   box-shadow: 0 0 0 1px #333, 0 18px 50px rgba(0, 0, 0, .85), 0 2px 8px rgba(0, 0, 0, .6); }
+  .player.corner .player-frame { border-radius: 12px; }
   .player.corner .player-close, .player.corner .player-corner { position: absolute; top: .35rem; width: 1.9rem;
                    height: 1.9rem; background: rgba(0, 0, 0, .55); color: #fff; }
   .player.corner .player-close { right: .35rem; }
@@ -980,7 +983,7 @@ CSS = """
     .player-frame > * { transition: none; opacity: 1; }
   }
   /* The way back to the top sits where the video now is, so it steps up over it. */
-  body.video-corner .to-top { bottom: calc(2rem + min(22rem, 100vw - 2rem) * 0.5625); }
+  body.video-corner .to-top { bottom: calc(2.25rem + min(26rem, 100vw - 2rem) * 0.5625); }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
   /* The whole screen: the video takes all of it, whatever shape the screen is, and the × and the way back to
      the corner sit over it. */
