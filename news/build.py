@@ -528,6 +528,7 @@ def render_index(feeds, posts, failed, stale, built_at):
 PLAYER = """<dialog class="player" aria-label="Video">
 <button class="player-corner" aria-label="Play over the page"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="to-corner"><rect x="2" y="3" width="12" height="10" rx="1.5"/><rect x="7.75" y="7.75" width="5" height="4" rx="1"/></g><g class="to-page"><path d="M6.5 3.5h-3v3M3.5 3.5l4 4M9.5 12.5h3v-3M12.5 12.5l-4-4"/></g></svg></button>
 <button class="player-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
+<div class="player-bar"></div>
 <div class="player-frame"></div>
 <p class="player-note" hidden>This video can’t be played here. <a href="">Watch it on YouTube</a></p>
 </dialog>
@@ -633,6 +634,7 @@ INDEX_JS = """
     player = null;
     dialog.querySelector(".player-frame").replaceChildren();
     dialog.classList.remove("corner");
+    dialog.style.inset = "";  // Back to the corner it starts in, for the next video.
     document.body.classList.remove("video-corner");
   });
   // In the corner the video keeps playing while the list is read and scrolled behind it; the same button puts
@@ -689,6 +691,36 @@ INDEX_JS = """
     dialog.classList.toggle("filling", filling);
     corner.setAttribute("aria-label", filling ? "Play in the corner" : corner.getAttribute("aria-label"));
     if (!filling && dialog.open) moveTo(true);
+  });
+  // Dragging the corner window by its bar: the video itself can't be taken hold of, being YouTube's own page,
+  // which answers every press inside it. Where it's put is remembered while it plays and forgotten when it
+  // closes, and it's kept whole on the screen, both as it's dragged and if the window is resized under it.
+  const bar = dialog.querySelector(".player-bar");
+  let held = null;
+  const putAt = (left, top) => {
+    const box = dialog.getBoundingClientRect();
+    const x = Math.min(Math.max(left, 8), Math.max(8, innerWidth - box.width - 8));
+    const y = Math.min(Math.max(top, 8), Math.max(8, innerHeight - box.height - 8));
+    dialog.style.inset = `${y}px auto auto ${x}px`;
+  };
+  bar.addEventListener("pointerdown", event => {
+    if (!dialog.classList.contains("corner")) return;
+    const box = dialog.getBoundingClientRect();
+    held = { x: event.clientX - box.left, y: event.clientY - box.top };
+    bar.setPointerCapture(event.pointerId);
+    dialog.classList.add("dragging");
+  });
+  bar.addEventListener("pointermove", event => {
+    if (held) putAt(event.clientX - held.x, event.clientY - held.y);
+  });
+  for (const ending of ["pointerup", "pointercancel"]) {
+    bar.addEventListener(ending, () => { held = null; dialog.classList.remove("dragging"); });
+  }
+  addEventListener("resize", () => {
+    if (dialog.style.inset && dialog.classList.contains("corner")) {
+      const box = dialog.getBoundingClientRect();
+      putAt(box.left, box.top);
+    }
   });
   // Outside the video, which is the page itself only while the window is over it.
   dialog.addEventListener("click", event => {
@@ -965,11 +997,18 @@ CSS = """
                    /* A window of its own, not a hole in the page: a hairline around it, a dark ground under it,
                       and a shadow deep enough to lift it off a page that's black to begin with. */
                    box-shadow: 0 0 0 1px #333, 0 18px 50px rgba(0, 0, 0, .85), 0 2px 8px rgba(0, 0, 0, .6); }
-  .player.corner .player-frame { border-radius: 12px; }
-  .player.corner .player-close, .player.corner .player-corner { position: absolute; top: .35rem; width: 1.9rem;
-                   height: 1.9rem; background: rgba(0, 0, 0, .55); color: #fff; }
-  .player.corner .player-close { right: .35rem; }
-  .player.corner .player-corner { right: 2.5rem; }
+  .player.corner .player-frame { border-radius: 0 0 12px 12px; }
+  /* A bar across the top: what the buttons sit in, and what the window is taken hold of by. Above the video
+     rather than over it, so it covers none of it. */
+  .player-bar { display: none; }
+  .player.corner .player-bar { display: block; height: 1.9rem; background: #101010; cursor: grab;
+                               touch-action: none; }
+  .player.corner.dragging .player-bar { cursor: grabbing; }
+  .player.corner .player-close, .player.corner .player-corner { position: absolute; top: .15rem; width: 1.6rem;
+                   height: 1.6rem; background: none; color: #999; }
+  .player.corner .player-close { right: .3rem; }
+  .player.corner .player-corner { right: 2.1rem; }
+  .player.corner .player-close:hover, .player.corner .player-corner:hover { background: #262626; color: #fff; }
 
   .player.corner .player-note { padding: 0 .6rem .6rem; }
   /* Coming up in the corner: a short rise and fade, so a window appearing at the edge of the eye is a movement
