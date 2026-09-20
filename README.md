@@ -8,6 +8,7 @@ Two plain, black pages built from the same code:
 ## What's where
 
 - `news/`: the newsfeed. `feeds.txt` lists its sites; `build.py` reads their feeds (and links podcast episodes to Pocket Casts); `sources.py` is the bot behind the "Add a site" page.
+- `events/verify/` is published at pushpin.city's root as it is, for a file a service asks for to know the site is ours (Google Search Console's `googleXXXX.html`).
 - `events/`: the events page. `sources.txt` lists its venues and how to read each (Boston's; `sources-westernma.txt` and `sources-bayarea.txt` for the other cities); `skip.txt` has words and phrases that keep a listing off both events pages when its name has one ("comedy"), except films; `build.py` has a reader for each kind of source and combines a film showing at several theaters into one row; `find_venue.py` looks up Ticketmaster venue ids.
 - `shared/`: what both use. `site.py` has the page around each list (head, header, the styles they share, icons, the script that ages timestamps), fetching with retries, and the fallback and failure bookkeeping; `alerts.py` opens and closes "Source failing" issues.
 - `tests/`: each page's readers against saved samples of real sources (`tests/fixtures/news`, `tests/fixtures/events`), the fallback rules, and the shared page and alerts.

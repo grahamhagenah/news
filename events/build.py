@@ -4251,6 +4251,9 @@ def main():
         write_city(city, *by_city(city, events, sources, failed, stale), built_at)
     use_city(BOSTON_CITY)
     shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
+    # Anything a service wants to find at the site's root to know the site is ours: Google Search Console's
+    # googleXXXX.html, say. Dropped in events/verify, published as it is.
+    shutil.copytree(ROOT / "verify", PUBLIC_DIR, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".gitkeep"))
     shutil.copytree(ROOT / "share" / "site", PUBLIC_DIR / "share", dirs_exist_ok=True)
     (PUBLIC_DIR / "index.html").write_text(render_cities(CITIES))
     (PUBLIC_DIR / "contact").mkdir(exist_ok=True)
