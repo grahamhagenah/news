@@ -576,6 +576,7 @@ INDEX_JS = """
     const holder = document.createElement("div");
     dialog.querySelector(".player-frame").replaceChildren(holder);
     let started = false;
+    dialog.classList.remove("ready");  // Until the video is there to show, the frame stays dark and empty.
     return new YT.Player(holder, {
       host: "https://www.youtube-nocookie.com",
       videoId,
@@ -587,6 +588,7 @@ INDEX_JS = """
       playerVars: { autoplay: 1, rel: 0, iv_load_policy: 3, playsinline: 1,
                     controls: corner ? 0 : 1, start: Math.floor(from) },
       events: {
+        onReady: () => dialog.classList.add("ready"),
         onStateChange: event => {
           // The player takes the keyboard when it starts; give it back once, so Esc closes the window.
           if (event.data === YT.PlayerState.PLAYING && !started) {
@@ -929,6 +931,16 @@ CSS = """
   .player.corner .player-corner { right: 2.5rem; }
 
   .player.corner .player-note { padding: 0 .6rem .6rem; }
+  /* Coming up in the corner: a short rise and fade, so a window appearing at the edge of the eye is a movement
+     rather than a jump; and the video itself fades in when it's there, rather than snapping in over the dark. */
+  .player.corner[open] { animation: corner-in .25s ease-out; }
+  @keyframes corner-in { from { opacity: 0; transform: translateY(.75rem) scale(.97); } }
+  .player-frame > * { opacity: 0; transition: opacity .3s ease-out; }
+  .player.ready .player-frame > * { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .player.corner[open] { animation: none; }
+    .player-frame > * { transition: none; opacity: 1; }
+  }
   /* The way back to the top sits where the video now is, so it steps up over it. */
   body.video-corner .to-top { bottom: calc(2rem + min(22rem, 100vw - 2rem) * 0.5625); }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
