@@ -620,6 +620,7 @@ INDEX_JS = """
     dialog.classList.add("corner");
     document.body.classList.add("video-corner");
     dialog.show();
+    corner.setAttribute("aria-label", "Fill the screen");
     await loadYouTube();
     if (!dialog.open) return; // Closed while the player loaded.
     player = mount(a.closest("li").dataset.video, { corner: true });
@@ -637,20 +638,48 @@ INDEX_JS = """
   // In the corner the video keeps playing while the list is read and scrolled behind it; the same button puts
   // it back over the page. The window itself never leaves the page, so the video isn't interrupted: it's the
   // same element, closed and shown again, rather than a frame moved somewhere else, which would reload it.
+  // Two states, and the button goes between them: in the corner, small and quiet, or the whole screen. A
+  // player is made for wherever it's going, from the second the video had reached, since whether it carries
+  // YouTube's controls is settled when it's made.
   const corner = dialog.querySelector(".player-corner");
-  corner.addEventListener("click", () => {
+  function moveTo(tucked) {
     const video = player?.getVideoData?.().video_id;
     const from = player?.getCurrentTime?.() || 0;
-    const tucked = dialog.classList.toggle("corner");
+    dialog.classList.toggle("corner", tucked);
     document.body.classList.toggle("video-corner", tucked);  // The way back to the top steps over the video.
-    dialog.close();
-    if (tucked) dialog.show(); else dialog.showModal();
-    corner.setAttribute("aria-label", tucked ? "Play over the page" : "Play in the corner");
+    if (!dialog.open) {  // Shown as a window of its own either way; the screen it fills is the browser's doing.
+      dialog.show();
+    }
+    corner.setAttribute("aria-label", tucked ? "Fill the screen" : "Play in the corner");
     if (video) {
       player.destroy();
       player = mount(video, { corner: tucked, from });
     }
-    if (!tucked) dialog.querySelector(".player-close").focus();
+  }
+  corner.addEventListener("click", async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => {});  // The leaving puts it back in the corner.
+      return;
+    }
+    // The whole screen, in one step. Where a browser won't give it — iPhones don't, for anything but a video
+    // of their own, and a browser may refuse — the window over the page is what there is.
+    moveTo(false);
+    const overThePage = () => {
+      dialog.classList.remove("filling");
+      dialog.close();
+      dialog.showModal();
+    };
+    try {
+      const asked = dialog.requestFullscreen?.();
+      if (asked) await asked; else overThePage();
+    } catch {
+      overThePage();
+    }
+  });
+  // Left by Esc, by the browser's own way out, or by the button: back to the corner, playing on.
+  document.addEventListener("fullscreenchange", () => {
+    dialog.classList.toggle("filling", Boolean(document.fullscreenElement));
+    if (!document.fullscreenElement && dialog.open) moveTo(true);
   });
   // Outside the video, which is the page itself only while the window is over it.
   dialog.addEventListener("click", event => {
@@ -944,6 +973,12 @@ CSS = """
   /* The way back to the top sits where the video now is, so it steps up over it. */
   body.video-corner .to-top { bottom: calc(2rem + min(22rem, 100vw - 2rem) * 0.5625); }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
+  /* The whole screen: the video takes all of it, whatever shape the screen is, and the × and the way back to
+     the corner sit over it. */
+  .player:fullscreen { width: 100vw; max-width: none; height: 100vh; background: #000; }
+  .player:fullscreen .player-frame { aspect-ratio: auto; height: 100%; }
+  .player:fullscreen .player-close, .player:fullscreen .player-corner { position: fixed; top: 1rem;
+                                    background: rgba(0, 0, 0, .55); color: #fff; }
   .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
   .player-note { margin: .75rem 0 0; color: #999; font-size: .85rem; }
   .player-note a { color: #fff; text-decoration: underline; text-underline-offset: .2em; }
