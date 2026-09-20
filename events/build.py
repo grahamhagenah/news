@@ -1718,17 +1718,15 @@ TAPOS_TIME = re.compile(r'<span class="showtime-button-time">\s*(\d{1,2}):(\d{2}
 
 
 def tapos_day(text, today):
-    """"Thursday September 17th", which carries no year: the next such date from today, so a January showing
-    read in December falls in the year it's in, not the one just gone."""
+    """"Thursday September 17th", which carries no year: this year's, unless that's months behind, which is how
+    a January showing read in December tells itself apart from the January just gone. The same two months'
+    grace the other readers of a yearless date allow, so a page still showing last week doesn't jump a year."""
     _, month, day = text.split()
-    for year in (today.year, today.year + 1):
-        try:
-            found = datetime.strptime(f"{month} {day} {year}", "%B %d %Y").date()
-        except ValueError:
-            return None
-        if found >= today - timedelta(days=1):
-            return found
-    return None
+    try:
+        found = datetime.strptime(f"{month} {day} {today.year}", "%B %d %Y").date()
+    except ValueError:
+        return None
+    return found.replace(year=today.year + 1) if found < today - timedelta(days=60) else found
 
 
 def read_tapos(source):

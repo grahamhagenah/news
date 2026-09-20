@@ -357,8 +357,10 @@ class Readers(unittest.TestCase):
         found = self.read("tapos", "https://www.internet-ticketing.com/websales/sales/LEXLEX/start", "film")
         coyote = sorted((item["date"], item["times"]) for item in found if item["title"] == "Coyote vs. Acme")
         # Three days, a showing each: the times run on in the page under headings with no end of their own.
-        self.assertEqual(coyote, [(date(2026, 9, 17), [time(18, 45)]), (date(2026, 9, 18), [time(19, 15)]),
-                                  (date(2026, 9, 19), [time(17, 0)])])
+        # The sample's headings carry no year, so the days are read as this year's, whenever this test runs.
+        self.assertEqual([(day.month, day.day, times) for day, times in coyote],
+                         [(9, 17, [time(18, 45)]), (9, 18, [time(19, 15)]), (9, 19, [time(17, 0)])])
+        self.assertEqual(len({day.year for day, _ in coyote}), 1)
         self.assertEqual(found[0]["image"], "https://image.tmdb.org/t/p/w780/vhv7lBWYM0DUuNU2a0V7Rhq21dD.jpg")
         self.assertTrue(any("billboard lawyer" in line for line in found[0]["about"]))
         # A film with no certificate says "Rating N/A" where one would go; that isn't part of its name.
