@@ -526,6 +526,7 @@ def render_index(feeds, posts, failed, stale, built_at):
 
 # Where a video plays: over the list, with a way to close it, and nothing else. (The player shows its name.)
 PLAYER = """<dialog class="player" aria-label="Video">
+<button class="player-corner" aria-label="Play in the corner"><svg viewBox="0 0 16 16" aria-hidden="true"><rect class="corner-out" x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5"/><rect class="corner-in" x="8" y="8" width="5.5" height="4.5" rx="1"/><path class="corner-back" d="M6 10H3.5V7.5M3.5 10l4-4M10 6h2.5V3.5M12.5 6l-4 4"/></svg></button>
 <button class="player-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
 <div class="player-frame"></div>
 <p class="player-note" hidden>This video can’t be played here. <a href="">Watch it on YouTube</a></p>
@@ -570,6 +571,15 @@ INDEX_JS = """
     document.head.append(Object.assign(document.createElement("script"), { src: "https://www.youtube.com/iframe_api" }));
   });
   async function play(a) {
+    // Another video, with one already playing (in the corner, most likely): the window closes on the old one
+    // first, and the wait is for the closing to be done with — it takes the player apart a moment later, and
+    // would take the new one apart with it.
+    if (dialog.open) {
+      dialog.classList.remove("corner");
+      document.body.classList.remove("video-corner");
+      dialog.close();
+      await new Promise(done => setTimeout(done));
+    }
     dialog.setAttribute("aria-label", a.textContent);
     note.querySelector("a").href = a.href;
     note.hidden = true;
@@ -600,11 +610,31 @@ INDEX_JS = """
     });
   }
   dialog.addEventListener("close", () => {
+    // Moved to the corner, or back: the window is shown again in the same breath, and what's playing in it
+    // carries on. Taking the player apart here would stop the video the move is meant to keep.
+    if (dialog.open) return;
     if (player) player.destroy();
     player = null;
     dialog.querySelector(".player-frame").replaceChildren();
+    dialog.classList.remove("corner");
+    document.body.classList.remove("video-corner");
   });
-  dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); }); // Outside the video.
+  // In the corner the video keeps playing while the list is read and scrolled behind it; the same button puts
+  // it back over the page. The window itself never leaves the page, so the video isn't interrupted: it's the
+  // same element, closed and shown again, rather than a frame moved somewhere else, which would reload it.
+  const corner = dialog.querySelector(".player-corner");
+  corner.addEventListener("click", () => {
+    const tucked = dialog.classList.toggle("corner");
+    document.body.classList.toggle("video-corner", tucked);  // The way back to the top steps over the video.
+    dialog.close();
+    if (tucked) dialog.show(); else dialog.showModal();
+    corner.setAttribute("aria-label", tucked ? "Play over the page" : "Play in the corner");
+    if (!tucked) dialog.querySelector(".player-close").focus();
+  });
+  // Outside the video, which is the page itself only while the window is over it.
+  dialog.addEventListener("click", event => {
+    if (event.target === dialog && !dialog.classList.contains("corner")) dialog.close();
+  });
   dialog.querySelector(".player-close").addEventListener("click", () => dialog.close());
   // Esc, which the dialog closes on by itself in most browsers. Once the video has been clicked, keys go to
   // YouTube's player instead, and the × or a click outside the video closes it.
@@ -853,13 +883,33 @@ CSS = """
   .player { width: min(64rem, 100vw - 2.5rem); max-width: none; max-height: none; padding: 0; border: 0;
             background: none; color: #fff; overflow: visible; }
   .player::backdrop { background: #000; }
-  /* Closing it: a thin × in the window's corner, in a circle that lights up faintly on hover. */
-  .player-close { position: fixed; top: 1rem; right: 1rem; display: grid; place-items: center; width: 2.25rem;
+  /* Its buttons: a thin × to close, and one to send the video to the corner, each in a circle that lights up
+     faintly on hover. Over the page they sit in the window's corner; in the corner they sit on the video. */
+  .player-close, .player-corner { position: fixed; top: 1rem; display: grid; place-items: center; width: 2.25rem;
                   height: 2.25rem; padding: 0; border: 0; border-radius: 50%; background: none; color: #777; cursor: pointer;
                   transition: background-color .15s, color .15s; }
-  .player-close svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-  .player-close:hover, .player-close:focus-visible { background: #1a1a1a; color: #fff; }
-  .player-close:focus { outline: none; }
+  .player-close { right: 1rem; }
+  .player-corner { right: 3.5rem; }
+  .player-close svg, .player-corner svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+  .player-corner .corner-in { fill: currentColor; stroke: none; }
+  .player-corner .corner-back { display: none; }  /* The way back, shown only once it's in the corner. */
+  .player-close:hover, .player-close:focus-visible,
+  .player-corner:hover, .player-corner:focus-visible { background: #1a1a1a; color: #fff; }
+  .player-close:focus, .player-corner:focus { outline: none; }
+  /* In the corner: a small window of its own, over the page but out of the way, the page reading and scrolling
+     behind it. Its buttons come along, on the video itself, where there's nowhere else to put them. */
+  .player.corner { position: fixed; z-index: 3; inset: auto 1rem 1rem auto; width: min(22rem, calc(100vw - 2rem));
+                   border-radius: 10px; overflow: hidden; box-shadow: 0 8px 40px rgba(0, 0, 0, .6); }
+  .player.corner .player-frame { border-radius: 10px; }
+  .player.corner .player-close, .player.corner .player-corner { position: absolute; top: .35rem; width: 1.9rem;
+                   height: 1.9rem; background: rgba(0, 0, 0, .55); color: #fff; }
+  .player.corner .player-close { right: .35rem; }
+  .player.corner .player-corner { right: 2.5rem; }
+  .player.corner .corner-out, .player.corner .corner-in { display: none; }
+  .player.corner .corner-back { display: block; }
+  .player.corner .player-note { padding: 0 .6rem .6rem; }
+  /* The way back to the top sits where the video now is, so it steps up over it. */
+  body.video-corner .to-top { bottom: calc(2rem + min(22rem, 100vw - 2rem) * 0.5625); }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
   .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
   .player-note { margin: .75rem 0 0; color: #999; font-size: .85rem; }
