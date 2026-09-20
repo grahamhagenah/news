@@ -694,6 +694,26 @@ class Facts(unittest.TestCase):
         self.assertEqual(build.combine_films([dict(film, category="film") for film in films])[0]["image"], "https://b/1.jpg")
 
 
+class StructuredData(unittest.TestCase):
+    def test_a_listing_gives_what_it_knows_and_no_more(self):
+        sinclair = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+        priced = build.event(sinclair, "A show", date(2026, 9, 22), time(20, 0),
+                             image="https://example.com/a.jpg", price="$20–$60", link="https://example.com/tickets")
+        data = build.event_data(priced)
+        self.assertEqual(data["image"], "https://example.com/a.jpg")
+        self.assertEqual({data["offers"]["@type"], data["offers"]["lowPrice"], data["offers"]["highPrice"]},
+                         {"AggregateOffer", "20", "60"})
+        self.assertEqual(build.event_data(build.event(sinclair, "Free show", date(2026, 9, 22), time(20, 0),
+                                                      price="Free"))["offers"]["price"], "0")
+        # Nothing invented: a listing with no price and no picture says neither.
+        bare = build.event_data(build.event(sinclair, "A show", date(2026, 9, 22), time(20, 0)))
+        self.assertNotIn("offers", bare)
+        self.assertNotIn("image", bare)
+        # Sold out, where the source says so.
+        gone = build.event_data(build.event(sinclair, "A show", date(2026, 9, 22), time(20, 0), price="$20", sold_out=True))
+        self.assertEqual(gone["offers"]["availability"], "https://schema.org/SoldOut")
+
+
 class Descriptions(unittest.TestCase):
     def test_all_of_it_kept_and_a_preview_clipped(self):
         long = "\n\n".join(f"Paragraph {n} says a good deal about the show, the band, and the night ahead of us all." for n in range(8))

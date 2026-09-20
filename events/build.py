@@ -2557,7 +2557,28 @@ def event_data(item):
     if item.get("about"):
         first = item["about"][0]
         data["description"] = first if len(first) <= 160 else first[:160].rsplit(" ", 1)[0] + "…"
+    if item.get("image"):
+        data["image"] = item["image"]
+    offer = offer_data(item)
+    if offer:
+        data["offers"] = offer
     return data
+
+
+def offer_data(item):
+    """What a ticket costs, where the source says: one price, or the two ends of a range, with the venue's own
+    page to buy it at. Only where there's a price to give — most listings have none, and a made-up one would be
+    worse than none at all."""
+    sold = "https://schema.org/SoldOut" if item.get("sold_out") else "https://schema.org/InStock"
+    amounts = [found.replace(",", "") for found in re.findall(r"\d+(?:\.\d{2})?", item.get("price", ""))]
+    if item.get("price", "").casefold() == "free":
+        amounts = ["0"]
+    if not amounts:
+        return None
+    shared = {"priceCurrency": "USD", "url": item["link"], "availability": sold}
+    if len(amounts) == 1:
+        return {"@type": "Offer", "price": amounts[0], **shared}
+    return {"@type": "AggregateOffer", "lowPrice": min(amounts, key=float), "highPrice": max(amounts, key=float), **shared}
 
 
 def shorter(paragraphs):
