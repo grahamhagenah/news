@@ -527,6 +527,7 @@ def render_index(feeds, posts, failed, stale, built_at):
 # Where a video plays: over the list, with a way to close it, and nothing else. (The player shows its name.)
 PLAYER = """<dialog class="player" aria-label="Video">
 <button class="player-corner" aria-label="Play over the page"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="to-corner"><rect x="2" y="3" width="12" height="10" rx="1.5"/><rect x="7.75" y="7.75" width="5" height="4" rx="1"/></g><g class="to-page"><path d="M6.5 3.5h-3v3M3.5 3.5l4 4M9.5 12.5h3v-3M12.5 12.5l-4-4"/></g></svg></button>
+<button class="player-copy" aria-label="Copy link"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="copy-link"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/></g><g class="copy-done"><path d="M3.5 8.5l3 3 6-6"/></g></svg></button>
 <button class="player-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
 <div class="player-bar"></div>
 <div class="player-frame"></div>
@@ -566,7 +567,7 @@ INDEX_JS = """
   // YouTube, in a new tab.
   const dialog = document.querySelector(".player");
   const note = dialog.querySelector(".player-note");
-  let player = null, youtube = null;
+  let player = null, youtube = null, playing = "";
   const loadYouTube = () => youtube ??= new Promise(resolve => {
     window.onYouTubeIframeAPIReady = resolve;
     document.head.append(Object.assign(document.createElement("script"), { src: "https://www.youtube.com/iframe_api" }));
@@ -614,6 +615,7 @@ INDEX_JS = """
       await new Promise(done => setTimeout(done));
     }
     dialog.setAttribute("aria-label", a.textContent);
+    playing = a.href;  // What the copy button sends on: the video's own address, not this page's.
     note.querySelector("a").href = a.href;
     note.hidden = true;
     // In the corner to begin with: a video is something to have on while the list is read, and it's one
@@ -721,6 +723,27 @@ INDEX_JS = """
       const box = dialog.getBoundingClientRect();
       putAt(box.left, box.top);
     }
+  });
+  // The video's own address, to send to someone or keep: taken from the link that opened it, since the frame
+  // is YouTube's page and says nothing about where it came from. The mark turns to a tick for a moment.
+  const copy = dialog.querySelector(".player-copy");
+  copy.addEventListener("click", async () => {
+    if (!playing) return;
+    try {
+      await navigator.clipboard.writeText(playing);
+    } catch {
+      const field = Object.assign(document.createElement("textarea"), { value: playing });
+      document.body.append(field);
+      field.select();
+      document.execCommand("copy");
+      field.remove();
+    }
+    copy.classList.add("copied");
+    copy.setAttribute("aria-label", "Link copied");
+    setTimeout(() => {
+      copy.classList.remove("copied");
+      copy.setAttribute("aria-label", "Copy link");
+    }, 1600);
   });
   // Outside the video, which is the page itself only while the window is over it.
   dialog.addEventListener("click", event => {
@@ -976,20 +999,26 @@ CSS = """
   .player::backdrop { background: #000; }
   /* Its buttons: a thin × to close, and one to send the video to the corner, each in a circle that lights up
      faintly on hover. Over the page they sit in the window's corner; in the corner they sit on the video. */
-  .player-close, .player-corner { position: fixed; top: 1rem; display: grid; place-items: center; width: 2.25rem;
+  .player-close, .player-corner, .player-copy { position: fixed; top: 1rem; display: grid; place-items: center; width: 2.25rem;
                   height: 2.25rem; padding: 0; border: 0; border-radius: 50%; background: none; color: #777; cursor: pointer;
                   transition: background-color .15s, color .15s; }
   .player-close { right: 1rem; }
   .player-corner { right: 3.5rem; }
-  .player-close svg, .player-corner svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+  .player-copy { right: 6rem; }
+  /* Its mark turns to a tick for a moment once the link is taken. */
+  .player-copy .copy-done, .player-copy.copied .copy-link { display: none; }
+  .player-copy.copied .copy-done { display: block; }
+  .player-copy.copied { color: #4ade80; }
+  .player-close svg, .player-corner svg, .player-copy svg { width: 1rem; height: 1rem; fill: none;
+                   stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   .player-corner .to-corner rect + rect { fill: currentColor; stroke: none; }
   /* Over the page it shows the way to the corner; in the corner, the way back over the page. */
   .player-corner .to-page { display: none; }
   .player.corner .player-corner .to-corner { display: none; }
   .player.corner .player-corner .to-page { display: block; }
-  .player-close:hover, .player-close:focus-visible,
-  .player-corner:hover, .player-corner:focus-visible { background: #1a1a1a; color: #fff; }
-  .player-close:focus, .player-corner:focus { outline: none; }
+  .player-close:hover, .player-close:focus-visible, .player-corner:hover, .player-corner:focus-visible,
+  .player-copy:hover, .player-copy:focus-visible { background: #1a1a1a; color: #fff; }
+  .player-close:focus, .player-corner:focus, .player-copy:focus { outline: none; }
   /* In the corner: a small window of its own, over the page but out of the way, the page reading and scrolling
      behind it. Its buttons come along, on the video itself, where there's nowhere else to put them. */
   .player.corner { position: fixed; z-index: 3; inset: auto 1.25rem 1.25rem auto; width: min(26rem, calc(100vw - 2rem));
@@ -1008,12 +1037,17 @@ CSS = """
                                -webkit-backdrop-filter: blur(14px) saturate(1.4);
                                border-bottom: 1px solid rgba(255, 255, 255, .07); }
   .player.corner.dragging .player-bar { cursor: grabbing; }
-  .player.corner .player-close, .player.corner .player-corner { position: absolute; top: .1rem; width: 1.3rem;
-                   height: 1.3rem; background: none; color: #999; }
+  /* In the bar, and above it: the bar is glass, which blurs whatever it's drawn over, and these are drawn
+     before it. */
+  .player.corner .player-close, .player.corner .player-corner, .player.corner .player-copy {
+                   position: absolute; z-index: 1; top: .1rem; width: 1.3rem; height: 1.3rem; background: none; color: #999; }
   .player.corner .player-close { right: .25rem; }
   .player.corner .player-corner { right: 1.7rem; }
-  .player.corner .player-close svg, .player.corner .player-corner svg { width: .8rem; height: .8rem; }
-  .player.corner .player-close:hover, .player.corner .player-corner:hover { background: #262626; color: #fff; }
+  .player.corner .player-copy { right: 3.15rem; }
+  .player.corner .player-close svg, .player.corner .player-corner svg,
+  .player.corner .player-copy svg { width: .8rem; height: .8rem; }
+  .player.corner .player-close:hover, .player.corner .player-corner:hover,
+  .player.corner .player-copy:hover { background: #262626; color: #fff; }
 
   .player.corner .player-note { padding: 0 .6rem .6rem; }
   /* Coming up in the corner: a short rise and fade, so a window appearing at the edge of the eye is a movement
