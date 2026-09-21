@@ -377,14 +377,20 @@ CSS = """
   summary { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .8rem 0;
             cursor: pointer; list-style: none; font-weight: 700; }
   summary::-webkit-details-marker { display: none; }
-  summary::before { content: "›"; display: inline-block; width: 1em; color: #666; transition: transform .15s; }
+  /* A chevron drawn to a square and turned about its middle, so open or shut it sits level with the town's name
+     (a "›" turned with its line of text drops below it). */
+  summary::before { content: ""; flex: none; align-self: center; width: 12px; height: 12px; margin-right: .1rem;
+                    background: #666; transition: transform .15s;
+                    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5 2.5L8 6l-3.5 3.5' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+                    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5 2.5L8 6l-3.5 3.5' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
+  summary:hover::before { background: #999; }
   details[open] > summary::before { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }
   summary .town { flex: 1; }
   summary .count { color: #666; font-size: .8rem; font-weight: normal; }
   details > ul { padding-bottom: 1rem; }
   .from { margin: -.3rem 0 .6rem; color: #666; font-size: .8rem; }
   .from a { color: #999; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
-  .from.stale { color: #b08a4a; }
   .row .details { flex: none; margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .row .note { grid-column: 2 / -1; margin: -.2rem 0 0; color: #999; font-size: .8em; }
   .row { cursor: pointer; }
@@ -655,8 +661,9 @@ def source_note(town, rows, today):
         return ""
     latest = max((p["dated"] for p in rows if p["id"].startswith("massbuilds-") and p["dated"]), default=None)
     stale = latest and (today - latest).days > 180
-    return (f'<p class="from{" stale" if stale else ""}">From <a href="https://www.massbuilds.com/">MassBuilds</a>'
-            f'{f", last updated here {when(latest, today)}" if latest else ""}.</p>')
+    return (f'<p class="from">From <a href="https://www.massbuilds.com/">MassBuilds</a>'
+            f'{f", last updated here {when(latest, today)}" if latest else ""}'
+            f'{", so it may be out of date" if stale else ""}.</p>')
 
 
 def render(projects, built_at, failed):
