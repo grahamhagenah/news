@@ -144,7 +144,7 @@ def boston(body):
             "stage": row["project_status"],
             "lat": float(row["latitude"]), "lon": float(row["longitude"]),
             "link": str(row["website_url"]).strip(),
-            "origin": "Boston Planning Department",
+            "origin": "Boston Planning",
             "filed": str(row["last_filed_date"])[:10], "approved": str(row["last_board_approved_date"])[:10],
             "description": str(row["description"]).replace("\r", "").strip(),
             "dated": dated,
@@ -521,8 +521,6 @@ CSS = """
   .panel-image:not(.loaded) { background: linear-gradient(100deg, #151515 40%, #1d1d1d 50%, #151515 60%) 0 0 / 250% 100%;
                               animation: shimmer 1.6s linear infinite; }
   @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
-  .panel-image a { position: absolute; right: .6rem; bottom: .5rem; padding: .1rem .5rem; border-radius: 999px;
-                   background: rgba(0, 0, 0, .6); color: #ccc; font-size: .72rem; }
   .panel-where { margin: 0 2.5rem .4rem 0; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   .panel-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; line-height: 1.25; }
   .panel-pills { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .9rem; }
@@ -530,9 +528,10 @@ CSS = """
                 background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600; }
   .panel-note { margin: 0 0 1rem; padding: .6rem .8rem; border-left: 2px solid #ffd479; background: #141414; color: #ddd; font-size: .9rem; }
   .panel-note:empty { display: none; }
-  .panel-facts { display: grid; grid-template-columns: auto 1fr; gap: 0 1rem; margin: 0 0 1.1rem; font-size: .85rem; }
+  /* No gap between the columns, so each line runs unbroken across both; the room is in the label's own cell. */
+  .panel-facts { display: grid; grid-template-columns: auto 1fr; margin: 0 0 1.1rem; font-size: .85rem; }
   .panel-facts dt, .panel-facts dd { margin: 0; padding: .45rem 0; border-top: 1px solid #1c1c1c; }
-  .panel-facts dt { color: #777; }
+  .panel-facts dt { padding-right: 1rem; color: #777; }
   .panel-facts dd { color: #ddd; }
   .panel-about p { margin: 0 0 .8em; color: #bbb; }
   .panel-foot { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: 1.2rem; }
@@ -571,7 +570,7 @@ def mark(path):
 PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <div class="panel-tools"><button class="panel-back" type="button" aria-label="Previous project">{mark("M15 6l-6 6l6 6")}</button><button class="panel-on" type="button" aria-label="Next project">{mark("M9 6l6 6l-6 6")}</button><button class="panel-close" type="button" aria-label="Close">{mark("M6 6l12 12M18 6l-12 12")}</button></div>
 <div class="panel-body">
-<div class="panel-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"><a target="_blank" rel="noopener">Full size ↗</a></div>
+<div class="panel-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
 <p class="panel-where"></p>
 <h2 class="panel-title" id="panel-title"></h2>
 <div class="panel-pills"></div>
@@ -726,7 +725,7 @@ SCRIPT = """
       image.classList.remove("loaded");
       image.hidden = !p.image;
       view.classList.toggle("shows-picture", !!p.image);
-      if (p.image) { img.src = p.image; image.querySelector("a").href = p.image; } else img.removeAttribute("src");
+      if (p.image) img.src = p.image; else img.removeAttribute("src");
       // The same picture again, already loaded, fires no load event of its own.
       if (p.image && img.complete && img.naturalWidth) image.classList.add("loaded");
       part("source").hidden = !p.link;
