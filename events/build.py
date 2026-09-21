@@ -2516,7 +2516,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
         + f"<script>const FRESH = {fresh}, PLACES = {json.dumps(places, ensure_ascii=False)}, "
-          f"SHARE_URL = {json.dumps(PUBLIC_URL)};</script>\n"
+          f"SHARE_URL = {json.dumps(PUBLIC_URL)}, ZONE = {json.dumps(str(PUBLIC_ZONE))};</script>\n"
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
@@ -3212,7 +3212,8 @@ INDEX_JS = """
   const venueOf = el => el.closest(".showings li")?.dataset.source || el.closest(".day > ul > li")?.dataset.sources || "";
   // Today and Tomorrow, from this device's clock, so an older build still reads right; days already
   // past are hidden until the next build drops them.
-  const key = d => d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  // What day it is where the venues are, which is the city's clock, not the reader's and not this build's.
+  const key = d => d.toLocaleDateString("en-CA", { timeZone: ZONE });
   const today = key(new Date());
   const tomorrow = key(new Date(Date.now() + 86400000));
   const days = [...document.querySelectorAll(".day")];
@@ -3241,7 +3242,7 @@ INDEX_JS = """
 
   // Today lists only what's still to come: showings drop off once they've started, and an event goes
   // once its last one has. Events without a time stay all day.
-  const now = new Date().toLocaleTimeString("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" });
+  const now = new Date().toLocaleTimeString("en-GB", { timeZone: ZONE, hour: "2-digit", minute: "2-digit" });
   const todays = document.querySelector(`.day[data-date="${today}"]`);
   if (todays) {
     for (const li of todays.querySelectorAll(":scope > ul > li")) {
@@ -4179,7 +4180,10 @@ def gather(results, previous, built_at):
     today = built_at.astimezone(BOSTON).date()
     seen_before, seen = previous.get("first_seen") or {}, {}
     def ahead(item):  # Soon enough to list: two months for a concert, a month for the rest.
-        return today <= item["date"] <= today + timedelta(days=days_ahead(item["category"]))
+        # Counted from the day it is where the venue is: at nine in the evening in San Francisco it's already
+        # tomorrow in Boston, and counting from there would drop everything still to come that evening.
+        here = built_at.astimezone(zone_of(item)).date()
+        return here <= item["date"] <= here + timedelta(days=days_ahead(item["category"]))
     kept_sources = previous.get("sources", {})
     events, failed, stale, listings, errors = [], [], [], {}, {}
     for source, found, error in results:
