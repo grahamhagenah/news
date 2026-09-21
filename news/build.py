@@ -1001,13 +1001,18 @@ CSS = """
   /* A bar across the top: what the buttons sit in, and what the window is taken hold of by. Above the video
      rather than over it, so it covers none of it. */
   .player-bar { display: none; }
-  .player.corner .player-bar { display: block; height: 1.9rem; background: #101010; cursor: grab;
-                               touch-action: none; }
+  .player.corner .player-bar { display: block; height: 1.5rem; cursor: grab; touch-action: none;
+                               /* Glass: the list behind it blurred and darkened, so the bar belongs to the
+                                  window while still showing there's a page under it. */
+                               background: rgba(18, 18, 18, .55); backdrop-filter: blur(14px) saturate(1.4);
+                               -webkit-backdrop-filter: blur(14px) saturate(1.4);
+                               border-bottom: 1px solid rgba(255, 255, 255, .07); }
   .player.corner.dragging .player-bar { cursor: grabbing; }
-  .player.corner .player-close, .player.corner .player-corner { position: absolute; top: .15rem; width: 1.6rem;
-                   height: 1.6rem; background: none; color: #999; }
-  .player.corner .player-close { right: .3rem; }
-  .player.corner .player-corner { right: 2.1rem; }
+  .player.corner .player-close, .player.corner .player-corner { position: absolute; top: .1rem; width: 1.3rem;
+                   height: 1.3rem; background: none; color: #999; }
+  .player.corner .player-close { right: .25rem; }
+  .player.corner .player-corner { right: 1.7rem; }
+  .player.corner .player-close svg, .player.corner .player-corner svg { width: .8rem; height: .8rem; }
   .player.corner .player-close:hover, .player.corner .player-corner:hover { background: #262626; color: #fff; }
 
   .player.corner .player-note { padding: 0 .6rem .6rem; }
