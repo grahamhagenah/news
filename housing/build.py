@@ -21,9 +21,9 @@ OUT_DIR = ROOT.parent / "dist" / "housing"
 EDITS = ROOT / "edits.txt"
 USER_AGENT = "Mozilla/5.0 (compatible; housing-tracker/1.0)"
 SITE_URL = "https://housing.grahamhagenah.com/"
-NAME = "Housing Projects Tracker Boston"
+NAME = "Housing Tracker Boston"
 # The name as the header sets it, with the city in gray after it.
-MARKED_NAME = 'Housing Projects Tracker <span class="city">Boston</span>'
+MARKED_NAME = 'Housing Tracker <span class="city">Boston</span>'
 TAGLINE = "New homes around Boston, from proposal to move-in."
 PROJECTS_URL = SITE_URL + "projects.json"
 
