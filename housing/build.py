@@ -21,8 +21,10 @@ OUT_DIR = ROOT.parent / "dist" / "housing"
 EDITS = ROOT / "edits.txt"
 USER_AGENT = "Mozilla/5.0 (compatible; housing-tracker/1.0)"
 SITE_URL = "https://housing.grahamhagenah.com/"
-NAME = "Homes in the Works"
-TAGLINE = "New housing around Boston, from proposal to move-in: what’s planned, approved and being built."
+NAME = "Housing Projects Tracker Boston"
+# The name as the header sets it, with the city in gray after it.
+MARKED_NAME = 'Housing Projects Tracker <span class="city">Boston</span>'
+TAGLINE = "New homes around Boston, from proposal to move-in."
 PROJECTS_URL = SITE_URL + "projects.json"
 
 # Boston's projects under Article 80 review, the city's review of anything over about 20,000 square feet or
@@ -387,11 +389,13 @@ CSS = """
   #map + .filter { margin-top: 0; }
   /* What the site is, under its name, with the search beside it. */
   .intro { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; margin: -1.25rem 0 1.25rem; }
-  .tagline { margin: 0; color: #888; font-size: .9rem; }
+  .tagline { min-width: 0; margin: 0; overflow: hidden; color: #888; font-size: .9rem; white-space: nowrap; text-overflow: ellipsis; }
+  .sites .city { color: #777; }
   .intro .search { flex: none; margin-left: 0; }
   @media (max-width: 34rem) {
     .intro { flex-direction: column; align-items: stretch; gap: .9rem; }
     .intro .search { width: 100%; font-size: 1rem; }
+    .tagline { font-size: .8rem; }
   }
   /* Each project on the map: its status's icon on a dark badge, ringed in the status's color. */
   .pin > span { display: grid; place-items: center; width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%;
@@ -751,7 +755,7 @@ def render(projects, built_at, failed):
                        json.dumps({key: label for key, (label, _) in STATUSES.items()}))
     return shared.page(
         "news", NAME, body + script, css=CSS, head=LEAFLET, symbols=ICON_SYMBOLS, updated=built_at,
-        links=[(NAME, "./", True)],
+        links=[(NAME, "./", True)], marked={NAME: MARKED_NAME},
     )
 
 
