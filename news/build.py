@@ -541,7 +541,6 @@ def render_index(feeds, posts, failed, stale, built_at):
 
 # Where a video plays: over the list, with a way to close it, and nothing else. (The player shows its name.)
 PLAYER = """<dialog class="player" aria-label="Video">
-<button class="player-corner" aria-label="Play over the page"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="to-corner"><rect x="2" y="3" width="12" height="10" rx="1.5"/><rect x="7.75" y="7.75" width="5" height="4" rx="1"/></g><g class="to-page"><path d="M6.5 3.5h-3v3M3.5 3.5l4 4M9.5 12.5h3v-3M12.5 12.5l-4-4"/></g></svg></button>
 <button class="player-copy" aria-label="Copy link"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="copy-link"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/></g><g class="copy-done"><path d="M3.5 8.5l3 3 6-6"/></g></svg></button>
 <button class="player-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
 <div class="player-bar"></div>
@@ -576,10 +575,10 @@ INDEX_JS = """
   }
   saveClicked();
 
-  // Videos play here, in a plain window over the list: no comments, no suggestions, no next video. It's
-  // YouTube's own player, its privacy-enhanced version, loaded the first time a video is opened; when the
-  // video ends the window closes, before YouTube can offer another. A click with a modifier key still opens
-  // YouTube, in a new tab.
+  // Videos play here, in a small window in the corner of the page: no comments, no suggestions, no next
+  // video. It's YouTube's own player, its privacy-enhanced version, loaded the first time a video is opened;
+  // when the video ends the window closes, before YouTube can offer another. A click with a modifier key
+  // still opens YouTube, in a new tab.
   const dialog = document.querySelector(".player");
   const note = dialog.querySelector(".player-note");
   let player = null, youtube = null, playing = "";
@@ -587,32 +586,22 @@ INDEX_JS = """
     window.onYouTubeIframeAPIReady = resolve;
     document.head.append(Object.assign(document.createElement("script"), { src: "https://www.youtube.com/iframe_api" }));
   });
-  // Whether this browser will hand an element the screen. Where it won't — an iPhone gives it to nothing but
-  // a video of its own — YouTube's own full-screen button is the only way to the real thing, so the corner
-  // keeps YouTube's controls there and does without them everywhere else.
-  const screenIsOurs = () =>
-    Boolean(document.fullscreenEnabled && dialog.querySelector(".player-frame").requestFullscreen);
-
-  // The player itself, made afresh each time: whether it carries YouTube's own controls is settled when it's
-  // made, and the corner has no room for them. A video carries on from where it was when it moves.
-  function mount(videoId, { corner, from = 0 }) {
+  // The player itself, made once for each video and left alone after that. It carries YouTube's own controls,
+  // whose full-screen button is the way to the whole screen: YouTube takes its frame there and hands it back
+  // to the corner afterwards, still playing, which is surer than asking for the screen ourselves.
+  function mount(videoId) {
     const holder = document.createElement("div");
     dialog.querySelector(".player-frame").replaceChildren(holder);
     let started = false;
     dialog.classList.remove("ready");  // Until the video is there to show, the frame stays dark and empty.
-    // Where the screen isn't ours to give, YouTube's own button is the one that reaches it, and ours would
-    // only offer a window filled to the edges beside it. It stands down there.
-    dialog.classList.toggle("theirs", !screenIsOurs());
     return new YT.Player(holder, {
       host: "https://www.youtube-nocookie.com",
       videoId,
       width: "100%",
       height: "100%",
       // Related videos from the same channel only, no annotations, and inline on phones until made full
-      // screen. In the corner, none of YouTube's own furniture, which would crowd a window that size; a click
-      // on the video still stops and starts it.
-      playerVars: { autoplay: 1, rel: 0, iv_load_policy: 3, playsinline: 1,
-                    controls: corner && screenIsOurs() ? 0 : 1, start: Math.floor(from) },
+      // screen.
+      playerVars: { autoplay: 1, rel: 0, iv_load_policy: 3, playsinline: 1 },
       events: {
         onReady: () => dialog.classList.add("ready"),
         onStateChange: event => {
@@ -642,87 +631,22 @@ INDEX_JS = """
     playing = a.href;  // What the copy button sends on: the video's own address, not this page's.
     note.querySelector("a").href = a.href;
     note.hidden = true;
-    // In the corner to begin with: a video is something to have on while the list is read, and it's one
-    // button away from filling the window.
+    // A video is something to have on while the list is read, so the corner is where it plays; YouTube's own
+    // full-screen button is what gives it the whole screen.
     dialog.classList.add("corner");
     document.body.classList.add("video-corner");
     dialog.show();
-    corner.setAttribute("aria-label", "Fill the screen");
     await loadYouTube();
     if (!dialog.open) return; // Closed while the player loaded.
-    player = mount(a.closest("li").dataset.video, { corner: true });
+    player = mount(a.closest("li").dataset.video);
   }
   dialog.addEventListener("close", () => {
-    // Moved to the corner, or back: the window is shown again in the same breath, and what's playing in it
-    // carries on. Taking the player apart here would stop the video the move is meant to keep.
-    if (dialog.open) return;
     if (player) player.destroy();
     player = null;
     dialog.querySelector(".player-frame").replaceChildren();
-    dialog.classList.remove("corner", "filling");
+    dialog.classList.remove("corner");
     dialog.style.inset = placed = "";  // Back to the corner it starts in, for the next video.
     document.body.classList.remove("video-corner");
-  });
-  // In the corner the video keeps playing while the list is read and scrolled behind it; the same button puts
-  // it back over the page. The window itself never leaves the page, so the video isn't interrupted: it's the
-  // same element, closed and shown again, rather than a frame moved somewhere else, which would reload it.
-  // Two states, and the button goes between them: in the corner, small and quiet, or the whole screen. A
-  // player is made for wherever it's going, from the second the video had reached, since whether it carries
-  // YouTube's controls is settled when it's made.
-  const corner = dialog.querySelector(".player-corner");
-  function moveTo(tucked) {
-    const video = player?.getVideoData?.().video_id;
-    const from = player?.getCurrentTime?.() || 0;
-    dialog.classList.toggle("corner", tucked);
-    // Filling the window is what a refused full screen falls back to, and it holds the window to the whole of
-    // it: going back to the corner has to let that go, or the corner is drawn full size.
-    if (tucked) dialog.classList.remove("filling");
-    // Where it was dragged to is the corner's business. Filling the screen, it would hold the window to that
-    // spot and hang the video off the edge; so it's put away while it fills, and put back when it returns.
-    dialog.style.inset = tucked ? placed : "";
-    document.body.classList.toggle("video-corner", tucked);  // The way back to the top steps over the video.
-    if (!dialog.open) {  // Shown as a window of its own either way; the screen it fills is the browser's doing.
-      dialog.show();
-    }
-    corner.setAttribute("aria-label", tucked ? "Fill the screen" : "Play in the corner");
-    if (video) {
-      player.destroy();
-      player = mount(video, { corner: tucked, from });
-    }
-  }
-  corner.addEventListener("click", async () => {
-    // On the screen already: leave it, which puts it back in the corner.
-    if (document.fullscreenElement) {
-      await document.exitFullscreen().catch(() => {});
-      return;
-    }
-    // Over the page, where it lands when the screen was refused: back to the corner.
-    if (!dialog.classList.contains("corner")) {
-      dialog.close();
-      moveTo(true);
-      return;
-    }
-    // In the corner: the whole screen, in one step. The frame is what's asked to fill it rather than the
-    // window around it, a plain element being surer of it than a dialog. Where a browser won't grant it —
-    // iPhones don't, for anything but a video of their own — the window over the page is what there is.
-    moveTo(false);
-    const frame = dialog.querySelector(".player-frame");
-    try {
-      const asked = (frame.requestFullscreen ?? dialog.requestFullscreen)?.call(frame.requestFullscreen ? frame : dialog);
-      if (asked) await asked; else throw new Error("no full screen here");
-    } catch (refused) {
-      console.warn("Pushpin: the browser wouldn't give the screen —", refused?.message || refused);
-      dialog.classList.add("filling");
-      dialog.close();
-      dialog.showModal();
-    }
-  });
-  // Left by Esc, by the browser's own way out, or by the button: back to the corner, playing on.
-  document.addEventListener("fullscreenchange", () => {
-    const filling = Boolean(document.fullscreenElement);
-    dialog.classList.toggle("filling", filling);
-    corner.setAttribute("aria-label", filling ? "Play in the corner" : corner.getAttribute("aria-label"));
-    if (!filling && dialog.open) moveTo(true);
   });
   // Dragging the corner window by its bar: the video itself can't be taken hold of, being YouTube's own page,
   // which answers every press inside it. Where it's put is remembered while it plays and forgotten when it
@@ -737,7 +661,6 @@ INDEX_JS = """
     dialog.style.inset = placed;
   };
   bar.addEventListener("pointerdown", event => {
-    if (!dialog.classList.contains("corner")) return;
     const box = dialog.getBoundingClientRect();
     held = { x: event.clientX - box.left, y: event.clientY - box.top };
     bar.setPointerCapture(event.pointerId);
@@ -775,10 +698,6 @@ INDEX_JS = """
       copy.classList.remove("copied");
       copy.setAttribute("aria-label", "Copy link");
     }, 1600);
-  });
-  // Outside the video, which is the page itself only while the window is over it.
-  dialog.addEventListener("click", event => {
-    if (event.target === dialog && !dialog.classList.contains("corner")) dialog.close();
   });
   dialog.querySelector(".player-close").addEventListener("click", () => dialog.close());
   // Esc, which the dialog closes on by itself in most browsers. Once the video has been clicked, keys go to
@@ -1024,32 +943,24 @@ CSS = """
     .headline > time, .headline > .comments { margin-left: 0; }
     .row .source::before { content: "from "; }
   }
-  /* The video player: the video at the width of the window, up to a large laptop's, alone on black. */
-  .player { width: min(64rem, 100vw - 2.5rem); max-width: none; max-height: none; padding: 0; border: 0;
-            background: none; color: #fff; overflow: visible; }
-  .player::backdrop { background: #000; }
-  /* Its buttons: a thin × to close, and one to send the video to the corner, each in a circle that lights up
-     faintly on hover. Over the page they sit in the window's corner; in the corner they sit on the video. */
-  .player-close, .player-corner, .player-copy { position: fixed; top: 1rem; display: grid; place-items: center; width: 2.25rem;
+  /* The video player: a window of its own in the corner of the page, alone on black. */
+  .player { max-width: none; max-height: none; padding: 0; border: 0; background: none; color: #fff;
+            overflow: visible; }
+  /* Its buttons: a thin × to close and a link to copy, each in a circle that lights up faintly on hover. */
+  .player-close, .player-copy { position: fixed; top: 1rem; display: grid; place-items: center; width: 2.25rem;
                   height: 2.25rem; padding: 0; border: 0; border-radius: 50%; background: none; color: #777; cursor: pointer;
                   transition: background-color .15s, color .15s; }
   .player-close { right: 1rem; }
-  .player-corner { right: 3.5rem; }
-  .player-copy { right: 6rem; }
+  .player-copy { right: 3.5rem; }
   /* Its mark turns to a tick for a moment once the link is taken. */
   .player-copy .copy-done, .player-copy.copied .copy-link { display: none; }
   .player-copy.copied .copy-done { display: block; }
   .player-copy.copied { color: #4ade80; }
-  .player-close svg, .player-corner svg, .player-copy svg { width: 1rem; height: 1rem; fill: none;
+  .player-close svg, .player-copy svg { width: 1rem; height: 1rem; fill: none;
                    stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-  .player-corner .to-corner rect + rect { fill: currentColor; stroke: none; }
-  /* Over the page it shows the way to the corner; in the corner, the way back over the page. */
-  .player-corner .to-page { display: none; }
-  .player.corner .player-corner .to-corner { display: none; }
-  .player.corner .player-corner .to-page { display: block; }
-  .player-close:hover, .player-close:focus-visible, .player-corner:hover, .player-corner:focus-visible,
+  .player-close:hover, .player-close:focus-visible,
   .player-copy:hover, .player-copy:focus-visible { background: #1a1a1a; color: #fff; }
-  .player-close:focus, .player-corner:focus, .player-copy:focus { outline: none; }
+  .player-close:focus, .player-copy:focus { outline: none; }
   /* In the corner: a small window of its own, over the page but out of the way, the page reading and scrolling
      behind it. Its buttons come along, on the video itself, where there's nowhere else to put them. */
   .player.corner { position: fixed; z-index: 3; inset: auto 1.25rem 1.25rem auto; width: min(26rem, calc(100vw - 2rem));
@@ -1070,18 +981,12 @@ CSS = """
   .player.corner.dragging .player-bar { cursor: grabbing; }
   /* In the bar, and above it: the bar is glass, which blurs whatever it's drawn over, and these are drawn
      before it. */
-  .player.corner .player-close, .player.corner .player-corner, .player.corner .player-copy {
+  .player.corner .player-close, .player.corner .player-copy {
                    position: absolute; z-index: 1; top: .15rem; width: 1.7rem; height: 1.7rem; background: none; color: #999; }
   .player.corner .player-close { right: .3rem; }
-  .player.corner .player-corner { right: 2.15rem; }
-  .player.corner .player-copy { right: 4rem; }
-  /* Theirs to give: ours steps aside, and the rest close up. */
-  .player.theirs.corner .player-corner { display: none; }
-  .player.theirs.corner .player-copy { right: 2.15rem; }
-  .player.corner .player-close svg, .player.corner .player-corner svg,
-  .player.corner .player-copy svg { width: .95rem; height: .95rem; }
-  .player.corner .player-close:hover, .player.corner .player-corner:hover,
-  .player.corner .player-copy:hover { background: #262626; color: #fff; }
+  .player.corner .player-copy { right: 2.15rem; }
+  .player.corner .player-close svg, .player.corner .player-copy svg { width: .95rem; height: .95rem; }
+  .player.corner .player-close:hover, .player.corner .player-copy:hover { background: #262626; color: #fff; }
 
   .player.corner .player-note { padding: 0 .6rem .6rem; }
   /* Coming up in the corner: a short rise and fade, so a window appearing at the edge of the eye is a movement
@@ -1099,31 +1004,19 @@ CSS = """
   @media (max-width: 34rem) {
     /* A phone: the bar deep enough for a thumb, its buttons with it, and the way back to the top above them. */
     .player.corner .player-bar { height: 2.4rem; }
-    .player.corner .player-close, .player.corner .player-corner, .player.corner .player-copy {
+    .player.corner .player-close, .player.corner .player-copy {
                      top: .3rem; width: 1.9rem; height: 1.9rem; }
     .player.corner .player-close { right: .4rem; }
-    .player.corner .player-corner { right: 2.5rem; }
-    .player.corner .player-copy { right: 4.6rem; }
-    .player.theirs.corner .player-copy { right: 2.5rem; }
-    .player.corner .player-close svg, .player.corner .player-corner svg,
-    .player.corner .player-copy svg { width: 1rem; height: 1rem; }
+    .player.corner .player-copy { right: 2.5rem; }
+    .player.corner .player-close svg, .player.corner .player-copy svg { width: 1rem; height: 1rem; }
     body.video-corner .to-top { bottom: calc(4.6rem + min(26rem, 100vw - 2rem) * 0.5625); }
   }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
-  /* The whole screen: the video takes all of it, whatever shape the screen is, and the × and the way back to
-     the corner sit over it. */
-  .player-frame:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
-  .player.filling { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none;
-                    padding: 0; background: #000; }
-  .player.filling .player-frame { aspect-ratio: auto; height: 100%; display: grid; align-content: center; }
-  .player.filling .player-frame > * { aspect-ratio: 16 / 9; width: 100%; }
-  .player.filling .player-bar { display: none; }
-  .player.filling .player-close, .player.filling .player-corner { position: fixed; top: 1rem; z-index: 4;
-                                 background: rgba(0, 0, 0, .55); color: #fff; }
+  /* The whole screen, which YouTube's own button asks for: it takes the frame there and the window around it
+     stays where it is, out of the way until the video comes back to it. */
   .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
   .player-note { margin: .75rem 0 0; color: #999; font-size: .85rem; }
   .player-note a { color: #fff; text-decoration: underline; text-underline-offset: .2em; }
-  @media (max-width: 34rem) { .player { width: 100vw; } }
   .new-posts { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top) + .75rem); left: 50%;
                transform: translateX(-50%); padding: .45rem 1.1rem; border: 0; border-radius: 999px;
                background: #fff; color: #000; font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
