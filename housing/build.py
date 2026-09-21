@@ -37,6 +37,11 @@ BOSTON_URL = ("https://gis.bostonplans.org/hosting/rest/services/Hosted/A80_proj
 CAMBRIDGE_URL = "https://data.cambridgema.gov/resource/wjwg-93qh.json?$limit=5000"
 CAMBRIDGE_PAGE = "https://www.cambridgema.gov/CDD/factsandmaps/developmentlog"
 
+# How far back Recent updates goes, and how many the home page's banner turns over. The cities refresh their
+# lists every few weeks or months, so a month can go by with nothing new in them.
+RECENT_DAYS = 90
+FRESH_SHOWN = 8
+
 # Finished projects are kept for a few years, as what's recently been built; before that they're history.
 COMPLETE_SINCE = 2020
 
@@ -140,6 +145,7 @@ def boston(body):
             "lat": float(row["latitude"]), "lon": float(row["longitude"]),
             "link": str(row["website_url"]).strip(),
             "origin": "Boston Planning Department",
+            "filed": str(row["last_filed_date"])[:10], "approved": str(row["last_board_approved_date"])[:10],
             "description": str(row["description"]).replace("\r", "").strip(),
             "dated": dated,
             "facts": facts(
@@ -318,22 +324,47 @@ def apply_edits(projects, edits):
 
 
 def track(projects, previous, today):
-    """When each project was last seen to change status, from the previous build's record: today, for one
-    whose status has changed or that's new since then. The first build has nothing to compare with, so it
-    dates nothing. Returns the record to keep for next time."""
+    """When each project was last seen to change status, and from what, from the previous build's record:
+    today, for one whose status has changed or that's new since then. The first build has nothing to compare
+    with, so it dates nothing. Returns the record to keep for next time."""
     before = previous.get("projects")
     record = {}
     for project in projects:
         kept = (before or {}).get(project["id"])
         if before is None:
-            since = None
+            since, was = None, None
         elif kept and kept["status"] == project["status"]:
-            since = kept["since"]
+            since, was = kept["since"], kept.get("was")
         else:
-            since = today.isoformat()
+            # "" for a project that's new since the last build, which had nothing to say it was.
+            since, was = today.isoformat(), kept["status"] if kept else ""
         project["since"] = date.fromisoformat(since) if since else None
-        record[project["id"]] = {"status": project["status"], "since": since}
+        project["was"] = was
+        record[project["id"]] = {"status": project["status"], "since": since, "was": was}
     return record
+
+
+def change(project, today):
+    """What last happened to it in the last RECENT_DAYS days, as (the day, what), for Recent updates; None if
+    nothing did. A status seen to change says from what; Boston's filings and approvals and MassBuilds' updates
+    come from their own dates; our own notes from the date on them."""
+    events = []
+    if project.get("since"):
+        if project.get("was"):
+            events.append((project["since"], f"{STATUSES[project['was']][0]} → {STATUSES[project['status']][0]}"))
+        elif project.get("was") == "":
+            events.append((project["since"], "Newly listed"))
+    if iso_date(project.get("filed")):
+        events.append((iso_date(project["filed"]), "Filed with the city"))
+    if iso_date(project.get("approved")):
+        events.append((iso_date(project["approved"]), "Board approved"))
+    if project["id"].startswith("massbuilds-") and project["dated"]:
+        events.append((project["dated"], "Updated in MassBuilds"))
+    if project.get("edited"):
+        events.append((project["edited"], project.get("note") or "Updated"))
+    recent = [event for event in events if 0 <= (today - event[0]).days <= RECENT_DAYS]
+    # The latest; on the same day, the one listed first above, a change of status before the rest.
+    return max(recent, key=lambda event: event[0], default=None) if recent else None
 
 
 def updated(project):
@@ -353,12 +384,15 @@ def status_icon(status, label=None):
     return shared.icon(status.replace(" ", "-"), label).replace("<svg ", f'<svg style="color:{STATUSES[status][1]}" ', 1)
 
 
-def row(project, today):
+def row(project, today, changed=None):
+    """A project's row. On Recent updates, changed is what happened and when: it takes the status's place after
+    the name, and its day the row's date."""
     label, color = STATUSES[project["status"]]
-    day = updated(project)
+    day = changed[0] if changed else updated(project)
     ident = html.escape(project["id"])
     note = f'<p class="note">{html.escape(project["note"])}</p>' if project.get("note") else ""
-    place = " · ".join(html.escape(part) for part in (project["neighborhood"], when(day, today)) if part)
+    where = project["town"] if changed else project["neighborhood"]
+    place = " · ".join(html.escape(part) for part in (where, when(day, today)) if part)
     homes = f'{project["units"]:,} home{"s" if project["units"] != 1 else ""}'
     words = " ".join((project["name"], project["neighborhood"], project["town"], project["description"], project.get("note", "")))
     return (
@@ -366,7 +400,7 @@ def row(project, today):
         f'data-lat="{project["lat"]:.5f}" data-lon="{project["lon"]:.5f}" data-words="{html.escape(words.casefold())}">'
         f'{status_icon(project["status"], label)}'
         f'<span class="headline"><a class="title" href="#{ident}">{html.escape(project["name"])}</a>'
-        f' <span class="details">{homes} · {label.lower()}</span></span> '
+        f' <span class="details">{homes} · {html.escape(changed[1]) if changed else label.lower()}</span></span> '
         f'<span class="source"><span>{place}</span></span>{note}</li>'
     )
 
@@ -387,11 +421,32 @@ CSS = """
   @media (max-width: 34rem) { #map { height: 16rem; } }
   /* The filter under the map rather than under the header. */
   #map + .filter { margin-top: 0; }
+  /* Recently updated, a line over the map, as Pushpin's Just announced: one of the newest, and the way to the rest. */
+  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 1.25rem; padding: .5rem 0; font-size: .85rem;
+           border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
+  .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
+  .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
+  .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
+  .fresh-one b { color: #fff; font-weight: 500; }
+  .fresh-none { color: #666; }
+  .fresh-more { flex: none; margin-left: auto; color: #888; }
+  .fresh-more:hover, .fresh-one:hover { color: #fff; text-decoration: none; }
+  .fresh-one:hover b { text-decoration: underline; }
+  @media (max-width: 34rem) {
+    .fresh { display: grid; grid-template-columns: 1fr auto; gap: .1rem .6rem; }
+    .fresh-tag { grid-column: 1 / -1; }
+    .fresh-more { margin-left: 0; }
+  }
+  /* Recent updates' name for itself, after the site's in the header. */
+  .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
+  .sites a:not([aria-current]) .city { color: inherit; }
+  .tagline a { color: #bbb; }
   /* What the site is, under its name, with the search beside it. */
   .intro { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; margin: -1.25rem 0 1.25rem; }
   .tagline { min-width: 0; margin: 0; overflow: hidden; color: #888; font-size: .9rem; white-space: nowrap; text-overflow: ellipsis; }
   .sites .city { color: #777; }
-  .intro .search { flex: none; margin-left: 0; }
+  /* The search gives up its width before the tagline does. */
+  .intro .search { flex: 0 1 10rem; min-width: 6rem; margin-left: 0; }
   @media (max-width: 34rem) {
     .intro { flex-direction: column; align-items: stretch; gap: .9rem; }
     .intro .search { width: 100%; font-size: 1rem; }
@@ -526,6 +581,49 @@ PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 </div>
 </dialog>"""
 
+# Before Recently updated, as before Pushpin's Just announced: Tabler's "sparkles" (outline, MIT license).
+SPARK_MARK = ('<svg class="spark-mark" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" '
+              'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+              '<path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z"/>'
+              '<path d="M16 6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z"/>'
+              '<path d="M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"/></g></svg>')
+
+# Recently updated, over the home page's map: the newest few, turning over one at a time so a visit shows
+# several, as Pushpin's Just announced does; each opens its project's panel here. It starts anywhere among them,
+# holds while it's under the pointer or has the keyboard or the page is in the background, and stays put for
+# anyone who's asked for less motion.
+FRESH_SCRIPT = """
+<script>
+  {
+    const banner = document.querySelector(".fresh-one[href]");
+    if (banner) {
+      const show = pick => {
+        banner.href = "#" + pick.id;
+        banner.replaceChildren(Object.assign(document.createElement("b"), {textContent: pick.name}), ` · ${pick.what} · ${pick.when}`);
+      };
+      let at = Math.floor(Math.random() * FRESH.length);
+      show(FRESH[at]);
+      banner.addEventListener("click", event => {
+        const row = document.getElementById(banner.getAttribute("href").slice(1));
+        if (!row || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        row.click();
+      });
+      if (FRESH.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        let held = false;
+        for (const [name, on] of [["pointerenter", true], ["pointerleave", false], ["focusin", true], ["focusout", false]]) {
+          banner.closest(".fresh").addEventListener(name, () => { held = on; });
+        }
+        setInterval(() => {
+          if (held || document.hidden) return;
+          banner.animate([{opacity: 1}, {opacity: 0, offset: .45}, {opacity: 1}], {duration: 1400, easing: "ease-in-out"});
+          setTimeout(() => show(FRESH[at = (at + 1) % FRESH.length]), 620);
+        }, 7000);
+      }
+    }
+  }
+</script>"""
+
 LEAFLET = ('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">'
            '<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>')
 
@@ -594,6 +692,10 @@ SCRIPT = """
     });
     search.addEventListener("input", show);
     show();
+    // Recent updates' few projects, wherever they are, all in view at once.
+    if (map.getContainer().hasAttribute("data-fit") && rows.length) {
+      map.fitBounds(L.latLngBounds(rows.map(row => [+row.dataset.lat, +row.dataset.lon])), {padding: [30, 30], maxZoom: 14});
+    }
 
     // A project's panel: opened from its row or its dot, with its id in the address so it can be linked to.
     const data = JSON.parse(document.getElementById("projects").textContent);
@@ -716,24 +818,57 @@ def source_note(town, rows, today):
             f'{", so it may be out of date" if stale else ""}.</p>')
 
 
-def render(projects, built_at, failed):
+def recently_changed(projects, today):
+    """The projects with something that happened in the last RECENT_DAYS days, newest first, with what."""
+    found = [(project, change(project, today)) for project in projects]
+    found = [(project, changed) for project, changed in found if changed]
+    return sorted(found, key=lambda pair: (pair[1][0], pair[0]["units"]), reverse=True)
+
+
+def fresh_banner(recent, today):
+    """The home page's Recently updated line: one of the newest few, which its script turns over, and the way to
+    the rest. It stays when nothing's changed lately, saying so."""
+    fresh = [{"id": project["id"], "name": project["name"], "what": changed[1], "when": when(changed[0], today)}
+             for project, changed in recent[:FRESH_SHOWN]]
+    if fresh:
+        first = fresh[0]
+        one = (f'<a class="fresh-one" href="#{html.escape(first["id"])}"><b>{html.escape(first["name"])}</b> · '
+               f'{html.escape(first["what"])} · {html.escape(first["when"])}</a>')
+    else:
+        one = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
+    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>{one}'
+              f'<a class="fresh-more" href="recent/">See all →</a></p>')
+    return banner, json.dumps(fresh, ensure_ascii=False).replace("</", "<\\/")
+
+
+def render(projects, built_at, failed, recent=False):
+    """The home page, every project by town; or with recent, Recent updates: what's changed in the last
+    RECENT_DAYS days, in one list, newest first, each saying what happened."""
     today = built_at.date()
-    order = lambda project: (updated(project) or date.min, project["units"])
-    towns = {}
-    for project in sorted(projects, key=order, reverse=True):
-        towns.setdefault(project["town"], []).append(project)
-    sections = "".join(
-        f'<details><summary><span class="town">{html.escape(town)}</span><span class="count"></span></summary>'
-        f'{source_note(town, rows, today)}<ul>{"".join(row(project, today) for project in rows)}</ul></details>'
-        # Boston first, as the city the rest are around; then the others by name.
-        for town, rows in sorted(towns.items(), key=lambda item: (item[0] != "Boston", item[0]))
-    )
+    changes = recently_changed(projects, today)
+    if recent:
+        projects = [project for project, _ in changes]
+        heading = f"In the last {RECENT_DAYS} days"
+        sections = (f'<details open><summary><span class="town">{heading}</span><span class="count"></span></summary>'
+                    f'<ul>{"".join(row(project, today, changed) for project, changed in changes)}</ul></details>')
+    else:
+        order = lambda project: (updated(project) or date.min, project["units"])
+        towns = {}
+        for project in sorted(projects, key=order, reverse=True):
+            towns.setdefault(project["town"], []).append(project)
+        sections = "".join(
+            f'<details><summary><span class="town">{html.escape(town)}</span><span class="count"></span></summary>'
+            f'{source_note(town, rows, today)}<ul>{"".join(row(project, today) for project in rows)}</ul></details>'
+            # Boston first, as the city the rest are around; then the others by name.
+            for town, rows in sorted(towns.items(), key=lambda item: (item[0] != "Boston", item[0]))
+        )
+    shown = "all" if recent else "active"  # Recent updates shows every change, a project finished among them.
     choices = [("active", "In progress")] + [(key, label) for key, (label, _) in STATUSES.items()] + [("all", "All")]
     def colored(key):
         return f' style="color:{STATUSES[key][1]}"' if key in STATUSES else ""
     filter_row = (
         '<div class="filter">' + "".join(
-            f'<button type="button" data-show="{key}" aria-pressed="{"true" if key == "active" else "false"}">'
+            f'<button type="button" data-show="{key}" aria-pressed="{"true" if key == shown else "false"}">'
             f'<span{colored(key)}>{shared.icon(key.replace(" ", "-"))}</span>{label}</button>'
             for key, label in choices
         ) + '</div>'
@@ -748,14 +883,20 @@ def render(projects, built_at, failed):
         'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
     )
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
-    intro = f'<div class="intro"><p class="tagline">{html.escape(TAGLINE)}</p>{shared.SEARCH}</div>'
-    body = (f'{intro}<div id="map"></div>{filter_row}{missing}{sections}{footer}{PANEL}'
-            f'<script type="application/json" id="projects">{data}</script>')
+    said = (f'What’s changed in the last {RECENT_DAYS} days. <a href="../">All projects →</a>' if recent
+            else html.escape(TAGLINE))
+    intro = f'<div class="intro"><p class="tagline">{said}</p>{shared.SEARCH}</div>'
+    banner, fresh = ("", "[]") if recent else fresh_banner(changes, today)
+    body = (f'{intro}{banner}<div id="map"{" data-fit" if recent else ""}></div>{filter_row}{missing}{sections}{footer}{PANEL}'
+            f'<script type="application/json" id="projects">{data}</script>'
+            f'<script>const FRESH = {fresh};</script>')
     script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
-                       json.dumps({key: label for key, (label, _) in STATUSES.items()}))
+                       json.dumps({key: label for key, (label, _) in STATUSES.items()})) + FRESH_SCRIPT
+    title = f"Recent updates · {NAME}" if recent else NAME
     return shared.page(
-        "news", NAME, body + script, css=CSS, head=LEAFLET, symbols=ICON_SYMBOLS, updated=built_at,
-        links=[(NAME, "./", True)], marked={NAME: MARKED_NAME},
+        "news", title, body + script, css=CSS, head=LEAFLET, symbols=ICON_SYMBOLS, updated=built_at,
+        links=[(NAME, "../" if recent else "./", not recent)], marked={NAME: MARKED_NAME},
+        here="Recent updates" if recent else None,
     )
 
 
@@ -823,9 +964,13 @@ def main():
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "index.html").write_text(render(projects, built_at, failed))
+    (OUT_DIR / "recent").mkdir(exist_ok=True)
+    (OUT_DIR / "recent" / "index.html").write_text(render(projects, built_at, failed, recent=True))
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
-    print(f"Wrote dist/housing/index.html and projects.json: {len(projects)} projects")
+    recent = recently_changed(projects, built_at.date())
+    print(f"Wrote dist/housing/index.html, recent/ and projects.json: {len(projects)} projects, {len(recent)} changed "
+          f"in the last {RECENT_DAYS} days")
 
 
 if __name__ == "__main__":

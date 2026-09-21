@@ -101,7 +101,40 @@ class Tracking(unittest.TestCase):
         projects = [project(), project("boston-2"), project("boston-3")]
         record = build.track(projects, previous, date(2026, 9, 21))
         self.assertEqual([p["since"] for p in projects], [date(2026, 9, 21), date(2026, 1, 5), date(2026, 9, 21)])
-        self.assertEqual(record["boston-1"], {"status": "approved", "since": "2026-09-21"})
+        self.assertEqual(record["boston-1"], {"status": "approved", "since": "2026-09-21", "was": "proposed"})
+        self.assertEqual(record["boston-3"]["was"], "")  # New since the last build.
+        self.assertIsNone(record["boston-2"]["was"])
+
+
+class Recent(unittest.TestCase):
+    TODAY = date(2026, 9, 21)
+
+    def changed(self, **fields):
+        return build.change(dict(project(), **dict({"since": None, "was": None}, **fields)), self.TODAY)
+
+    def test_a_status_seen_to_change_says_from_what(self):
+        self.assertEqual(self.changed(since=date(2026, 9, 20), was="proposed"), (date(2026, 9, 20), "Proposed → Approved"))
+        self.assertEqual(self.changed(since=date(2026, 9, 20), was="")[1], "Newly listed")
+
+    def test_boston_dates_and_notes(self):
+        self.assertEqual(self.changed(approved="2026-09-01", filed="2026-07-01")[1], "Board approved")
+        self.assertEqual(self.changed(edited=date(2026, 9, 10), note="Broke ground.")[1], "Broke ground.")
+
+    def test_nothing_older_than_the_window(self):
+        self.assertIsNone(self.changed(approved="2026-01-01", dated=date(2026, 1, 1)))
+
+    def test_recent_page_lists_only_whats_changed_newest_first(self):
+        projects = [dict(project("boston-1"), since=None, was=None, approved="2026-09-01"),
+                    dict(project("boston-2"), since=date(2026, 9, 20), was="proposed"),
+                    dict(project("boston-3"), since=None, was=None)]
+        built = datetime(2026, 9, 21, tzinfo=timezone.utc)
+        page = build.render(projects, built, [], recent=True)
+        self.assertLess(page.index('id="boston-2"'), page.index('id="boston-1"'))
+        self.assertNotIn('id="boston-3"', page)
+        self.assertIn("Proposed → Approved", page)
+        home = build.render(projects, built, [])
+        self.assertIn('class="fresh"', home)
+        self.assertIn('href="recent/"', home)
 
 
 class Page(unittest.TestCase):
