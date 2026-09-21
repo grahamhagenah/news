@@ -572,6 +572,12 @@ INDEX_JS = """
     window.onYouTubeIframeAPIReady = resolve;
     document.head.append(Object.assign(document.createElement("script"), { src: "https://www.youtube.com/iframe_api" }));
   });
+  // Whether this browser will hand an element the screen. Where it won't — an iPhone gives it to nothing but
+  // a video of its own — YouTube's own full-screen button is the only way to the real thing, so the corner
+  // keeps YouTube's controls there and does without them everywhere else.
+  const screenIsOurs = () =>
+    Boolean(document.fullscreenEnabled && dialog.querySelector(".player-frame").requestFullscreen);
+
   // The player itself, made afresh each time: whether it carries YouTube's own controls is settled when it's
   // made, and the corner has no room for them. A video carries on from where it was when it moves.
   function mount(videoId, { corner, from = 0 }) {
@@ -588,7 +594,7 @@ INDEX_JS = """
       // screen. In the corner, none of YouTube's own furniture, which would crowd a window that size; a click
       // on the video still stops and starts it.
       playerVars: { autoplay: 1, rel: 0, iv_load_policy: 3, playsinline: 1,
-                    controls: corner ? 0 : 1, start: Math.floor(from) },
+                    controls: corner && screenIsOurs() ? 0 : 1, start: Math.floor(from) },
       events: {
         onReady: () => dialog.classList.add("ready"),
         onStateChange: event => {
