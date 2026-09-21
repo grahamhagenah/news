@@ -394,8 +394,9 @@ CSS = """
   .leaflet-popup-content a { color: #fff; }
   .leaflet-popup-content .muted { color: #888; }
   .leaflet-container a.leaflet-popup-close-button { color: #666; }
-  .leaflet-control-attribution { background: rgba(0, 0, 0, .6) !important; color: #555; font-size: 10px; }
-  .leaflet-control-attribution a { color: #777; }
+  /* The map's credits, which Esri's and OpenStreetMap's terms ask to be on it: as small and quiet as they can be. */
+  .leaflet-control-attribution { background: none !important; color: #555; font-size: 9px; line-height: 1.4; }
+  .leaflet-control-attribution a { color: #555; }
   .leaflet-bar a { background: #111; color: #999; border-color: #333; }
   .leaflet-bar a:hover { background: #222; color: #fff; }
   .panel-pill .icon { width: 12px; height: 12px; }
@@ -524,10 +525,11 @@ SCRIPT = """
     const buttons = [...document.querySelectorAll(".filter button")];
     const search = document.querySelector(".search");
     const map = L.map("map", {preferCanvas: true, scrollWheelZoom: false}).setView([42.345, -71.08], 12);
+    map.attributionControl.setPrefix(false);  // Leaflet's own link and flag, which its license doesn't ask for.
     // Esri's dark gray canvas, which needs no key: the land and water, then the place names over them.
     const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
     L.tileLayer(esri + "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-      maxNativeZoom: 16, maxZoom: 18, attribution: "Esri, HERE, Garmin, &copy; OpenStreetMap contributors",
+      maxNativeZoom: 16, maxZoom: 18, attribution: '&copy; <a href="https://www.esri.com/">Esri</a> · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     L.tileLayer(esri + "World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {maxNativeZoom: 16, maxZoom: 18}).addTo(map);
     const dots = L.layerGroup().addTo(map);
