@@ -152,27 +152,60 @@ class Reading(unittest.TestCase):
         self.assertEqual(build.read_feed(site("https://www.nytimes.com/", days=0))["posts"], [])
 
 
-class PocketCasts(unittest.TestCase):
-    def pocket_casts(self, url, payload=None):
-        return json.loads((FIXTURES / ("pocketcasts_find.json" if payload else "pocketcasts_episodes.json")).read_text())
+class ApplePodcasts(unittest.TestCase):
+    EPISODES = "https://podcasts.apple.com/us/podcast"
+    SHOW = f"{EPISODES}/the-big-picture/id1080911743"
 
-    def test_links_episodes_to_pocket_casts(self):
+    def apple(self, url, asked):
+        name = "apple_search.json" if url == build.APPLE_SEARCH_URL else "apple_lookup.json"
+        self.asked.append((name, asked))
+        return json.loads((FIXTURES / name).read_text())
+
+    def setUp(self):
+        self.asked = []
         with mock.patch.object(build, "fetch", sample):
-            feed = build.read_feed(site("https://feeds.megaphone.fm/the-big-picture"))
-        episodes = {episode["title"] for episode in self.pocket_casts("x")["podcast"]["episodes"]}
-        with mock.patch.object(build, "pocket_casts_json", self.pocket_casts):
-            build.link_to_pocket_casts(feed)
-        for post in feed["posts"]:
-            expected = "https://pca.st/episode/" if post["title"] in episodes else "https://pca.st/podcast/"
-            self.assertTrue(post["link"].startswith(expected), (post["title"], post["link"]))
+            self.feed = build.read_feed(site("https://feeds.megaphone.fm/the-big-picture"))
+
+    def links(self):
+        with mock.patch.object(build, "apple_json", self.apple):
+            build.link_to_apple(self.feed)
+        return [post["link"] for post in self.feed["posts"]]
+
+    def test_links_an_episode_by_its_audio_file(self):
+        # Apple's own title for it is shorter than the feed's, so the audio file is what finds it.
+        self.assertEqual(self.links()[0], f"{self.EPISODES}/the-winners-and-losers-of-the-summer/id1080911743?i=1000790786635")
+
+    def test_links_an_episode_by_its_title(self):
+        # Apple serves this one from a tracking address, so the title, punctuation aside, is what finds it.
+        self.assertEqual(self.links()[1], f"{self.EPISODES}/the-10-best-movies/id1080911743?i=1000789112233")
+
+    def test_opens_the_show_for_an_episode_apple_hasnt_picked_up(self):
+        self.assertEqual(self.links()[2], self.SHOW)
+
+    def test_finds_the_show_by_the_feed_it_carries(self):
+        # A search by name returns another show first; the feed address is what tells them apart.
+        self.links()
+        self.assertEqual(self.asked[0][1]["term"], "The Big Picture")
+        self.assertEqual(self.asked[1][1]["id"], "1080911743")
+
+    def test_takes_the_show_a_feed_names(self):
+        self.feed["apple"] = "1080911743"
+        self.links()
+        self.assertEqual([name for name, _ in self.asked], ["apple_lookup.json"])
+
+    def test_keeps_web_links_when_apple_cannot_be_reached(self):
+        before = [post["link"] for post in self.feed["posts"]]
+        with mock.patch.object(build, "apple_json", side_effect=OSError("no answer")):
+            build.link_to_apple(self.feed)
+        self.assertEqual([post["link"] for post in self.feed["posts"]], before)
 
     def test_leaves_a_newsletter_with_episodes_alone(self):
-        feed = {"name": "Mixed", "feed_url": "x", "pocketcasts": "", "posts": [
+        feed = {"name": "Mixed", "feed_url": "x", "apple": "", "posts": [
             {"title": "Episode", "link": "https://a", "audio": "https://a.mp3", "podcast": True},
             {"title": "Essay", "link": "https://b", "audio": None, "podcast": False},
         ]}
-        with mock.patch.object(build, "pocket_casts_json", side_effect=AssertionError("looked up")):
-            build.link_to_pocket_casts(feed)
+        with mock.patch.object(build, "apple_json", side_effect=AssertionError("looked up")):
+            build.link_to_apple(feed)
         self.assertEqual(feed["posts"][0]["link"], "https://a")
 
 
@@ -185,7 +218,7 @@ class Fallback(unittest.TestCase):
                 "summary": [], "comments": None, "comment_count": None, "audio": None, "podcast": False}
 
     def feed(self, posts=(), error=None):
-        feed = {"name": "A Blog", "url": self.blog["url"], "feed_url": "https://blog.example/feed", "pocketcasts": "", "posts": list(posts)}
+        feed = {"name": "A Blog", "url": self.blog["url"], "feed_url": "https://blog.example/feed", "apple": "", "posts": list(posts)}
         return dict(feed, error=error) if error else feed
 
     def previous(self, hours_old, post_hours_ago=10):

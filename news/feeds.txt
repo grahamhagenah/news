@@ -3,8 +3,9 @@
 # Options at the end of a line: limit=5 (at most 5 posts), days=14 (keep posts for 14 days), and
 # only="Full Performance" (only posts whose titles have that in them, in any case).
 # Defaults are 15 posts from the last 3 days.
-# For a podcast whose feed address isn't the one Pocket Casts knows, pocketcasts=<show id> links it to
-# the right show (the id is in the show's pocketcasts.com address).
+# A podcast's episodes link to Apple Podcasts, the show found by searching its name and told apart by the
+# feed it carries. Where a show publishes under a feed address Apple doesn't list, apple=<show id> names
+# it outright (the id is the number after /id in its podcasts.apple.com address).
 
 # News
 https://www.nytimes.com/        The New York Times
@@ -45,15 +46,15 @@ https://usa.streetsblog.org/
 https://grist.org/   Grist
 https://humantransit.org/feed   Human Transit   days=30
 
-# Podcasts (episodes open in Pocket Casts). days= roughly matches how often each show posts.
+# Podcasts (episodes open in Apple Podcasts). days= roughly matches how often each show posts.
 https://feeds.npr.org/510318/podcast.xml   Up First
 https://feeds.megaphone.fm/GLT1412515089   The Joe Rogan Experience
-https://feeds.simplecast.com/82FI35Px   The Ezra Klein Show   days=7
+https://feeds.simplecast.com/82FI35Px   The Ezra Klein Show   days=7   apple=1548604447
 https://feeds.megaphone.fm/theezrakleinshow   The Gray Area   days=7
 https://feeds.megaphone.fm/ARML2708405200   Past Present Future   days=7
 https://audioboom.com/channels/5166624.rss   Pod Save America   days=7
-# Volts' Substack feed blocks GitHub's servers, so use its own domain, with the show Pocket Casts knows.
-https://www.volts.wtf/feed/podcast/193024.rss   Volts   days=7   pocketcasts=647db5e0-3818-0139-3324-0acc26574db2
+# Volts' Substack feed blocks GitHub's servers, so use its own domain, and name the show Apple lists.
+https://www.volts.wtf/feed/podcast/193024.rss   Volts   days=7   apple=1548554104
 https://feeds.megaphone.fm/the-big-picture   The Big Picture   days=7
 https://feeds.npr.org/510289/podcast.xml   Planet Money   days=7
 https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/8a94442e-5a74-4fa2-8b8d-ae27003a8d6b/982f5071-765c-403d-969d-ae27003a8d83/podcast.rss   Odd Lots   days=7

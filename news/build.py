@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import sys
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -36,9 +37,11 @@ FALLBACK_LIMIT = timedelta(days=2)
 # InsideEVs) block a user agent containing "newsfeed" but allow this one.
 USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 
-# The endpoints Pocket Casts' own web player uses; they're undocumented, so failures fall back to web links.
-POCKET_CASTS_FIND_URL = "https://refresh.pocketcasts.com/author/add_feed_url"
-POCKET_CASTS_EPISODES_URL = "https://podcast-api.pocketcasts.com/podcast/full/{uuid}"
+# Apple's own catalogue, which its Podcasts app opens from: a show is found by name and told apart by the feed
+# it carries, and its episodes come back with the audio file each points at, which is what an episode here is
+# matched to. Failures fall back to web links.
+APPLE_SEARCH_URL = "https://itunes.apple.com/search"
+APPLE_LOOKUP_URL = "https://itunes.apple.com/lookup"
 
 FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/rdf+xml"}
 COMMON_FEED_PATHS = ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/index.xml"]
@@ -56,16 +59,16 @@ def parse_site(line):
     if only:
         line = line[:only.start()] + line[only.end():]
     url, *words = line.split()
-    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "pocketcasts": "",
+    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "apple": "",
             "only": only.group(1) if only else ""}
     name = []
     for word in words:
         option = re.fullmatch(r"(limit|days)=(\d+)", word)
-        show = re.fullmatch(r"pocketcasts=([0-9a-f-]{36})", word)
+        show = re.fullmatch(r"apple=(\d+)", word)
         if option:
             site[option.group(1)] = int(option.group(2))
         elif show:
-            site["pocketcasts"] = show.group(1)
+            site["apple"] = show.group(1)
         else:
             name.append(word)
     site["name"] = " ".join(name)
@@ -304,7 +307,7 @@ def read_feed(site):
         "name": site["name"] or clean(child_text(meta, "title")) or site["url"],
         "url": site["url"],
         "feed_url": feed_url,
-        "pocketcasts": site["pocketcasts"],
+        "apple": site["apple"],
         "posts": posts[: site["limit"]],
     }
 
@@ -344,7 +347,7 @@ def read_youtube_api(site, channel, key):
             "video": video,
         })
     name = site["name"] or (items[0]["snippet"].get("channelTitle", "") if items else "") or site["url"]
-    return {"name": name, "url": site["url"], "feed_url": site["url"], "pocketcasts": site["pocketcasts"],
+    return {"name": name, "url": site["url"], "feed_url": site["url"], "apple": site["apple"],
             "posts": posts[: site["limit"]]}
 
 
@@ -365,12 +368,10 @@ def load(site):
         return {"name": site["name"] or site["url"], "url": site["url"], "error": str(error), "posts": []}
 
 
-def pocket_casts_json(url, payload=None):
-    data = json.dumps(payload).encode() if payload is not None else None
-    headers = {"User-Agent": USER_AGENT, "Content-Type": "application/json"}
-    with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers), timeout=20) as response:
+def apple_json(url, asked):
+    address = f"{url}?{urllib.parse.urlencode(asked)}"
+    with urllib.request.urlopen(urllib.request.Request(address, headers={"User-Agent": USER_AGENT}), timeout=20) as response:
         body = response.read()
-    # Episode lists are stored gzipped and served that way whatever the request accepts.
     return json.loads(gzip.decompress(body) if body[:2] == b"\x1f\x8b" else body)
 
 
@@ -378,42 +379,56 @@ def comparable(text):
     return re.sub(r"\W+", " ", html.unescape(text or "")).strip().lower()
 
 
-def pocket_casts_links(feed):
-    """Pocket Casts links for a podcast's episodes, keyed by audio file and by title, and the show's own page."""
-    uuid = feed["pocketcasts"]
-    if not uuid:
-        # Named "add feed", but for a feed Pocket Casts already has it just returns the show.
-        found = pocket_casts_json(POCKET_CASTS_FIND_URL, {"url": feed["feed_url"]})
-        uuid = ((found.get("result") or {}).get("podcast") or {}).get("uuid")
-    if not uuid:
+def apple_show(feed):
+    """Which show in Apple's catalogue a feed is: the one its line names (apple=…), or the one a search by name
+    returns carrying this feed. Nothing without that, since the nearest thing by name is often another show."""
+    if feed["apple"]:
+        return feed["apple"]
+    found = apple_json(APPLE_SEARCH_URL, {"term": feed["name"], "media": "podcast", "limit": 10})
+    wanted = (feed["feed_url"] or "").rstrip("/")
+    for show in found.get("results", []):
+        if (show.get("feedUrl") or "").rstrip("/") == wanted:
+            return str(show["collectionId"])
+    return ""
+
+
+def apple_links(feed):
+    """Apple Podcasts links for a show's episodes, keyed by audio file and by title, and the show's own page."""
+    show = apple_show(feed)
+    if not show:
         return {}, None
+    answer = apple_json(APPLE_LOOKUP_URL, {"id": show, "media": "podcast", "entity": "podcastEpisode", "limit": 200})
+    results = answer.get("results") or []
     links = {}
-    for episode in pocket_casts_json(POCKET_CASTS_EPISODES_URL.format(uuid=uuid))["podcast"]["episodes"]:
-        url = f"https://pca.st/episode/{episode['uuid']}"
-        links[episode.get("url")] = url
-        links[comparable(episode.get("title"))] = url
-    return links, f"https://pca.st/podcast/{uuid}"
+    for episode in results:
+        url = episode.get("trackViewUrl")
+        if episode.get("wrapperType") != "podcastEpisode" or not url:
+            continue
+        links[episode.get("episodeUrl")] = url
+        links[comparable(episode.get("trackName"))] = url
+    showing = next((item.get("collectionViewUrl") for item in results if item.get("wrapperType") == "track"), None)
+    return links, showing or f"https://podcasts.apple.com/podcast/id{show}"
 
 
-def link_to_pocket_casts(feed):
-    """Point podcast episodes at Pocket Casts, whose pca.st links open in the Pocket Casts app."""
+def link_to_apple(feed):
+    """Point podcast episodes at Apple Podcasts, whose links open in the Podcasts app."""
     episodes = [post for post in feed["posts"] if post["podcast"]]
-    # Only whole podcast feeds: the lookup adds feeds Pocket Casts doesn't have yet, and a newsletter
-    # feed with the odd episode in it shouldn't become a podcast there. Those episodes keep web links.
+    # Only whole podcast feeds: a newsletter with the odd episode in it isn't a show in Apple's catalogue,
+    # and the nearest thing by name would be someone else's. Those episodes keep web links.
     if len(episodes) < len(feed["posts"]):
         return
     try:
-        links, show_url = pocket_casts_links(feed)
+        links, show_url = apple_links(feed)
     except Exception as error:
-        print(f"  {feed['name']}: Pocket Casts lookup failed, keeping web links ({error})", file=sys.stderr)
+        print(f"  {feed['name']}: Apple Podcasts lookup failed, keeping web links ({error})", file=sys.stderr)
         return
     linked = 0
     for post in episodes:
         episode_url = links.get(post["audio"]) or links.get(comparable(post["title"]))
         linked += bool(episode_url)
-        # An episode Pocket Casts hasn't picked up yet opens the show, where it will appear.
+        # An episode Apple hasn't picked up yet opens the show, where it will appear.
         post["link"] = episode_url or show_url or post["link"]
-    print(f"  {feed['name']}: {linked} of {len(episodes)} episodes linked to Pocket Casts")
+    print(f"  {feed['name']}: {linked} of {len(episodes)} episodes linked to Apple Podcasts")
 
 
 def render_time(date, css_class=""):
@@ -1180,7 +1195,7 @@ def gather(sites, feeds, previous, built_at):
             gathered.append(feed)
             continue
         # Keep its last good posts, and when they were fetched, so they still age out. Their links are
-        # already resolved (to Pocket Casts, for episodes), so the feed isn't looked up again.
+        # already resolved (to Apple Podcasts, for episodes), so the feed isn't looked up again.
         fetched = datetime.fromisoformat(kept["fetched"])
         stale.append((name, fetched))
         print(f"  {name}: showing its posts from {kept['fetched']} instead", file=sys.stderr)
@@ -1216,7 +1231,7 @@ def main():
     # One podcast at a time, to go easy on an API that isn't meant for public use.
     for feed in feeds:
         if not feed.get("restored") and any(post["podcast"] for post in feed["posts"]):
-            link_to_pocket_casts(feed)
+            link_to_apple(feed)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
