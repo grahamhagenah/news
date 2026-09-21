@@ -11,11 +11,12 @@ Two plain, black pages built from the same code:
 - `events/verify/` is published at pushpin.city's root as it is, for a file a service asks for to know the site is ours (Google Search Console's `googleXXXX.html`).
 - `events/`: the events page. `sources.txt` lists its venues and how to read each (Boston's; `sources-westernma.txt` and `sources-bayarea.txt` for the other cities); `skip.txt` has words and phrases that keep a listing off both events pages when its name has one ("comedy"), except films; `build.py` has a reader for each kind of source and combines a film showing at several theaters into one row; `find_venue.py` looks up Ticketmaster venue ids.
 - `shared/`: what both use. `site.py` has the page around each list (head, header, the styles they share, icons, the script that ages timestamps), fetching with retries, and the fallback and failure bookkeeping; `alerts.py` opens and closes "Source failing" issues.
+- `housing/`: the housing tracker. `build.py` reads Boston's and Cambridge's lists of development projects, and MassBuilds for the towns around them; `edits.txt` holds our own changes to them and projects they don't list.
 - `tests/`: each page's readers against saved samples of real sources (`tests/fixtures/news`, `tests/fixtures/events`), the fallback rules, and the shared page and alerts.
 
 Run everything from this top folder, with only the Python standard library:
 
-- `python3 -m news.build` and `python3 -m events.build` write `dist/news` and `dist/events`; open their `index.html`.
+- `python3 -m news.build` and `python3 -m events.build` write `dist/news` and `dist/events`; open their `index.html`. `python3 -m housing.build` writes `dist/housing`.
 - `python3 -m unittest` runs the tests.
 
 ## The newsfeed
@@ -73,6 +74,15 @@ The events build also writes the same listings for anyone, as **Pushpin Boston**
 - The Contact page's form sends through [FormSubmit](https://formsubmit.co) to the address in `PUBLIC_CONTACT`; its first message asks that address to confirm, and FormSubmit then offers a random alias to use there instead of the address.
 - The deploy pushes it with a deploy key that can write to that repo only, kept as the `PUBLIC_DEPLOY_KEY` secret. To move it to another domain: point the domain at GitHub Pages, set it in that repo's Pages settings, change the `CNAME` the deploy writes, and change `PUBLIC_URL`.
 
+## The housing tracker
+
+New housing being proposed, approved and built around Boston, at housing.grahamhagenah.com: a map of it, then a list for each town, newest news first.
+
+- Boston's projects come from the Planning Department's map of projects under Article 80 review (anything over about 20,000 square feet or 15 homes); Cambridge's from its quarterly development log (50,000 square feet or 10 homes). The towns around them (`INNER_RING`: Somerville, Brookline, Medford and the rest) come from MAPC's [MassBuilds](https://www.massbuilds.com/), which MAPC's staff and the towns' planners keep up, some towns far more often than others, so each of those lists says when its data was last updated, in amber after six months. MassBuilds' "planning" (filed, approved or not) shows as proposed, and its "stalled" flag as stalled. Only projects with homes are listed, and finished ones only from 2020 on (`COMPLETE_SINCE`).
+- Each project's status is one of proposed, approved, under construction, complete or stalled. A project's date is the latest of its filing, its approval, the day a build first saw its status change (each build compares with the last one's `projects.json`) and the date on our own edit. The first build has nothing to compare with, so Cambridge's projects, which have no dates of their own, go undated until they change.
+- To correct a project, note something about it or add one the cities don't list, add a block to `housing/edits.txt` (its top explains how) and push; the page rebuilds at once. An edit that can't be used is reported in the build's log and skipped.
+- Changes to MassBuilds' projects can go back to MassBuilds too, where anyone with an account can propose an edit or flag a record for MAPC to review. `python3 -m housing.upstream` lists what our edits would change there, each with its MassBuilds page, and whether it can go as an edit (MassBuilds takes one only if it leaves the whole record valid) or needs a flag; it sends nothing.
+
 ## Visitor counts (GoatCounter)
 
 Pushpin Boston's visits are counted with [GoatCounter](https://www.goatcounter.com), free for a personal, non-commercial site. It uses no cookies and keeps nothing personal, so no cookie notice is needed; the About page's "Does it track me?" answer says so. Only Pushpin Boston is counted, not the newsfeed or the personal events page.
@@ -99,7 +109,8 @@ Pushpin Boston's visits are counted with [GoatCounter](https://www.goatcounter.c
 
 - The newsfeed is this repo's GitHub Pages site.
 - A repo can publish only one Pages site, so what's left at events.grahamhagenah.com (its listings and the page pointing on to Pushpin) is pushed to the `gh-pages` branch of [grahamhagenah/events](https://github.com/grahamhagenah/events). The push uses a deploy key that can write to that repo only, kept as the `EVENTS_DEPLOY_KEY` secret here (its public half is under that repo's Settings → Deploy keys). Deploy keys don't expire.
-- The newsfeed rebuilds every run; the events page every three hours, since listings change slowly and the theaters' sites are small. A push rebuilds both at once.
+- The housing tracker is pushed the same way, to [grahamhagenah/housing](https://github.com/grahamhagenah/housing), with the `HOUSING_DEPLOY_KEY` secret. Without that secret it's built but not published.
+- The newsfeed rebuilds every run; the housing tracker every six hours; the events page every three hours, since listings change slowly and the theaters' sites are small. A push rebuilds both at once.
 
 ## Scheduled builds
 

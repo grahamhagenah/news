@@ -97,6 +97,32 @@ jobs:
           GIT_SSH_COMMAND="ssh -i ~/.ssh/public -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
             git push -qf git@github.com:grahamhagenah/pushpin.git gh-pages
 
+      # The housing tracker, pushed to the grahamhagenah/housing repo's gh-pages branch, which publishes it to
+      # housing.grahamhagenah.com. The cities update their lists every few weeks or months, so it rebuilds every
+      # six hours, or at once after a push. Until the repo's deploy key is kept as HOUSING_DEPLOY_KEY, it's
+      # built (so a problem shows here) but not published.
+      - run: python3 -m housing.build
+        continue-on-error: true
+        env:
+          HOUSING_EVERY_HOURS: ${{ github.event_name != 'push' && '6' || '' }}
+      - name: Publish the housing tracker
+        if: hashFiles('dist/housing/index.html') != ''
+        continue-on-error: true
+        env:
+          DEPLOY_KEY: ${{ secrets.HOUSING_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then echo "No HOUSING_DEPLOY_KEY yet; not publishing."; exit 0; fi
+          echo housing.grahamhagenah.com > dist/housing/CNAME
+          touch dist/housing/.nojekyll
+          mkdir -p ~/.ssh && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/housing && chmod 600 ~/.ssh/housing
+          cd dist/housing
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Housing tracker, built from grahamhagenah/news@${GITHUB_SHA::7}"
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/housing -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git push -qf git@github.com:grahamhagenah/housing.git gh-pages
+
       # An issue for any source failing for hours (GitHub emails about it); never holds up either page. A page
       # not built this run is left out, so its issues stay as they are.
       - if: ${{ !cancelled() }}

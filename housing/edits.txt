@@ -1,0 +1,13 @@
+# Changes to what the cities' data says, and projects it doesn't have. One block per project, separated by a
+# blank line. A block starts with the project's id, as its row's id on the page (boston-3195, cambridge-800),
+# then any of these, one per line:
+#
+#   status: proposed, approved, under construction, complete or stalled
+#   note: a line of our own, shown under the project and first in its preview
+#   date: when this happened (2026-09-01), which puts it at the top of its list; the note's date, if given
+#   link: an address to link the project's name to instead of the city's page
+#   hide: yes, to leave it off the page
+#
+# A project the cities don't list gets an id of its own (somerville-union-square-d2) and needs a name, town,
+# units, status, lat and lon too, and can have a neighborhood, address and description.
+
