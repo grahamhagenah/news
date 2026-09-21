@@ -45,6 +45,23 @@ STATUSES = {
     "stalled": ("Stalled", "#d65a50"),
 }
 
+# Each filter's mark, drawn in 16×16 strokes like the other pages' icons, and in its status's color where it has
+# one: a half-filled circle for everything in progress, a filed page for proposed, a check for approved, a crane
+# for under construction, a house for complete, a pause for stalled, and four squares for all.
+ICON_DRAWINGS = {
+    "active": '<circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/>',
+    "proposed": '<path d="M9.25 1.75H4.5A1.5 1.5 0 0 0 3 3.25v9.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5V5.5z"/>'
+                '<path d="M9.25 1.75V5.5H13M5.75 8.5h4.5M5.75 11h2.75"/>',
+    "approved": '<circle cx="8" cy="8" r="6.25"/><path d="M5.25 8.25l2 2 3.5-4"/>',
+    "under-construction": '<path d="M6 14.25V1.75M3.25 14.25h5.5M2 4.25h12M6 1.75L2 4.25M6 1.75l8 2.5M12 4.25V8"/>'
+                          '<rect x="10.9" y="8" width="2.2" height="2" rx=".4" fill="currentColor" stroke="none"/>',
+    "complete": '<path d="M2.25 7.5L8 2.5l5.75 5"/><path d="M3.75 6.25v7.5h8.5v-7.5"/><path d="M6.75 13.75v-3.5h2.5v3.5"/>',
+    "stalled": '<circle cx="8" cy="8" r="6.25"/><path d="M6.5 5.75v4.5M9.5 5.75v4.5"/>',
+    "all": '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>'
+           '<rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>',
+}
+ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
+
 BOSTON_STATUSES = {
     "Prefile (Default)": "proposed",
     "Letter of Intent": "proposed",
@@ -675,12 +692,16 @@ def render(projects, built_at, failed):
     sections = "".join(
         f'<details><summary><span class="town">{html.escape(town)}</span><span class="count"></span></summary>'
         f'{source_note(town, rows, today)}<ul>{"".join(row(project, today) for project in rows)}</ul></details>'
-        for town, rows in sorted(towns.items())
+        # Boston first, as the city the rest are around; then the others by name.
+        for town, rows in sorted(towns.items(), key=lambda item: (item[0] != "Boston", item[0]))
     )
     choices = [("active", "In progress")] + [(key, label) for key, (label, _) in STATUSES.items()] + [("all", "All")]
+    def colored(key):
+        return f' style="color:{STATUSES[key][1]}"' if key in STATUSES else ""
     filter_row = (
         '<div class="filter">' + "".join(
-            f'<button type="button" data-show="{key}" aria-pressed="{"true" if key == "active" else "false"}">{label}</button>'
+            f'<button type="button" data-show="{key}" aria-pressed="{"true" if key == "active" else "false"}">'
+            f'<span{colored(key)}>{shared.icon(key.replace(" ", "-"))}</span>{label}</button>'
             for key, label in choices
         ) + f'<div class="finders">{shared.SEARCH}</div></div>'
     )
@@ -702,7 +723,7 @@ def render(projects, built_at, failed):
     script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                        json.dumps({key: label for key, (label, _) in STATUSES.items()}))
     return shared.page(
-        "news", "Housing", body + script, css=CSS, head=LEAFLET, updated=built_at,
+        "news", "Housing", body + script, css=CSS, head=LEAFLET, symbols=ICON_SYMBOLS, updated=built_at,
         links=[("Housing", "./", True)],
     )
 
