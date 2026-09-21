@@ -37,7 +37,7 @@ class Readers(unittest.TestCase):
 
     def test_massbuilds(self):
         projects = {p["id"]: p for p in build.massbuilds((FIXTURES / "massbuilds.json").read_bytes())}
-        # 1135 was finished in 2007 and 140 has no homes.
+        # 1135 was finished in 2007, 140 has no homes, and 99999 ended with two fewer than it began with.
         self.assertEqual(set(projects), {"massbuilds-1549", "massbuilds-6582", "massbuilds-135", "massbuilds-6126",
                                          "massbuilds-3476"})
         self.assertEqual(projects["massbuilds-1549"]["status"], "proposed")

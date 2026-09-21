@@ -128,7 +128,7 @@ def boston(body):
     for feature in json.loads(body)["features"]:
         row = {key: "" if value is None else value for key, value in feature["attributes"].items()}
         units, status = number(row["total_residential_units"]), BOSTON_STATUSES.get(row["project_status"])
-        if not units or not status:
+        if units <= 0 or not status:  # MassBuilds counts homes lost as negative; so might anyone.
             continue
         dates = [d for d in (iso_date(row["last_filed_date"]), iso_date(row["last_board_approved_date"])) if d]
         dated = max(dates, default=None)
@@ -166,7 +166,7 @@ def cambridge(body):
     projects = []
     for row in json.loads(body):
         units, status = number(row.get("residential_units")), CAMBRIDGE_STATUSES.get(row.get("status"))
-        if not units or not status or not row.get("latitude"):
+        if units <= 0 or not status or not row.get("latitude"):
             continue
         finished = number(row.get("year_complete"))
         if status == "complete" and finished and finished < COMPLETE_SINCE:
@@ -221,7 +221,8 @@ def massbuilds(body):
     for item in json.loads(body)["data"]:
         row = item["attributes"]
         units, status = number(row.get("hu")), MASSBUILDS_STATUSES.get(row.get("status"))
-        if not units or not status or row.get("latitude") is None:
+        # A project that ends with fewer homes than it began with (two flats made one) has a negative count.
+        if units <= 0 or not status or row.get("latitude") is None:
             continue
         finished = number(row.get("year_compl"))
         if status == "complete" and (not finished or finished < COMPLETE_SINCE):
@@ -449,7 +450,7 @@ CSS = """
   .intro .search { flex: 0 1 10rem; min-width: 6rem; margin-left: 0; }
   @media (max-width: 34rem) {
     .intro { flex-direction: column; align-items: stretch; gap: .9rem; }
-    .intro .search { width: 100%; font-size: 1rem; }
+    .intro .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
     .tagline { font-size: .8rem; }
   }
   /* Each project on the map: its status's icon on a dark badge, ringed in the status's color. */
@@ -650,7 +651,7 @@ SCRIPT = """
       const name = row.querySelector(".title").textContent, units = +row.dataset.units, status = row.dataset.status;
       // Its status's icon on a dark badge ringed in the status's color, bigger for more homes; the smaller ones
       // drawn over the bigger, so a small project beside a big one can still be clicked.
-      const size = Math.round(Math.max(16, Math.min(30, 12 + Math.sqrt(units) / 1.5)));
+      const size = Math.round(Math.max(16, Math.min(30, 12 + Math.sqrt(Math.max(0, units) || 0) / 1.5)));
       const dot = L.marker([+row.dataset.lat, +row.dataset.lon], {
         icon: L.divIcon({
           className: "pin", iconSize: [size, size], popupAnchor: [0, -size / 2],
