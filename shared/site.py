@@ -15,7 +15,7 @@ from datetime import datetime
 # The two pages, in the order the header names them.
 SITES = {
     "news": ("Newsfeed", "https://news.grahamhagenah.com/"),
-    "events": ("Events", "https://events.grahamhagenah.com/"),
+    "events": ("Events", "https://pushpin.city/boston/"),
 }
 
 

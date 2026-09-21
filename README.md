@@ -3,7 +3,7 @@
 Two plain, black pages built from the same code:
 
 - **Newsfeed**, the latest posts, podcast episodes and videos from a few sites, newest first: https://news.grahamhagenah.com/
-- **Events**, concerts over the next 60 days (venues announce them further ahead) and films, and art and talks, over the next 30, in Boston, Cambridge and Somerville, grouped by day (`MUSIC_DAYS_AHEAD` and `DAYS_AHEAD` in `events/build.py`): https://events.grahamhagenah.com/
+- **Events**, concerts over the next 60 days (venues announce them further ahead) and films, and art and talks, over the next 30, grouped by day (`MUSIC_DAYS_AHEAD` and `DAYS_AHEAD` in `events/build.py`): pushpin.city, a site for each city. events.grahamhagenah.com was this page before Pushpin had a site of its own; it now holds the listings each build keeps for the next one (`listings.json`) and a page sending readers on to Pushpin Boston.
 
 ## What's where
 
@@ -98,7 +98,7 @@ Pushpin Boston's visits are counted with [GoatCounter](https://www.goatcounter.c
 `deploy.yml` runs the tests, then builds and publishes both pages:
 
 - The newsfeed is this repo's GitHub Pages site.
-- A repo can publish only one Pages site, so the events page is pushed to the `gh-pages` branch of [grahamhagenah/events](https://github.com/grahamhagenah/events), whose Pages site is events.grahamhagenah.com. The push uses a deploy key that can write to that repo only, kept as the `EVENTS_DEPLOY_KEY` secret here (its public half is under that repo's Settings → Deploy keys). Deploy keys don't expire.
+- A repo can publish only one Pages site, so what's left at events.grahamhagenah.com (its listings and the page pointing on to Pushpin) is pushed to the `gh-pages` branch of [grahamhagenah/events](https://github.com/grahamhagenah/events). The push uses a deploy key that can write to that repo only, kept as the `EVENTS_DEPLOY_KEY` secret here (its public half is under that repo's Settings → Deploy keys). Deploy keys don't expire.
 - The newsfeed rebuilds every run; the events page every three hours, since listings change slowly and the theaters' sites are small. A push rebuilds both at once.
 
 ## Scheduled builds

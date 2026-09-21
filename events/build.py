@@ -4261,12 +4261,14 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
     # The personal events page: Boston's. Its listings.json keeps every city's, for falling back on.
-    personal = by_city(BOSTON_CITY, events, sources, failed, stale)
-    (OUT_DIR / "index.html").write_text(render_index(*personal, built_at))
+    # This page was Boston's before Pushpin had a site of its own, and said the same things twice after; what's
+    # left of it is the listings this build keeps for the next one to fall back on, which stays at the address
+    # every build looks for it at (LISTINGS_URL), and a way on to the page that replaced it.
+    (OUT_DIR / "index.html").write_text(moved_on(f"{PUBLIC_SITE}boston/"))
     record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at),
               "first_seen": first_seen}
     (OUT_DIR / "listings.json").write_text(json.dumps(record, ensure_ascii=False))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html with {len(personal[0])} listings, and listings.json")
+    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/listings.json, and index.html pointing at {PUBLIC_SITE}boston/")
 
     # Each city's public site, from the same listings; then the site's own root.
     for city in CITIES:
@@ -4287,6 +4289,19 @@ def main():
     (PUBLIC_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n\n" + f"Sitemap: {PUBLIC_SITE}sitemap.xml\n" + "".join(
         f"Sitemap: {PUBLIC_SITE}{city.slug}/sitemap.xml\n" for city in CITIES))
     print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: the cities, contact/, sitemap.xml, robots.txt and 404.html")
+
+
+def moved_on(address):
+    """What events.grahamhagenah.com holds now: a page that sends a reader to the one that took its place, and
+    tells a search engine the same, for the links and bookmarks that still point here."""
+    return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n'
+            f'<meta http-equiv="refresh" content="0; url={address}">\n'
+            f'<link rel="canonical" href="{address}">\n<meta name="robots" content="noindex">\n'
+            f'<title>Moved to Pushpin Boston</title>\n<meta name="color-scheme" content="dark">\n'
+            f'<style>html {{ background: #000; }} body {{ margin: 2rem; color: #fff; '
+            f'font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }} '
+            f'a {{ color: #fff; }}</style>\n'
+            f'<p>This page is now <a href="{address}">Pushpin Boston</a>.</p>\n</html>\n')
 
 
 def by_city(city, events, sources, failed, stale):

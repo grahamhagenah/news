@@ -21,7 +21,8 @@ class Page(unittest.TestCase):
     def test_header_names_both_pages_marking_this_one(self):
         news = site.page("news", "Newsfeed", "<ul></ul>", updated=datetime(2026, 9, 12, tzinfo=timezone.utc))
         events = site.page("events", "Events", "<ul></ul>")
-        self.assertIn('<a href="./" aria-current="page">Newsfeed</a><a href="https://events.grahamhagenah.com/">Events</a>', news)
+        # Events is Pushpin Boston now; the page that used to be here sends a reader on to it.
+        self.assertIn('<a href="./" aria-current="page">Newsfeed</a><a href="https://pushpin.city/boston/">Events</a>', news)
         self.assertIn('<a href="https://news.grahamhagenah.com/">Newsfeed</a><a href="./" aria-current="page">Events</a>', events)
         self.assertIn('Updated <time class="updated" datetime="2026-09-12T00:00:00+00:00">', news)
         self.assertNotIn('<span class="header-note">', events, "no updated time given, no note")
