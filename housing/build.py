@@ -69,20 +69,7 @@ ICON_DRAWINGS = {
     "all": '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>'
            '<rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>',
 }
-# Behind each status's lines, its shape filled in with --backing: white on the map, where it's the icon's ground
-# over the streets; nothing (none) everywhere else. A page's styles can't reach inside a drawing it reuses, but a
-# custom property is inherited into it.
-BACKINGS = {
-    "proposed": '<path d="M9.25 1.75H4.5A1.5 1.5 0 0 0 3 3.25v9.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5V5.5z"/>',
-    "approved": '<circle cx="8" cy="8" r="6.25"/>',
-    "under-construction": '<path d="M6.5 2.25h3l3.25 10.5h-9.5z"/>',
-    "complete": '<path d="M3.75 6.25L8 2.5l4.25 3.75v7.5h-8.5z"/>',
-    "stalled": '<circle cx="8" cy="8" r="6.25"/>',
-}
-ICON_SYMBOLS = shared.icon_symbols({
-    name: (f'<g style="fill: var(--backing, none); stroke: none">{BACKINGS[name]}</g>' if name in BACKINGS else "") + drawing
-    for name, drawing in ICON_DRAWINGS.items()
-})
+ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 
 BOSTON_STATUSES = {
     "Prefile (Default)": "proposed",
@@ -466,10 +453,10 @@ CSS = """
     .intro .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
     .tagline { font-size: .8rem; }
   }
-  /* Each project on the map: its status's icon on its own, filled in white (--backing) under its lines in the
-     status's color, with a soft dark edge so it holds up over the map's lighter roads and names. */
-  .pin > span { display: block; width: 100%; height: 100%; transition: transform .12s; --backing: #fff;
-                filter: drop-shadow(0 0 1px rgba(0, 0, 0, .9)) drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
+  /* Each project on the map: its status's icon on its own, in the status's color, with a soft dark edge so it
+     holds up over the map's lighter roads and names. */
+  .pin > span { display: block; width: 100%; height: 100%; transition: transform .12s;
+                filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 2px rgba(0, 0, 0, .8)); }
   .pin svg { display: block; width: 100%; height: 100%; }
   .pin:hover > span { transform: scale(1.25); }
   .leaflet-container { font: inherit; }
