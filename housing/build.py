@@ -453,11 +453,12 @@ CSS = """
     .intro .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
     .tagline { font-size: .8rem; }
   }
-  /* Each project on the map: its status's icon on a dark badge, ringed in the status's color. */
-  .pin > span { display: grid; place-items: center; width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%;
-                border: 1.5px solid currentColor; background: rgba(0, 0, 0, .85); }
-  .pin svg { width: 58%; height: 58%; }
-  .pin:hover > span { background: #000; box-shadow: 0 0 0 2px rgba(255, 255, 255, .35); }
+  /* Each project on the map: its status's icon on its own, in the status's color, with a soft dark edge so it
+     holds up over the map's lighter roads and names. */
+  .pin > span { display: block; width: 100%; height: 100%; transition: transform .12s;
+                filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 2px rgba(0, 0, 0, .8)); }
+  .pin svg { display: block; width: 100%; height: 100%; }
+  .pin:hover > span { transform: scale(1.25); }
   .leaflet-container { font: inherit; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111; color: #ddd; border: 1px solid #333; box-shadow: none; }
   .leaflet-popup-content { margin: .7rem .9rem; font-size: .85rem; line-height: 1.4; }
@@ -492,7 +493,12 @@ CSS = """
   .row .details { flex: none; margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .row .note { grid-column: 2 / -1; margin: -.2rem 0 0; color: #999; font-size: .8em; }
   .row { cursor: pointer; }
-  .row:hover .title { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
+  /* The row under the pointer, a faint band just darker than the one left on the project last opened; where a
+     pointer hovers only, since on a touch screen the last row tapped would stay lit. */
+  @media (hover: hover) and (pointer: fine) {
+    .row { transition: background-color .12s, box-shadow .12s; }
+    .row:hover { background: #0f0f0f; box-shadow: -.5rem 0 #0f0f0f, .5rem 0 #0f0f0f; }
+  }
   /* The project last opened, a faint band behind its row, reaching a little past the text on either side. */
   .row.lit { background: #141414; box-shadow: -.5rem 0 #141414, .5rem 0 #141414; }
   /* A project's panel, in from the right, as Pushpin's listings open: a sheet up from the bottom on a phone. */
@@ -649,9 +655,9 @@ SCRIPT = """
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const marker = row => {
       const name = row.querySelector(".title").textContent, units = +row.dataset.units, status = row.dataset.status;
-      // Its status's icon on a dark badge ringed in the status's color, bigger for more homes; the smaller ones
+      // Its status's icon, in the status's color, bigger for more homes; the smaller ones
       // drawn over the bigger, so a small project beside a big one can still be clicked.
-      const size = Math.round(Math.max(16, Math.min(30, 12 + Math.sqrt(Math.max(0, units) || 0) / 1.5)));
+      const size = Math.round(Math.max(13, Math.min(26, 9 + Math.sqrt(Math.max(0, units) || 0) / 1.6)));
       const dot = L.marker([+row.dataset.lat, +row.dataset.lon], {
         icon: L.divIcon({
           className: "pin", iconSize: [size, size], popupAnchor: [0, -size / 2],
