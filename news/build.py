@@ -635,7 +635,7 @@ INDEX_JS = """
     if (player) player.destroy();
     player = null;
     dialog.querySelector(".player-frame").replaceChildren();
-    dialog.classList.remove("corner");
+    dialog.classList.remove("corner", "filling");
     dialog.style.inset = "";  // Back to the corner it starts in, for the next video.
     document.body.classList.remove("video-corner");
   });
@@ -650,6 +650,9 @@ INDEX_JS = """
     const video = player?.getVideoData?.().video_id;
     const from = player?.getCurrentTime?.() || 0;
     dialog.classList.toggle("corner", tucked);
+    // Filling the window is what a refused full screen falls back to, and it holds the window to the whole of
+    // it: going back to the corner has to let that go, or the corner is drawn full size.
+    if (tucked) dialog.classList.remove("filling");
     document.body.classList.toggle("video-corner", tucked);  // The way back to the top steps over the video.
     if (!dialog.open) {  // Shown as a window of its own either way; the screen it fills is the browser's doing.
       dialog.show();
