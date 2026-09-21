@@ -527,7 +527,7 @@ CSS = """
   .panel-pills { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .9rem; }
   .panel-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .6rem; border-radius: 999px;
                 background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600; }
-  .panel-note { margin: 0 0 1rem; padding: .6rem .8rem; border-left: 2px solid #ffd479; background: #141414; color: #ddd; font-size: .9rem; }
+  .panel-note { margin: 0 0 1rem; padding: .6rem .8rem; border-left: 2px solid #555; background: #141414; color: #ddd; font-size: .9rem; }
   .panel-note:empty { display: none; }
   /* No gap between the columns, so each line runs unbroken across both; the room is in the label's own cell. */
   .panel-facts { display: grid; grid-template-columns: auto 1fr; margin: 0 0 1.1rem; font-size: .85rem; }
