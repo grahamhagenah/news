@@ -3,6 +3,7 @@ projects from each, so they run offline."""
 
 import sys
 import unittest
+import unittest.mock
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -20,6 +21,10 @@ class Readers(unittest.TestCase):
         self.assertEqual(projects["boston-3398"]["status"], "proposed")
         self.assertEqual(projects["boston-3195"]["dated"], date(2024, 4, 11))
         self.assertEqual(projects["boston-3195"]["units"], 55)
+        facts = dict(projects["boston-3195"]["facts"])
+        self.assertEqual(facts["Approved"], "Apr 11, 2024")
+        self.assertEqual(facts["Cost"], "$25M")
+        self.assertEqual(facts["Address"], "267 Old Colony Avenue")
         # Finished before COMPLETE_SINCE: history, not news.
         self.assertNotIn("boston-114", projects)
 
@@ -66,6 +71,24 @@ class Edits(unittest.TestCase):
         self.assertEqual(projects["somerville-1"]["units"], 450)
 
 
+class Pictures(unittest.TestCase):
+    def test_boston_rendering_from_its_page(self):
+        page = """<aside class="bpdaInteriorHeaderImg">
+    <img src='/getattachment/0d1fcada-2bb9-4dcf-8d3d-e4e93c581492/' alt='' />"""
+        found = build.BOSTON_IMAGE.search(page)
+        self.assertEqual(found.group(1), "/getattachment/0d1fcada-2bb9-4dcf-8d3d-e4e93c581492/")
+
+    def test_only_new_projects_are_looked_up(self):
+        projects = [project("boston-1", link="https://example.com/1"), project("boston-2", link="https://example.com/2"),
+                    project("cambridge-1", link="https://example.com/c")]
+        looked = []
+        with unittest.mock.patch.object(build, "boston_image", lambda link: looked.append(link) or "https://img/2"):
+            images = build.add_images(projects, {"boston-1": "https://img/1"})
+        self.assertEqual(looked, ["https://example.com/2"])
+        self.assertEqual(images, {"boston-1": "https://img/1", "boston-2": "https://img/2"})
+        self.assertEqual([p["image"] for p in projects], ["https://img/1", "https://img/2", ""])
+
+
 class Tracking(unittest.TestCase):
     def test_first_build_dates_nothing(self):
         projects = [project()]
@@ -92,6 +115,15 @@ class Page(unittest.TestCase):
         self.assertLess(page.index("<span class=\"town\">Boston"), page.index("<span class=\"town\">Cambridge"))
         self.assertIn("Aug 1", page)
         self.assertIn("Jan 2024", page)
+
+    def test_panel_data_is_on_the_page_and_cant_close_its_script(self):
+        projects = [project("boston-1", description="Ends </script> here", facts=[["Cost", "$5M"]])]
+        projects[0]["since"] = None
+        page = build.render(projects, datetime(2026, 9, 21, tzinfo=timezone.utc), [])
+        data = page.split('<script type="application/json" id="projects">')[1].split("</script>")[0]
+        self.assertIn('"Cost"', data)
+        self.assertIn("<\\/script>", data)
+        self.assertIn('href="#boston-1"', page)
 
 
 class Upstream(unittest.TestCase):

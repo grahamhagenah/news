@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -77,6 +78,24 @@ def iso_date(text):
         return None
 
 
+def long_date(day):
+    return f"{day:%b} {day.day}, {day.year}" if day else ""
+
+
+def money(amount):
+    """Dollars as a panel shows them: $25M, $1.2B."""
+    if not amount:
+        return ""
+    if amount >= 1e9:
+        return f"${amount / 1e9:.1f}B".replace(".0B", "B")
+    return f"${amount / 1e6:.1f}M".replace(".0M", "M") if amount >= 1e6 else f"${amount:,.0f}"
+
+
+def facts(*pairs):
+    """A project's details for its panel, as [label, value], leaving out the ones it doesn't have."""
+    return [[label, str(value)] for label, value in pairs if value not in (None, "", 0, "0")]
+
+
 def boston(body):
     """Boston's projects with homes in them."""
     projects = []
@@ -99,8 +118,18 @@ def boston(body):
             "stage": row["project_status"],
             "lat": float(row["latitude"]), "lon": float(row["longitude"]),
             "link": str(row["website_url"]).strip(),
-            "description": str(row["description"]).replace("\r", ""),
+            "origin": "Boston Planning Department",
+            "description": str(row["description"]).replace("\r", "").strip(),
             "dated": dated,
+            "facts": facts(
+                ("Address", " ".join(str(row[k]).strip() for k in ("project_street_number", "project_street_name",
+                                                                   "project_street_suffix") if str(row[k]).strip())),
+                ("Filed", long_date(iso_date(row["last_filed_date"]))),
+                ("Approved", long_date(iso_date(row["last_board_approved_date"]))),
+                ("Review", str(row["project__record_type"]).replace("Project", "project review")),
+                ("Floor area", f'{number(row["gross_square_footage"]):,} sq ft' if number(row["gross_square_footage"]) else ""),
+                ("Cost", money(number(row["total_development_cost"]))),
+            ),
         })
     return projects
 
@@ -115,10 +144,6 @@ def cambridge(body):
         finished = number(row.get("year_complete"))
         if status == "complete" and finished and finished < COMPLETE_SINCE:
             continue
-        affordable = number(row.get("affordable_units"))
-        description = (row.get("project_description") or "").strip()
-        if affordable:
-            description = f"{description} {affordable} of its homes are income-restricted.".strip()
         projects.append({
             "id": f"cambridge-{row['project_id']}",
             "town": "Cambridge",
@@ -130,8 +155,18 @@ def cambridge(body):
             "stage": row["status"],
             "lat": float(row["latitude"]), "lon": float(row["longitude"]),
             "link": CAMBRIDGE_PAGE,
-            "description": description,
+            "origin": "Cambridge development log",
+            "description": (row.get("project_description") or "").strip(),
             "dated": date(finished, 12, 31) if status == "complete" and finished else None,
+            "facts": facts(
+                ("Address", (row.get("address") or "").strip()),
+                ("Developer", (row.get("developer") or "").strip()),
+                ("Income-restricted", number(row.get("affordable_units"))),
+                ("Floor area", f'{number(row.get("total_gfa")):,} sq ft' if number(row.get("total_gfa")) else ""),
+                ("Permit", (row.get("permit_type") or "").strip()),
+                ("Stage", row["status"]),
+                ("Finished", finished if status == "complete" else ""),
+            ),
         })
     return projects
 
@@ -166,12 +201,7 @@ def massbuilds(body):
             continue
         if row.get("stalled") and status != "complete":
             status = "stalled"
-        description = (row.get("descr") or "").strip()
-        affordable = number(row.get("affrd_unit"))
-        if affordable:
-            description = f"{description} {affordable} of its homes are income-restricted.".strip()
-        if finished and status != "complete":
-            description = f"{description} Expected to be finished in {finished}.".strip()
+        estimated = " (estimated)" if row.get("yrcomp_est") else ""
         projects.append({
             "id": f"massbuilds-{row['id']}",
             "town": row["municipal"],
@@ -182,8 +212,21 @@ def massbuilds(body):
             "stage": row["status"],
             "lat": float(row["latitude"]), "lon": float(row["longitude"]),
             "link": MASSBUILDS_PAGE.format(row["id"]),
-            "description": description,
+            "origin": "MassBuilds",
+            "site": (row.get("prj_url") or "").strip(),
+            "description": (row.get("descr") or "").strip(),
             "dated": iso_date(row.get("updated_at")),
+            "facts": facts(
+                ("Address", (row.get("address") or "").strip()),
+                ("Developer", (row.get("devlper") or "").strip()),
+                ("Income-restricted", number(row.get("affrd_unit"))),
+                ("For 55 and over", "Yes" if row.get("ovr55") else ""),
+                ("Commercial space", f'{number(row.get("commsf")):,} sq ft' if number(row.get("commsf")) else ""),
+                ("Stories", number(row.get("stories"))),
+                ("Cost", money(number(row.get("total_cost")))),
+                ("Finished" if status == "complete" else "Expected", f"{finished}{estimated}" if finished else ""),
+                ("Near", ", ".join((row.get("n_transit") or [])[:4])),
+            ),
         })
     return projects
 
@@ -239,13 +282,13 @@ def apply_edits(projects, edits):
                 "id": ident, "town": fields["town"], "neighborhood": fields.get("neighborhood", ""),
                 "name": fields["name"], "units": number(fields["units"]), "status": status, "stage": "",
                 "lat": lat, "lon": lon, "link": fields.get("link", ""), "description": fields.get("description", ""),
-                "dated": None,
+                "dated": None, "origin": "", "facts": facts(("Address", fields.get("address", ""))),
             }
         if fields.get("hide", "").lower() in ("yes", "true"):
             project["hidden"] = True
         if status:
             project["status"] = status
-        for key in ("note", "link", "description"):
+        for key in ("note", "link", "description", "image"):
             if fields.get(key):
                 project[key] = fields[key]
         if when:
@@ -287,21 +330,30 @@ def when(day, today):
 def row(project, today):
     label, color = STATUSES[project["status"]]
     day = updated(project)
-    name = html.escape(project["name"])
-    title = f'<a class="title" href="{html.escape(project["link"])}">{name}</a>' if project["link"] else f'<span class="title">{name}</span>'
-    paragraphs = [p for p in ([project.get("note", "")] + shared.excerpt(html.escape(project["description"]).replace("\n", "<br>"))) if p]
+    ident = html.escape(project["id"])
     note = f'<p class="note">{html.escape(project["note"])}</p>' if project.get("note") else ""
     place = " · ".join(html.escape(part) for part in (project["neighborhood"], when(day, today)) if part)
     homes = f'{project["units"]:,} home{"s" if project["units"] != 1 else ""}'
     words = " ".join((project["name"], project["neighborhood"], project["town"], project["description"], project.get("note", "")))
     return (
-        f'<li class="row" id="{html.escape(project["id"])}" data-status="{project["status"]}" data-units="{project["units"]}" '
+        f'<li class="row" id="{ident}" data-status="{project["status"]}" data-units="{project["units"]}" '
         f'data-lat="{project["lat"]:.5f}" data-lon="{project["lon"]:.5f}" data-words="{html.escape(words.casefold())}">'
         f'<span class="dot" style="background:{color}" role="img" aria-label="{label}"></span>'
-        f'<span class="headline">{title}{shared.preview(project["name"], paragraphs)}'
+        f'<span class="headline"><a class="title" href="#{ident}">{html.escape(project["name"])}</a>'
         f' <span class="details">{homes} · {label.lower()}</span></span> '
         f'<span class="source"><span>{place}</span></span>{note}</li>'
     )
+
+
+def panel_data(project, today):
+    """What a project's panel shows, beyond its row: the page carries it as JSON, for the script to fill in."""
+    return {
+        "name": project["name"], "town": project["town"], "neighborhood": project["neighborhood"],
+        "units": project["units"], "status": project["status"], "facts": project.get("facts", []),
+        "description": project["description"], "note": project.get("note", ""), "link": project["link"],
+        "origin": project.get("origin", ""), "site": project.get("site", ""), "image": project.get("image", ""),
+        "updated": when(updated(project), today),
+    }
 
 
 CSS = """
@@ -335,7 +387,69 @@ CSS = """
   .from.stale { color: #b08a4a; }
   .row .details { flex: none; margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
   .row .note { grid-column: 2 / -1; margin: -.2rem 0 0; color: #999; font-size: .8em; }
+  .row { cursor: pointer; }
+  .row:hover .title { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   .row.lit .title { color: #ffd479; }
+  /* A project's panel, in from the right, as Pushpin's listings open: a sheet up from the bottom on a phone. */
+  body.viewing { overflow: hidden; }
+  dialog.project { width: min(32rem, 100%); height: 100dvh; max-height: none; margin: 0 0 0 auto; box-sizing: border-box;
+                   overflow: hidden; padding: 0; border: 0; border-left: 1px solid #262626; border-radius: 0;
+                   background: #0b0b0b; color: #ddd; box-shadow: -1px 0 40px rgba(0, 0, 0, .5); font-size: .95rem; line-height: 1.5; }
+  dialog.project::backdrop { background: rgba(0, 0, 0, .6); }
+  dialog.project[open] { display: flex; flex-direction: column; animation: slide .22s ease-out; }
+  @keyframes slide { from { transform: translateX(100%); } }
+  @keyframes appear { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { dialog.project[open] { animation: appear .15s ease-out; } }
+  .panel-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 3.4rem 1.5rem 1.5rem; }
+  .panel-body > * { flex: none; }
+  dialog.project.shows-picture .panel-body { padding-top: 1.4rem; }
+  .panel-tools { position: absolute; top: .85rem; right: .85rem; z-index: 1; display: flex; gap: .2rem; }
+  .panel-tools button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 50%;
+                        background: none; color: #888; cursor: pointer; transition: background-color .15s, color .15s; }
+  .panel-tools button:hover, .panel-tools button:focus-visible { background: #262626; color: #fff; outline: none; }
+  .panel-tools button:disabled { visibility: hidden; transition: none; }
+  .panel-tools svg { width: 16px; height: 16px; }
+  dialog.project.shows-picture .panel-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
+  dialog.project.shows-picture .panel-tools button:hover:not(:disabled) { background: rgba(0, 0, 0, .9); }
+  .panel-image { position: relative; aspect-ratio: 16 / 10; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; background: #151515; }
+  .panel-image img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease-out; }
+  .panel-image.loaded img { opacity: 1; }
+  .panel-image:not(.loaded) { background: linear-gradient(100deg, #151515 40%, #1d1d1d 50%, #151515 60%) 0 0 / 250% 100%;
+                              animation: shimmer 1.6s linear infinite; }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  .panel-image a { position: absolute; right: .6rem; bottom: .5rem; padding: .1rem .5rem; border-radius: 999px;
+                   background: rgba(0, 0, 0, .6); color: #ccc; font-size: .72rem; }
+  .panel-where { margin: 0 2.5rem .4rem 0; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .panel-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; line-height: 1.25; }
+  .panel-pills { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .9rem; }
+  .panel-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .6rem; border-radius: 999px;
+                background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600; }
+  .panel-note { margin: 0 0 1rem; padding: .6rem .8rem; border-left: 2px solid #ffd479; background: #141414; color: #ddd; font-size: .9rem; }
+  .panel-note:empty { display: none; }
+  .panel-facts { display: grid; grid-template-columns: auto 1fr; gap: 0 1rem; margin: 0 0 1.1rem; font-size: .85rem; }
+  .panel-facts dt, .panel-facts dd { margin: 0; padding: .45rem 0; border-top: 1px solid #1c1c1c; }
+  .panel-facts dt { color: #777; }
+  .panel-facts dd { color: #ddd; }
+  .panel-about p { margin: 0 0 .8em; color: #bbb; }
+  .panel-foot { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: 1.2rem; }
+  .panel-foot a, .panel-foot button { display: inline-flex; align-items: center; padding: .4rem .9rem; border: 1px solid #333;
+                border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; text-decoration: none; }
+  .panel-foot a:hover, .panel-foot button:hover, .panel-foot a:focus-visible, .panel-foot button:focus-visible {
+    border-color: #888; color: #fff; outline: none; text-decoration: none; }
+  .panel-foot .primary { border-color: #eee; background: #eee; color: #000; font-weight: 600; }
+  .panel-foot .primary:hover, .panel-foot .primary:focus-visible { background: #fff; color: #000; }
+  .panel-updated { width: 100%; margin: .6rem 0 0; color: #666; font-size: .8rem; }
+  @media (max-width: 34rem) {
+    dialog.project { width: 100%; max-width: 100%; height: auto; max-height: 88dvh; margin: auto 0 0;
+                     border: 1px solid #262626; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
+    .panel-body { padding: 3.2rem 1.25rem 1.5rem; }
+    dialog.project.shows-picture .panel-body { padding-top: 1.25rem; }
+    .panel-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }
+    .panel-tools { top: .75rem; right: .75rem; gap: .9rem; }
+    .panel-tools button { width: 2.5rem; height: 2.5rem; }
+    dialog.project[open] { animation: sheet .22s ease-out; }
+    @keyframes sheet { from { transform: translateY(100%); } }
+  }
   @media (max-width: 34rem) {
     .row { padding-left: calc(8px + .8em); }
     .row > .dot { position: absolute; left: 0; top: calc(.4rem + .72em - 4px); }
@@ -345,6 +459,26 @@ CSS = """
     .row .details::after { content: " ·"; }
   }
 """
+
+def mark(path):
+    return (f'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="{path}" fill="none" stroke="currentColor" stroke-width="2" '
+            'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+
+
+# A project's panel. The script fills it in from the page's data as a project is opened.
+PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
+<div class="panel-tools"><button class="panel-back" type="button" aria-label="Previous project">{mark("M15 6l-6 6l6 6")}</button><button class="panel-on" type="button" aria-label="Next project">{mark("M9 6l6 6l-6 6")}</button><button class="panel-close" type="button" aria-label="Close">{mark("M6 6l12 12M18 6l-12 12")}</button></div>
+<div class="panel-body">
+<div class="panel-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"><a target="_blank" rel="noopener">Full size ↗</a></div>
+<p class="panel-where"></p>
+<h2 class="panel-title" id="panel-title"></h2>
+<div class="panel-pills"></div>
+<p class="panel-note"></p>
+<dl class="panel-facts"></dl>
+<div class="panel-about"></div>
+<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-map" type="button">Show on map</button><p class="panel-updated"></p></div>
+</div>
+</dialog>"""
 
 LEAFLET = ('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">'
            '<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>')
@@ -377,9 +511,7 @@ SCRIPT = """
         + `${units.toLocaleString()} homes · ${labels[status].toLowerCase()}</span>`);
       dot.on("popupopen", event => event.popup.getElement().querySelector(".to-row").addEventListener("click", click => {
         click.preventDefault();
-        row.closest("details").open = true;
-        row.scrollIntoView({block: "center"});
-        rows.forEach(other => other.classList.toggle("lit", other === row));
+        openProject(row, true);
       }));
       return dot;
     };
@@ -409,6 +541,107 @@ SCRIPT = """
     });
     search.addEventListener("input", show);
     show();
+
+    // A project's panel: opened from its row or its dot, with its id in the address so it can be linked to.
+    const data = JSON.parse(document.getElementById("projects").textContent);
+    const view = document.querySelector("dialog.project");
+    const part = name => view.querySelector(".panel-" + name);
+    const make = (tag, props, ...children) => { const el = Object.assign(document.createElement(tag), props); el.append(...children); return el; };
+    let shown = null, pushed = false;
+    // Through the list from inside the panel: what the filter and search show, town by town, in the page's order.
+    const beside = step => {
+      const showing = rows.filter(row => !row.hidden);
+      const at = showing.indexOf(shown);
+      return at < 0 ? null : showing[at + step] || null;
+    };
+    function fill(row) {
+      shown = row;
+      const p = data[row.id];
+      rows.forEach(other => other.classList.toggle("lit", other === row));
+      part("where").textContent = [p.town, p.neighborhood].filter(Boolean).join(" · ");
+      part("title").textContent = p.name;
+      const dot = make("span", {className: "dot"});
+      dot.style.background = colors[p.status];
+      part("pills").replaceChildren(make("span", {className: "panel-pill"}, dot, labels[p.status]),
+        make("span", {className: "panel-pill"}, p.units.toLocaleString() + (p.units === 1 ? " home" : " homes")));
+      part("note").textContent = p.note;
+      part("facts").replaceChildren(...p.facts.flatMap(([label, value]) => [make("dt", {textContent: label}), make("dd", {textContent: value})]));
+      part("about").replaceChildren(...p.description.split(/\\n+/).map(text => text.trim()).filter(Boolean)
+        .map(text => make("p", {textContent: text})));
+      const image = part("image"), img = image.querySelector("img");
+      image.classList.remove("loaded");
+      image.hidden = !p.image;
+      view.classList.toggle("shows-picture", !!p.image);
+      if (p.image) { img.src = p.image; image.querySelector("a").href = p.image; } else img.removeAttribute("src");
+      // The same picture again, already loaded, fires no load event of its own.
+      if (p.image && img.complete && img.naturalWidth) image.classList.add("loaded");
+      part("source").hidden = !p.link;
+      part("source").href = p.link;
+      part("source").textContent = (p.origin ? "View on " + p.origin : "View source") + " ↗";
+      part("site").hidden = !p.site;
+      part("site").href = p.site;
+      part("updated").textContent = p.updated ? "Last update " + p.updated : "";
+      part("body").scrollTop = 0;
+      part("back").disabled = !beside(-1);
+      part("on").disabled = !beside(1);
+    }
+    const img = part("image").querySelector("img");
+    img.addEventListener("load", () => part("image").classList.add("loaded"));
+    img.addEventListener("error", () => {
+      if (!img.getAttribute("src")) return;
+      part("image").hidden = true;
+      view.classList.remove("shows-picture");
+    });
+    function openProject(row, push) {
+      fill(row);
+      if (push) { history.pushState(null, "", "#" + row.id); pushed = true; } else history.replaceState(null, "", "#" + row.id);
+      if (!view.open) { view.showModal(); document.body.classList.add("viewing"); }
+    }
+    const closeProject = () => { if (view.open) view.close(); };
+    // Closing takes its address away: Back, where opening it added one; otherwise in place.
+    view.addEventListener("close", () => {
+      document.body.classList.remove("viewing");
+      if (pushed) { pushed = false; history.back(); } else history.replaceState(null, "", location.pathname + location.search);
+    });
+    const step = where => { const near = beside(where); if (near) openProject(near, false); };
+    part("close").addEventListener("click", closeProject);
+    part("back").addEventListener("click", () => step(-1));
+    part("on").addEventListener("click", () => step(1));
+    view.addEventListener("keydown", event => {
+      const where = {ArrowLeft: -1, ArrowRight: 1}[event.key];
+      if (!where || event.metaKey || event.ctrlKey || event.altKey) return;
+      event.preventDefault();
+      step(where);
+    });
+    // A click outside it, on the backdrop, closes it; a press that began inside and drifted out doesn't.
+    let pressedIn = false;
+    view.addEventListener("pointerdown", event => { pressedIn = event.target !== view; });
+    view.addEventListener("click", event => { if (event.target === view && !pressedIn) closeProject(); });
+    // Its dot, found and opened on the map.
+    part("map").addEventListener("click", () => {
+      const row = shown, dot = markers.get(row);
+      closeProject();
+      if (row.hidden) dots.addLayer(dot);
+      document.getElementById("map").scrollIntoView({behavior: "smooth", block: "center"});
+      map.once("moveend", () => dot.openPopup());
+      map.flyTo(dot.getLatLng(), 16);
+    });
+    // Clicking anywhere on a row opens it; with a modifier key, its address opens in a new tab as usual.
+    for (const row of rows) row.addEventListener("click", event => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+      event.preventDefault();
+      openProject(row, true);
+    });
+    // A link to a project opens it, with its town's list open behind it; Back and Forward follow the address.
+    const fromAddress = () => {
+      const row = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      if (row && row.classList.contains("row")) {
+        row.closest("details").open = true;
+        if (view.open) fill(row); else openProject(row, false);
+      } else if (view.open) { pushed = false; view.close(); }
+    };
+    addEventListener("popstate", () => { pushed = false; fromAddress(); });
+    fromAddress();
   }
 </script>"""
 
@@ -456,13 +689,46 @@ def render(projects, built_at, failed):
         '<a href="https://www.massbuilds.com/">MassBuilds</a>, with notes of our own. A project’s date is the latest '
         'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
     )
-    body = f'{filter_row}<div id="map"></div>{legend}{missing}{sections}{footer}'
+    data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
+    body = (f'{filter_row}<div id="map"></div>{legend}{missing}{sections}{footer}{PANEL}'
+            f'<script type="application/json" id="projects">{data}</script>')
     script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                        json.dumps({key: label for key, (label, _) in STATUSES.items()}))
     return shared.page(
         "news", "Housing", body + script, css=CSS, head=LEAFLET, updated=built_at,
         links=[("Housing", "./", True)],
     )
+
+
+# The rendering at the head of a Boston project's page on bostonplans.org, which the city's data doesn't carry.
+BOSTON_IMAGE = re.compile(r"""bpdaInteriorHeaderImg">\s*<img src=["'](/getattachment/[^"']+)["']""")
+
+
+def boston_image(link):
+    """A Boston project's rendering, from its page; empty for one without."""
+    try:
+        page = shared.fetch(link, USER_AGENT, attempts=2, timeout=20)[1].decode("utf-8", "replace")
+    except Exception as error:
+        print(f"  no picture for {link} ({error})", file=sys.stderr)
+        return None  # Tried again next build.
+    found = BOSTON_IMAGE.search(page)
+    return "https://www.bostonplans.org" + found.group(1) if found else ""
+
+
+def add_images(projects, known):
+    """Each Boston project's rendering, fetched from its page the first time it's seen and kept from build to build
+    after that, so a build fetches only the new ones. Returns them all, to keep for next time."""
+    images = {ident: url for ident, url in known.items() if url is not None}
+    wanted = [p for p in projects if p["id"].startswith("boston-") and p["link"] and p["id"] not in images]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for project, url in zip(wanted, pool.map(lambda p: boston_image(p["link"]), wanted)):
+            if url is not None:
+                images[project["id"]] = url
+    if wanted:
+        print(f"✓ Boston pictures: looked for {len(wanted)}, found {sum(1 for p in wanted if images.get(p['id']))}")
+    for project in projects:
+        project.setdefault("image", images.get(project["id"], ""))
+    return images
 
 
 def main():
@@ -492,12 +758,13 @@ def main():
         sys.exit("No town loaded — not writing the page.")
     raw = {town: [{key: value for key, value in project.items() if key != "source"}
                   for project in projects if project["source"] == town] for town, _, _ in SOURCES}
+    images = add_images(projects, previous.get("images", {}))
     projects = apply_edits(projects, read_edits(EDITS.read_text()))
     record = track(projects, previous, built_at.date())
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "index.html").write_text(render(projects, built_at, failed))
-    saved = {"built": built_at.isoformat(), "projects": record, "sources": raw}
+    saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     print(f"Wrote dist/housing/index.html and projects.json: {len(projects)} projects")
 

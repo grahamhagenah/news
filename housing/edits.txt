@@ -5,7 +5,8 @@
 #   status: proposed, approved, under construction, complete or stalled
 #   note: a line of our own, shown under the project and first in its preview
 #   date: when this happened (2026-09-01), which puts it at the top of its list; the note's date, if given
-#   link: an address to link the project's name to instead of the city's page
+#   link: an address for its panel's source button instead of the city's page
+#   image: the address of a picture of it (a rendering, a photo), for its panel
 #   hide: yes, to leave it off the page
 #
 # A project the cities don't list gets an id of its own (somerville-union-square-d2) and needs a name, town,
