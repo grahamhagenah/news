@@ -379,8 +379,15 @@ def panel_data(project, today):
 
 
 CSS = """
-  #map { height: 22rem; margin: 0 0 2rem; border: 1px solid #222; border-radius: 6px; background: #0a0a0a; }
+  #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #0a0a0a; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
+  /* The filter under the map rather than under the header. */
+  #map + .filter { margin-top: 0; }
+  /* Each project on the map: its status's icon on a dark badge, ringed in the status's color. */
+  .pin > span { display: grid; place-items: center; width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%;
+                border: 1.5px solid currentColor; background: rgba(0, 0, 0, .85); }
+  .pin svg { width: 58%; height: 58%; }
+  .pin:hover > span { background: #000; box-shadow: 0 0 0 2px rgba(255, 255, 255, .35); }
   .leaflet-container { font: inherit; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111; color: #ddd; border: 1px solid #333; box-shadow: none; }
   .leaflet-popup-content { margin: .7rem .9rem; font-size: .85rem; line-height: 1.4; }
@@ -527,9 +534,15 @@ SCRIPT = """
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const marker = row => {
       const name = row.querySelector(".title").textContent, units = +row.dataset.units, status = row.dataset.status;
-      const dot = L.circleMarker([+row.dataset.lat, +row.dataset.lon], {
-        radius: Math.max(3, Math.min(11, Math.sqrt(units) / 2.2)), weight: 1, color: "#000",
-        fillColor: colors[status], fillOpacity: .85,
+      // Its status's icon on a dark badge ringed in the status's color, bigger for more homes; the smaller ones
+      // drawn over the bigger, so a small project beside a big one can still be clicked.
+      const size = Math.round(Math.max(16, Math.min(30, 12 + Math.sqrt(units) / 1.5)));
+      const dot = L.marker([+row.dataset.lat, +row.dataset.lon], {
+        icon: L.divIcon({
+          className: "pin", iconSize: [size, size], popupAnchor: [0, -size / 2],
+          html: `<span style="color:${colors[status]}"><svg aria-hidden="true"><use href="#icon-${status.replace(" ", "-")}"/></svg></span>`,
+        }),
+        keyboard: false, zIndexOffset: -units, title: name,
       });
       dot.bindPopup(`<a href="#${row.id}" class="to-row">${escape(name)}</a><br><span class="muted">`
         + `${units.toLocaleString()} homes · ${labels[status].toLowerCase()}</span>`);
@@ -719,7 +732,7 @@ def render(projects, built_at, failed):
         'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
     )
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
-    body = (f'{filter_row}<div id="map"></div>{missing}{sections}{footer}{PANEL}'
+    body = (f'<div id="map"></div>{filter_row}{missing}{sections}{footer}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>')
     script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                        json.dumps({key: label for key, (label, _) in STATUSES.items()}))
