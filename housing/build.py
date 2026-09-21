@@ -46,15 +46,15 @@ STATUSES = {
 }
 
 # Each filter's mark, drawn in 16×16 strokes like the other pages' icons, and in its status's color where it has
-# one: a half-filled circle for everything in progress, a filed page for proposed, a check for approved, a crane
-# for under construction, a house for complete, a pause for stalled, and four squares for all.
+# one: a half-filled circle for everything in progress, a filed page for proposed, a check for approved, a traffic
+# cone for under construction, a house for complete, a pause for stalled, and four squares for all.
 ICON_DRAWINGS = {
     "active": '<circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/>',
     "proposed": '<path d="M9.25 1.75H4.5A1.5 1.5 0 0 0 3 3.25v9.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5V5.5z"/>'
                 '<path d="M9.25 1.75V5.5H13M5.75 8.5h4.5M5.75 11h2.75"/>',
     "approved": '<circle cx="8" cy="8" r="6.25"/><path d="M5.25 8.25l2 2 3.5-4"/>',
-    "under-construction": '<path d="M6 14.25V1.75M3.25 14.25h5.5M2 4.25h12M6 1.75L2 4.25M6 1.75l8 2.5M12 4.25V8"/>'
-                          '<rect x="10.9" y="8" width="2.2" height="2" rx=".4" fill="currentColor" stroke="none"/>',
+    "under-construction": '<path d="M6.5 2.25h3l3.25 10.5h-9.5z"/><path d="M5.35 6.5h5.3M4.55 9.25h6.9"/>'
+                          '<path d="M1.75 13.75h12.5"/>',
     "complete": '<path d="M2.25 7.5L8 2.5l5.75 5"/><path d="M3.75 6.25v7.5h8.5v-7.5"/><path d="M6.75 13.75v-3.5h2.5v3.5"/>',
     "stalled": '<circle cx="8" cy="8" r="6.25"/><path d="M6.5 5.75v4.5M9.5 5.75v4.5"/>',
     "all": '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>'
