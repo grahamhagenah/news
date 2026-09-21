@@ -636,7 +636,7 @@ INDEX_JS = """
     player = null;
     dialog.querySelector(".player-frame").replaceChildren();
     dialog.classList.remove("corner", "filling");
-    dialog.style.inset = "";  // Back to the corner it starts in, for the next video.
+    dialog.style.inset = placed = "";  // Back to the corner it starts in, for the next video.
     document.body.classList.remove("video-corner");
   });
   // In the corner the video keeps playing while the list is read and scrolled behind it; the same button puts
@@ -653,6 +653,9 @@ INDEX_JS = """
     // Filling the window is what a refused full screen falls back to, and it holds the window to the whole of
     // it: going back to the corner has to let that go, or the corner is drawn full size.
     if (tucked) dialog.classList.remove("filling");
+    // Where it was dragged to is the corner's business. Filling the screen, it would hold the window to that
+    // spot and hang the video off the edge; so it's put away while it fills, and put back when it returns.
+    dialog.style.inset = tucked ? placed : "";
     document.body.classList.toggle("video-corner", tucked);  // The way back to the top steps over the video.
     if (!dialog.open) {  // Shown as a window of its own either way; the screen it fills is the browser's doing.
       dialog.show();
@@ -701,12 +704,13 @@ INDEX_JS = """
   // which answers every press inside it. Where it's put is remembered while it plays and forgotten when it
   // closes, and it's kept whole on the screen, both as it's dragged and if the window is resized under it.
   const bar = dialog.querySelector(".player-bar");
-  let held = null;
+  let held = null, placed = "";
   const putAt = (left, top) => {
     const box = dialog.getBoundingClientRect();
     const x = Math.min(Math.max(left, 8), Math.max(8, innerWidth - box.width - 8));
     const y = Math.min(Math.max(top, 8), Math.max(8, innerHeight - box.height - 8));
-    dialog.style.inset = `${y}px auto auto ${x}px`;
+    placed = `${y}px auto auto ${x}px`;
+    dialog.style.inset = placed;
   };
   bar.addEventListener("pointerdown", event => {
     if (!dialog.classList.contains("corner")) return;
