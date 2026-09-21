@@ -128,13 +128,35 @@ class Recent(unittest.TestCase):
                     dict(project("boston-2"), since=date(2026, 9, 20), was="proposed"),
                     dict(project("boston-3"), since=None, was=None)]
         built = datetime(2026, 9, 21, tzinfo=timezone.utc)
-        page = build.render(projects, built, [], recent=True)
+        page = build.render(projects, built, [], page="recent")
         self.assertLess(page.index('id="boston-2"'), page.index('id="boston-1"'))
         self.assertNotIn('id="boston-3"', page)
         self.assertIn("Proposed → Approved", page)
         home = build.render(projects, built, [])
         self.assertIn('class="fresh"', home)
         self.assertIn('href="recent/"', home)
+
+    def test_large_projects_biggest_first_with_their_steps(self):
+        built = datetime(2026, 9, 21, tzinfo=timezone.utc)
+        projects = [dict(project("boston-1", units=300, status="under construction"), since=None, was=None),
+                    dict(project("boston-2", units=1200, status="stalled"), since=None, was=None),
+                    dict(project("boston-3", units=40), since=None, was=None)]
+        page = build.render(projects, built, [], page="large")
+        self.assertLess(page.index('id="boston-2"'), page.index('id="boston-1"'))
+        self.assertNotIn('id="boston-3"', page)
+        self.assertIn('aria-label="Under construction, step 3 of 4"', page)
+        self.assertIn('aria-label="Stalled, step 0 of 4"', page)
+
+    def test_footer_links_each_town_and_page(self):
+        built = datetime(2026, 9, 21, tzinfo=timezone.utc)
+        projects = [dict(project("boston-1"), since=None, was=None),
+                    dict(project("massbuilds-1", town="Somerville"), since=None, was=None)]
+        home = build.render(projects, built, [])
+        self.assertIn('id="town-somerville"', home)
+        self.assertIn('href="#town-somerville"', home)
+        large = build.render(projects, built, [], page="large")
+        self.assertIn('href="../#town-somerville"', large)
+        self.assertIn('href="../large/" aria-current="page"', large)
 
 
 class Page(unittest.TestCase):

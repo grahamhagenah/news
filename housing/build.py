@@ -9,6 +9,7 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
@@ -36,6 +37,11 @@ BOSTON_URL = ("https://gis.bostonplans.org/hosting/rest/services/Hosted/A80_proj
 # from the time they're proposed until they're finished. It has no dates of its own besides the year one was.
 CAMBRIDGE_URL = "https://data.cambridgema.gov/resource/wjwg-93qh.json?$limit=5000"
 CAMBRIDGE_PAGE = "https://www.cambridgema.gov/CDD/factsandmaps/developmentlog"
+
+# Large projects: those with at least this many homes, across every town.
+LARGE_HOMES = 300
+# A project's way from proposal to move-in, for Large projects' bar of four steps. Stalled isn't a step.
+STAGES = ["proposed", "approved", "under construction", "complete"]
 
 # How far back Recent updates goes, and how many the home page's banner turns over. The cities refresh their
 # lists every few weeks or months, so a month can go by with nothing new in them.
@@ -385,14 +391,25 @@ def status_icon(status, label=None):
     return shared.icon(status.replace(" ", "-"), label).replace("<svg ", f'<svg style="color:{STATUSES[status][1]}" ', 1)
 
 
-def row(project, today, changed=None):
+def steps(status):
+    """How far along a project is, as four short bars, lit in its status's color up to its step; a stalled
+    project's all unlit, its red icon saying why."""
+    label, color = STATUSES[status]
+    reached = STAGES.index(status) + 1 if status in STAGES else 0
+    lit = f' style="background:{color}"'
+    bars = "".join(f"<i{lit if n < reached else ''}></i>" for n in range(len(STAGES)))
+    return f'<span class="steps" role="img" aria-label="{label}, step {reached} of {len(STAGES)}">{bars}</span>'
+
+
+def row(project, today, changed=None, large=False):
     """A project's row. On Recent updates, changed is what happened and when: it takes the status's place after
-    the name, and its day the row's date."""
+    the name, and its day the row's date. On Large projects, a bar of four steps shows how far along it is.
+    Both name its town, the page having projects from all of them in one list."""
     label, color = STATUSES[project["status"]]
     day = changed[0] if changed else updated(project)
     ident = html.escape(project["id"])
     note = f'<p class="note">{html.escape(project["note"])}</p>' if project.get("note") else ""
-    where = project["town"] if changed else project["neighborhood"]
+    where = project["town"] if changed or large else project["neighborhood"]
     place = " · ".join(html.escape(part) for part in (where, when(day, today)) if part)
     homes = f'{project["units"]:,} home{"s" if project["units"] != 1 else ""}'
     words = " ".join((project["name"], project["neighborhood"], project["town"], project["description"], project.get("note", "")))
@@ -402,7 +419,7 @@ def row(project, today, changed=None):
         f'{status_icon(project["status"], label)}'
         f'<span class="headline"><a class="title" href="#{ident}">{html.escape(project["name"])}</a>'
         f' <span class="details">{homes} · {html.escape(changed[1]) if changed else label.lower()}</span></span> '
-        f'<span class="source"><span>{place}</span></span>{note}</li>'
+        f'<span class="source">{steps(project["status"]) if large else ""}<span>{place}</span></span>{note}</li>'
     )
 
 
@@ -442,6 +459,27 @@ CSS = """
   .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
   .sites a:not([aria-current]) .city { color: inherit; }
   .tagline a { color: #bbb; }
+  /* Large projects' bar of four steps, before its town: how far along the project is. */
+  .steps { display: inline-flex; flex: none; gap: 2px; margin-right: .6rem; }
+  .steps i { width: 9px; height: 4px; border-radius: 1px; background: #2a2a2a; }
+  /* The footer, as Pushpin's: set off by a faint line, what the site is, then its pages, towns and sources in
+     short lists under small, faint headings, the towns in two columns. */
+  footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
+  .foot-tagline { color: #888; font-size: .95rem; }
+  .site-links { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 18rem) minmax(0, 10rem); gap: 1.75rem 2.5rem;
+                margin: 1.25rem 0 2rem; }
+  .site-links h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+  .site-links ul { display: grid; gap: .45rem; }
+  /* The towns down one column, then the next, in the order they're listed on the home page. */
+  .site-links .towns ul { display: block; columns: 2; column-gap: 1.5rem; }
+  .site-links .towns li { margin-bottom: .45rem; break-inside: avoid; }
+  footer .site-links a, footer .site-links a:visited { color: #999; font-size: .95rem; text-decoration: none; }
+  footer .site-links a:hover { color: #fff; }
+  footer .site-links a[aria-current="page"] { color: #fff; }
+  @media (max-width: 34rem) {
+    .site-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .site-links .towns { grid-column: 1 / -1; order: 3; }
+  }
   /* What the site is, under its name, with the search beside it. */
   .intro { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; margin: -1.25rem 0 1.25rem; }
   .tagline { min-width: 0; margin: 0; overflow: hidden; color: #888; font-size: .9rem; white-space: nowrap; text-overflow: ellipsis; }
@@ -466,7 +504,6 @@ CSS = """
   .leaflet-bar a:hover { background: #222; color: #fff; }
   .panel-pill .icon { width: 12px; height: 12px; }
   details { border-top: 1px solid #1c1c1c; }
-  details:last-of-type { border-bottom: 1px solid #1c1c1c; }
   summary { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .8rem 0;
             cursor: pointer; list-style: none; font-weight: 700; }
   summary::-webkit-details-marker { display: none; }
@@ -624,6 +661,14 @@ FRESH_SCRIPT = """
     }
   }
 </script>"""
+
+# The site's icons (static/, drawn by make_icons.py), from a page root levels up.
+def icons_head(root):
+    return (f'<link rel="icon" href="{root}favicon.svg" type="image/svg+xml">'
+            f'<link rel="icon" href="{root}favicon-32.png" sizes="32x32" type="image/png">'
+            f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png">'
+            f'<link rel="manifest" href="{root}manifest.webmanifest">')
+
 
 LEAFLET = ('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">'
            '<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>')
@@ -791,7 +836,11 @@ SCRIPT = """
     // A link to a project opens it, with its town's list open behind it; Back and Forward follow the address.
     const fromAddress = () => {
       const row = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
-      if (row && row.classList.contains("row")) {
+      if (row && row.matches("details")) {  // A town's, from the footer: its list, open.
+        if (view.open) { pushed = false; view.close(); }
+        row.open = true;
+        row.scrollIntoView({block: "start"});
+      } else if (row && row.classList.contains("row")) {
         row.closest("details").open = true;
         if (view.open) fill(row); else openProject(row, false);
       } else if (view.open) { pushed = false; view.close(); }
@@ -839,28 +888,84 @@ def fresh_banner(recent, today):
     return banner, json.dumps(fresh, ensure_ascii=False).replace("</", "<\\/")
 
 
-def render(projects, built_at, failed, recent=False):
-    """The home page, every project by town; or with recent, Recent updates: what's changed in the last
-    RECENT_DAYS days, in one list, newest first, each saying what happened."""
+def slug(town):
+    return re.sub(r"[^a-z0-9]+", "-", town.lower()).strip("-")
+
+
+# The site's pages, besides the home page: each one's path, name, and what it says of itself under the header.
+PAGES = {
+    "recent": ("recent/", "Recent updates", f"What’s changed in the last {RECENT_DAYS} days."),
+    "large": ("large/", "Large projects", f"The biggest projects, {LARGE_HOMES} homes or more, and how far along each is."),
+}
+
+
+def footer(page, towns):
+    """The foot of each page, as Pushpin's: what the site is, then its pages, its towns and its sources in short
+    lists under faint headings (this page marked), then where the data comes from."""
+    root = "../" if page else ""
+    here = PAGES[page][0] if page else ""
+    marked = ' aria-current="page"'
+    groups = [
+        ("Browse", "browse", [("All projects", "")] + [(name, path) for path, name, _ in PAGES.values()]),
+        ("Towns", "towns", [(town, f"#town-{slug(town)}") for town in towns]),
+        ("Sources", "sources", [("Boston Planning", "https://www.bostonplans.org/projects/development-projects"),
+                                ("Cambridge log", CAMBRIDGE_PAGE), ("MassBuilds", "https://www.massbuilds.com/")]),
+    ]
+    def link(label, href):
+        outside = href.startswith("http")
+        current = marked if not outside and href == here and not href.startswith("#") else ""
+        return f'<li><a href="{href if outside else root + href or "./"}"{current}>{html.escape(label)}</a></li>'
+    lists = "".join(
+        f'<div class="{kind}"><h2>{heading}</h2><ul>{"".join(link(label, href) for label, href in links)}</ul></div>'
+        for heading, kind, links in groups
+    )
+    return (
+        f'<footer><p class="foot-tagline">{html.escape(TAGLINE)}</p>'
+        f'<nav class="site-links" aria-label="{html.escape(NAME)}">{lists}</nav>'
+        '<p>From <a href="https://data.boston.gov/dataset/article80-development-projects">Boston’s Article 80 '
+        'projects</a> (anything over about 20,000 square feet or 15 homes), <a href="' + CAMBRIDGE_PAGE +
+        '">Cambridge’s development log</a> (50,000 square feet or 10 homes) and, for the towns around them, MAPC’s '
+        '<a href="https://www.massbuilds.com/">MassBuilds</a>, with notes of our own. A project’s date is the latest '
+        'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
+    )
+
+
+def by_town(projects):
+    """The towns with projects, Boston first as the city the rest are around, then the others by name."""
+    return sorted({project["town"] for project in projects}, key=lambda town: (town != "Boston", town))
+
+
+def render(projects, built_at, failed, page=None):
+    """The home page, every project by town; or one of PAGES, each a single list across the towns: Recent
+    updates, what's changed in the last RECENT_DAYS days, newest first, each saying what happened; Large
+    projects, those of LARGE_HOMES homes or more, biggest first, each with how far along it is."""
     today = built_at.date()
+    towns = by_town(projects)
     changes = recently_changed(projects, today)
-    if recent:
+    if page == "recent":
         projects = [project for project, _ in changes]
+        rows = "".join(row(project, today, changed) for project, changed in changes)
         heading = f"In the last {RECENT_DAYS} days"
+    elif page == "large":
+        projects = sorted((p for p in projects if p["units"] >= LARGE_HOMES), key=lambda p: p["units"], reverse=True)
+        rows = "".join(row(project, today, large=True) for project in projects)
+        heading = f"{LARGE_HOMES} homes or more"
+    if page:
         sections = (f'<details open><summary><span class="town">{heading}</span><span class="count"></span></summary>'
-                    f'<ul>{"".join(row(project, today, changed) for project, changed in changes)}</ul></details>')
+                    f'<ul>{rows}</ul></details>')
     else:
         order = lambda project: (updated(project) or date.min, project["units"])
-        towns = {}
+        in_town = {}
         for project in sorted(projects, key=order, reverse=True):
-            towns.setdefault(project["town"], []).append(project)
+            in_town.setdefault(project["town"], []).append(project)
         sections = "".join(
-            f'<details><summary><span class="town">{html.escape(town)}</span><span class="count"></span></summary>'
-            f'{source_note(town, rows, today)}<ul>{"".join(row(project, today) for project in rows)}</ul></details>'
-            # Boston first, as the city the rest are around; then the others by name.
-            for town, rows in sorted(towns.items(), key=lambda item: (item[0] != "Boston", item[0]))
+            f'<details id="town-{slug(town)}"><summary><span class="town">{html.escape(town)}</span>'
+            f'<span class="count"></span></summary>{source_note(town, in_town[town], today)}'
+            f'<ul>{"".join(row(project, today) for project in in_town[town])}</ul></details>'
+            for town in towns
         )
-    shown = "all" if recent else "active"  # Recent updates shows every change, a project finished among them.
+    # The pages across the towns show every status, a finished project among them; the home page what's under way.
+    shown = "all" if page else "active"
     choices = [("active", "In progress")] + [(key, label) for key, (label, _) in STATUSES.items()] + [("all", "All")]
     def colored(key):
         return f' style="color:{STATUSES[key][1]}"' if key in STATUSES else ""
@@ -873,28 +978,22 @@ def render(projects, built_at, failed, recent=False):
     )
     missing = (f'<p class="empty">Couldn’t load {" or ".join(failed)} this time; showing what the last build had.</p>'
                if failed else "")
-    footer = (
-        '<footer><p>From <a href="https://data.boston.gov/dataset/article80-development-projects">Boston’s Article 80 '
-        'projects</a> (anything over about 20,000 square feet or 15 homes), <a href="' + CAMBRIDGE_PAGE +
-        '">Cambridge’s development log</a> (50,000 square feet or 10 homes) and, for the towns around them, MAPC’s '
-        '<a href="https://www.massbuilds.com/">MassBuilds</a>, with notes of our own. A project’s date is the latest '
-        'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
-    )
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
-    said = (f'What’s changed in the last {RECENT_DAYS} days. <a href="../">All projects →</a>' if recent
-            else html.escape(TAGLINE))
+    said = f'{PAGES[page][2]} <a href="../">All projects →</a>' if page else html.escape(TAGLINE)
     intro = f'<div class="intro"><p class="tagline">{said}</p>{shared.SEARCH}</div>'
-    banner, fresh = ("", "[]") if recent else fresh_banner(changes, today)
-    body = (f'{intro}{banner}<div id="map"{" data-fit" if recent else ""}></div>{filter_row}{missing}{sections}{footer}{PANEL}'
+    banner, fresh = ("", "[]") if page else fresh_banner(changes, today)
+    body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
+            f'{footer(page, towns)}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
             f'<script>const FRESH = {fresh};</script>')
     script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                        json.dumps({key: label for key, (label, _) in STATUSES.items()})) + FRESH_SCRIPT
-    title = f"Recent updates · {NAME}" if recent else NAME
+    name = PAGES[page][1] if page else None
+    root = "../" if page else ""
     return shared.page(
-        "news", title, body + script, css=CSS, head=LEAFLET, symbols=ICON_SYMBOLS, updated=built_at,
-        links=[(NAME, "../" if recent else "./", not recent)], marked={NAME: MARKED_NAME},
-        here="Recent updates" if recent else None,
+        "news", f"{name} · {NAME}" if page else NAME, body + script, css=CSS, head=icons_head(root) + LEAFLET,
+        symbols=ICON_SYMBOLS, updated=built_at, links=[(NAME, root or "./", not page)], marked={NAME: MARKED_NAME},
+        here=name,
     )
 
 
@@ -938,12 +1037,21 @@ def main():
         print(f"Built at {previous['built']}; not due yet, so not rebuilding.")
         return
 
-    projects, failed, kept = [], [], previous.get("sources", {})
-    for town, url, read in SOURCES:
+    # All at once, so a source that's slow to answer (MassBuilds, some days) holds the build up only as long as
+    # its own retries take, not once for each of its towns.
+    def load(source):
+        town, url, read = source
         try:
-            found = read(shared.fetch(url, USER_AGENT, timeout=60)[1])
-            print(f"✓ {town}: {len(found)} projects with homes")
+            return read(shared.fetch(url, USER_AGENT, attempts=2, timeout=45)[1]), None
         except Exception as error:
+            return None, error
+    with ThreadPoolExecutor(max_workers=len(SOURCES)) as pool:
+        loaded = list(pool.map(load, SOURCES))
+    projects, failed, kept = [], [], previous.get("sources", {})
+    for (town, _, _), (found, error) in zip(SOURCES, loaded):
+        if not error:
+            print(f"✓ {town}: {len(found)} projects with homes")
+        else:
             print(f"✗ {town}: {error}", file=sys.stderr)
             failed.append(town)
             if town not in kept:
@@ -961,13 +1069,15 @@ def main():
     record = track(projects, previous, built_at.date())
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
     (OUT_DIR / "index.html").write_text(render(projects, built_at, failed))
-    (OUT_DIR / "recent").mkdir(exist_ok=True)
-    (OUT_DIR / "recent" / "index.html").write_text(render(projects, built_at, failed, recent=True))
+    for page, (path, _, _) in PAGES.items():
+        (OUT_DIR / path).mkdir(exist_ok=True)
+        (OUT_DIR / path / "index.html").write_text(render(projects, built_at, failed, page))
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     recent = recently_changed(projects, built_at.date())
-    print(f"Wrote dist/housing/index.html, recent/ and projects.json: {len(projects)} projects, {len(recent)} changed "
+    print(f"Wrote dist/housing/index.html, {', '.join(path for path, _, _ in PAGES.values())} and projects.json: {len(projects)} projects, {len(recent)} changed "
           f"in the last {RECENT_DAYS} days")
 
 
