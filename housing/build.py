@@ -182,7 +182,7 @@ def cambridge(body):
             "stage": row["status"],
             "lat": float(row["latitude"]), "lon": float(row["longitude"]),
             "link": CAMBRIDGE_PAGE,
-            "origin": "Cambridge development log",
+            "origin": "Cambridge log",
             "description": (row.get("project_description") or "").strip(),
             "dated": date(finished, 12, 31) if status == "complete" and finished else None,
             "facts": facts(
@@ -493,7 +493,8 @@ CSS = """
   .row .note { grid-column: 2 / -1; margin: -.2rem 0 0; color: #999; font-size: .8em; }
   .row { cursor: pointer; }
   .row:hover .title { text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
-  .row.lit .title { color: #ffd479; }
+  /* The project last opened, a faint band behind its row, reaching a little past the text on either side. */
+  .row.lit { background: #141414; box-shadow: -.5rem 0 #141414, .5rem 0 #141414; }
   /* A project's panel, in from the right, as Pushpin's listings open: a sheet up from the bottom on a phone. */
   body.viewing { overflow: hidden; }
   dialog.project { width: min(32rem, 100%); height: 100dvh; max-height: none; margin: 0 0 0 auto; box-sizing: border-box;
