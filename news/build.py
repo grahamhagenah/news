@@ -682,7 +682,7 @@ INDEX_JS = """
       if (asked) await asked; else throw new Error("no full screen here");
     } catch (refused) {
       console.warn("Pushpin: the browser wouldn't give the screen —", refused?.message || refused);
-      dialog.classList.remove("filling");
+      dialog.classList.add("filling");
       dialog.close();
       dialog.showModal();
     }
@@ -1061,12 +1061,28 @@ CSS = """
     .player-frame > * { transition: none; opacity: 1; }
   }
   /* The way back to the top sits where the video now is, so it steps up over it. */
-  body.video-corner .to-top { bottom: calc(2.25rem + min(26rem, 100vw - 2rem) * 0.5625); }
+  body.video-corner .to-top { bottom: calc(3.75rem + min(26rem, 100vw - 2rem) * 0.5625); }  /* Over the bar too. */
+  @media (max-width: 34rem) {
+    /* A phone: the bar deep enough for a thumb, its buttons with it, and the way back to the top above them. */
+    .player.corner .player-bar { height: 2.4rem; }
+    .player.corner .player-close, .player.corner .player-corner, .player.corner .player-copy {
+                     top: .3rem; width: 1.9rem; height: 1.9rem; }
+    .player.corner .player-close { right: .4rem; }
+    .player.corner .player-corner { right: 2.5rem; }
+    .player.corner .player-copy { right: 4.6rem; }
+    .player.corner .player-close svg, .player.corner .player-corner svg,
+    .player.corner .player-copy svg { width: 1rem; height: 1rem; }
+    body.video-corner .to-top { bottom: calc(4.6rem + min(26rem, 100vw - 2rem) * 0.5625); }
+  }
   .player-frame { aspect-ratio: 16 / 9; background: #111; }
   /* The whole screen: the video takes all of it, whatever shape the screen is, and the × and the way back to
      the corner sit over it. */
   .player-frame:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
-  .player.filling { width: 100vw; max-width: none; padding: 0; background: #000; }
+  .player.filling { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none;
+                    padding: 0; background: #000; }
+  .player.filling .player-frame { aspect-ratio: auto; height: 100%; display: grid; align-content: center; }
+  .player.filling .player-frame > * { aspect-ratio: 16 / 9; width: 100%; }
+  .player.filling .player-bar { display: none; }
   .player.filling .player-close, .player.filling .player-corner { position: fixed; top: 1rem; z-index: 4;
                                  background: rgba(0, 0, 0, .55); color: #fff; }
   .player-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
