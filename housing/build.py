@@ -453,12 +453,6 @@ CSS = """
     .intro .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
     .tagline { font-size: .8rem; }
   }
-  /* Each project on the map: its status's icon on its own, in the status's color, with a soft dark edge so it
-     holds up over the map's lighter roads and names. */
-  .pin > span { display: block; width: 100%; height: 100%; transition: transform .12s;
-                filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 2px rgba(0, 0, 0, .8)); }
-  .pin svg { display: block; width: 100%; height: 100%; }
-  .pin:hover > span { transform: scale(1.25); }
   .leaflet-container { font: inherit; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111; color: #ddd; border: 1px solid #333; box-shadow: none; }
   .leaflet-popup-content { margin: .7rem .9rem; font-size: .85rem; line-height: 1.4; }
@@ -655,15 +649,10 @@ SCRIPT = """
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const marker = row => {
       const name = row.querySelector(".title").textContent, units = +row.dataset.units, status = row.dataset.status;
-      // Its status's icon, in the status's color, bigger for more homes; the smaller ones
-      // drawn over the bigger, so a small project beside a big one can still be clicked.
-      const size = Math.round(Math.max(13, Math.min(26, 9 + Math.sqrt(Math.max(0, units) || 0) / 1.6)));
-      const dot = L.marker([+row.dataset.lat, +row.dataset.lon], {
-        icon: L.divIcon({
-          className: "pin", iconSize: [size, size], popupAnchor: [0, -size / 2],
-          html: `<span style="color:${colors[status]}"><svg aria-hidden="true"><use href="#icon-${status.replace(" ", "-")}"/></svg></span>`,
-        }),
-        keyboard: false, zIndexOffset: -units, title: name,
+      // A dot in its status's color, bigger for more homes.
+      const dot = L.circleMarker([+row.dataset.lat, +row.dataset.lon], {
+        radius: Math.max(3, Math.min(11, Math.sqrt(Math.max(0, units) || 0) / 2.2)), weight: 1, color: "#000",
+        fillColor: colors[status], fillOpacity: .85,
       });
       dot.bindPopup(`<a href="#${row.id}" class="to-row">${escape(name)}</a><br><span class="muted">`
         + `${units.toLocaleString()} homes · ${labels[status].toLowerCase()}</span>`);
@@ -674,6 +663,7 @@ SCRIPT = """
       return dot;
     };
     const markers = new Map(rows.map(row => [row, marker(row)]));
+    const bySize = [...rows].sort((a, b) => b.dataset.units - a.dataset.units);
     const show = () => {
       const chosen = buttons.find(button => button.getAttribute("aria-pressed") === "true").dataset.show;
       const words = search.value.trim().toLowerCase().split(/\\s+/).filter(Boolean);
@@ -683,8 +673,9 @@ SCRIPT = """
         const fits = (chosen === "all" || (chosen === "active" ? status !== "complete" : status === chosen))
           && words.every(word => row.dataset.words.includes(word));
         row.hidden = !fits;
-        if (fits) dots.addLayer(markers.get(row));
       }
+      // The biggest first, so the smaller are drawn over them and a small project beside a big one can be clicked.
+      for (const row of bySize) if (!row.hidden) dots.addLayer(markers.get(row));
       for (const details of document.querySelectorAll("details")) {
         const showing = [...details.querySelectorAll(".row:not([hidden])")];
         const homes = showing.reduce((sum, row) => sum + +row.dataset.units, 0);
