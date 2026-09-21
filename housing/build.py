@@ -21,6 +21,8 @@ OUT_DIR = ROOT.parent / "dist" / "housing"
 EDITS = ROOT / "edits.txt"
 USER_AGENT = "Mozilla/5.0 (compatible; housing-tracker/1.0)"
 SITE_URL = "https://housing.grahamhagenah.com/"
+NAME = "Homes in the Works"
+TAGLINE = "New housing around Boston, from proposal to move-in: what’s planned, approved and being built."
 PROJECTS_URL = SITE_URL + "projects.json"
 
 # Boston's projects under Article 80 review, the city's review of anything over about 20,000 square feet or
@@ -383,6 +385,14 @@ CSS = """
   @media (max-width: 34rem) { #map { height: 16rem; } }
   /* The filter under the map rather than under the header. */
   #map + .filter { margin-top: 0; }
+  /* What the site is, under its name, with the search beside it. */
+  .intro { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; margin: -1.25rem 0 1.25rem; }
+  .tagline { margin: 0; color: #888; font-size: .9rem; }
+  .intro .search { flex: none; margin-left: 0; }
+  @media (max-width: 34rem) {
+    .intro { flex-direction: column; align-items: stretch; gap: .9rem; }
+    .intro .search { width: 100%; font-size: 1rem; }
+  }
   /* Each project on the map: its status's icon on a dark badge, ringed in the status's color. */
   .pin > span { display: grid; place-items: center; width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%;
                 border: 1.5px solid currentColor; background: rgba(0, 0, 0, .85); }
@@ -524,7 +534,7 @@ SCRIPT = """
     const rows = [...document.querySelectorAll(".row")];
     const buttons = [...document.querySelectorAll(".filter button")];
     const search = document.querySelector(".search");
-    const map = L.map("map", {preferCanvas: true, scrollWheelZoom: false}).setView([42.345, -71.08], 12);
+    const map = L.map("map", {preferCanvas: true, scrollWheelZoom: false}).setView([42.345, -71.08], innerWidth < 544 ? 12 : 13);  // A phone's narrower map, one step further out.
     map.attributionControl.setPrefix(false);  // Leaflet's own link and flag, which its license doesn't ask for.
     // Esri's dark gray canvas, which needs no key: the land and water, then the place names over them.
     const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
@@ -722,7 +732,7 @@ def render(projects, built_at, failed):
             f'<button type="button" data-show="{key}" aria-pressed="{"true" if key == "active" else "false"}">'
             f'<span{colored(key)}>{shared.icon(key.replace(" ", "-"))}</span>{label}</button>'
             for key, label in choices
-        ) + f'<div class="finders">{shared.SEARCH}</div></div>'
+        ) + '</div>'
     )
     missing = (f'<p class="empty">Couldn’t load {" or ".join(failed)} this time; showing what the last build had.</p>'
                if failed else "")
@@ -734,13 +744,14 @@ def render(projects, built_at, failed):
         'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
     )
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
-    body = (f'<div id="map"></div>{filter_row}{missing}{sections}{footer}{PANEL}'
+    intro = f'<div class="intro"><p class="tagline">{html.escape(TAGLINE)}</p>{shared.SEARCH}</div>'
+    body = (f'{intro}<div id="map"></div>{filter_row}{missing}{sections}{footer}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>')
     script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                        json.dumps({key: label for key, (label, _) in STATUSES.items()}))
     return shared.page(
-        "news", "Housing", body + script, css=CSS, head=LEAFLET, symbols=ICON_SYMBOLS, updated=built_at,
-        links=[("Housing", "./", True)],
+        "news", NAME, body + script, css=CSS, head=LEAFLET, symbols=ICON_SYMBOLS, updated=built_at,
+        links=[(NAME, "./", True)],
     )
 
 
