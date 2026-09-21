@@ -344,6 +344,11 @@ def when(day, today):
     return f"{day:%b} {day.day}" if day.year == today.year else f"{day:%b %Y}"
 
 
+def status_icon(status, label=None):
+    """A status's mark, in its color: before each row, and in a project's panel."""
+    return shared.icon(status.replace(" ", "-"), label).replace("<svg ", f'<svg style="color:{STATUSES[status][1]}" ', 1)
+
+
 def row(project, today):
     label, color = STATUSES[project["status"]]
     day = updated(project)
@@ -355,7 +360,7 @@ def row(project, today):
     return (
         f'<li class="row" id="{ident}" data-status="{project["status"]}" data-units="{project["units"]}" '
         f'data-lat="{project["lat"]:.5f}" data-lon="{project["lon"]:.5f}" data-words="{html.escape(words.casefold())}">'
-        f'<span class="dot" style="background:{color}" role="img" aria-label="{label}"></span>'
+        f'{status_icon(project["status"], label)}'
         f'<span class="headline"><a class="title" href="#{ident}">{html.escape(project["name"])}</a>'
         f' <span class="details">{homes} · {label.lower()}</span></span> '
         f'<span class="source"><span>{place}</span></span>{note}</li>'
@@ -374,7 +379,7 @@ def panel_data(project, today):
 
 
 CSS = """
-  #map { height: 22rem; margin: 0 0 1.5rem; border: 1px solid #222; border-radius: 6px; background: #0a0a0a; }
+  #map { height: 22rem; margin: 0 0 2rem; border: 1px solid #222; border-radius: 6px; background: #0a0a0a; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
   .leaflet-container { font: inherit; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111; color: #ddd; border: 1px solid #333; box-shadow: none; }
@@ -386,9 +391,7 @@ CSS = """
   .leaflet-control-attribution a { color: #777; }
   .leaflet-bar a { background: #111; color: #999; border-color: #333; }
   .leaflet-bar a:hover { background: #222; color: #fff; }
-  .legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin: -1rem 0 1.75rem; color: #666; font-size: .8rem; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; align-self: center; }
-  .legend .dot { margin-right: .4em; }
+  .panel-pill .icon { width: 12px; height: 12px; }
   details { border-top: 1px solid #1c1c1c; }
   details:last-of-type { border-bottom: 1px solid #1c1c1c; }
   summary { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .8rem 0;
@@ -474,8 +477,6 @@ CSS = """
     @keyframes sheet { from { transform: translateY(100%); } }
   }
   @media (max-width: 34rem) {
-    .row { padding-left: calc(8px + .8em); }
-    .row > .dot { position: absolute; left: 0; top: calc(.4rem + .72em - 4px); }
     .row .details { white-space: normal; }
     .row .note { margin: .15rem 0 0; }
     .row .details { margin-left: 0; }
@@ -583,9 +584,7 @@ SCRIPT = """
       rows.forEach(other => other.classList.toggle("lit", other === row));
       part("where").textContent = [p.town, p.neighborhood].filter(Boolean).join(" · ");
       part("title").textContent = p.name;
-      const dot = make("span", {className: "dot"});
-      dot.style.background = colors[p.status];
-      part("pills").replaceChildren(make("span", {className: "panel-pill"}, dot, labels[p.status]),
+      part("pills").replaceChildren(make("span", {className: "panel-pill"}, row.querySelector(".icon").cloneNode(true), labels[p.status]),
         make("span", {className: "panel-pill"}, p.units.toLocaleString() + (p.units === 1 ? " home" : " homes")));
       part("note").textContent = p.note;
       part("facts").replaceChildren(...p.facts.flatMap(([label, value]) => [make("dt", {textContent: label}), make("dd", {textContent: value})]));
@@ -628,6 +627,11 @@ SCRIPT = """
     });
     const step = where => { const near = beside(where); if (near) openProject(near, false); };
     part("close").addEventListener("click", closeProject);
+    // Esc, wherever focus is: a panel opened by a link as the page loads has nothing in it focused, and the
+    // browser's own Esc for a dialog waits for focus inside it.
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && view.open) { event.preventDefault(); closeProject(); }
+    });
     part("back").addEventListener("click", () => step(-1));
     part("on").addEventListener("click", () => step(1));
     view.addEventListener("keydown", event => {
@@ -705,9 +709,6 @@ def render(projects, built_at, failed):
             for key, label in choices
         ) + f'<div class="finders">{shared.SEARCH}</div></div>'
     )
-    legend = '<div class="legend">' + "".join(
-        f'<span><span class="dot" style="background:{color}"></span>{label}</span>' for label, color in STATUSES.values()
-    ) + "</div>"
     missing = (f'<p class="empty">Couldn’t load {" or ".join(failed)} this time; showing what the last build had.</p>'
                if failed else "")
     footer = (
@@ -718,7 +719,7 @@ def render(projects, built_at, failed):
         'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
     )
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
-    body = (f'{filter_row}<div id="map"></div>{legend}{missing}{sections}{footer}{PANEL}'
+    body = (f'{filter_row}<div id="map"></div>{missing}{sections}{footer}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>')
     script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                        json.dumps({key: label for key, (label, _) in STATUSES.items()}))
