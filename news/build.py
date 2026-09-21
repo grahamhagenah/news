@@ -585,6 +585,9 @@ INDEX_JS = """
     dialog.querySelector(".player-frame").replaceChildren(holder);
     let started = false;
     dialog.classList.remove("ready");  // Until the video is there to show, the frame stays dark and empty.
+    // Where the screen isn't ours to give, YouTube's own button is the one that reaches it, and ours would
+    // only offer a window filled to the edges beside it. It stands down there.
+    dialog.classList.toggle("theirs", !screenIsOurs());
     return new YT.Player(holder, {
       host: "https://www.youtube-nocookie.com",
       videoId,
@@ -1043,7 +1046,7 @@ CSS = """
   /* A bar across the top: what the buttons sit in, and what the window is taken hold of by. Above the video
      rather than over it, so it covers none of it. */
   .player-bar { display: none; }
-  .player.corner .player-bar { display: block; height: 1.5rem; cursor: grab; touch-action: none;
+  .player.corner .player-bar { display: block; height: 2rem; cursor: grab; touch-action: none;
                                /* Glass: the list behind it blurred and darkened, so the bar belongs to the
                                   window while still showing there's a page under it. */
                                background: rgba(18, 18, 18, .55); backdrop-filter: blur(14px) saturate(1.4);
@@ -1053,12 +1056,15 @@ CSS = """
   /* In the bar, and above it: the bar is glass, which blurs whatever it's drawn over, and these are drawn
      before it. */
   .player.corner .player-close, .player.corner .player-corner, .player.corner .player-copy {
-                   position: absolute; z-index: 1; top: .1rem; width: 1.3rem; height: 1.3rem; background: none; color: #999; }
-  .player.corner .player-close { right: .25rem; }
-  .player.corner .player-corner { right: 1.7rem; }
-  .player.corner .player-copy { right: 3.15rem; }
+                   position: absolute; z-index: 1; top: .15rem; width: 1.7rem; height: 1.7rem; background: none; color: #999; }
+  .player.corner .player-close { right: .3rem; }
+  .player.corner .player-corner { right: 2.15rem; }
+  .player.corner .player-copy { right: 4rem; }
+  /* Theirs to give: ours steps aside, and the rest close up. */
+  .player.theirs.corner .player-corner { display: none; }
+  .player.theirs.corner .player-copy { right: 2.15rem; }
   .player.corner .player-close svg, .player.corner .player-corner svg,
-  .player.corner .player-copy svg { width: .8rem; height: .8rem; }
+  .player.corner .player-copy svg { width: .95rem; height: .95rem; }
   .player.corner .player-close:hover, .player.corner .player-corner:hover,
   .player.corner .player-copy:hover { background: #262626; color: #fff; }
 
@@ -1074,7 +1080,7 @@ CSS = """
     .player-frame > * { transition: none; opacity: 1; }
   }
   /* The way back to the top sits where the video now is, so it steps up over it. */
-  body.video-corner .to-top { bottom: calc(3.75rem + min(26rem, 100vw - 2rem) * 0.5625); }  /* Over the bar too. */
+  body.video-corner .to-top { bottom: calc(4.25rem + min(26rem, 100vw - 2rem) * 0.5625); }  /* Over the bar too. */
   @media (max-width: 34rem) {
     /* A phone: the bar deep enough for a thumb, its buttons with it, and the way back to the top above them. */
     .player.corner .player-bar { height: 2.4rem; }
@@ -1083,6 +1089,7 @@ CSS = """
     .player.corner .player-close { right: .4rem; }
     .player.corner .player-corner { right: 2.5rem; }
     .player.corner .player-copy { right: 4.6rem; }
+    .player.theirs.corner .player-copy { right: 2.5rem; }
     .player.corner .player-close svg, .player.corner .player-corner svg,
     .player.corner .player-copy svg { width: 1rem; height: 1rem; }
     body.video-corner .to-top { bottom: calc(4.6rem + min(26rem, 100vw - 2rem) * 0.5625); }
