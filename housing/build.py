@@ -474,7 +474,7 @@ CSS = """
   /* The footer, as Pushpin's: set off by a faint line, what the site is, then its pages, towns and sources in
      short lists under small, faint headings, the towns in two columns. */
   footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
-  .foot-tagline { color: #888; font-size: .95rem; }
+  .foot-about { max-width: 38rem; margin: 0; color: #999; font-size: .9rem; line-height: 1.6; }
   .site-links { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 18rem) minmax(0, 10rem); gap: 1.75rem 2.5rem;
                 margin: 1.25rem 0 2rem; }
   .site-links h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
@@ -1035,9 +1035,23 @@ PAGES = {
 }
 
 
-def footer(page, towns):
-    """The foot of each page, as Pushpin's: what the site is, then its pages, its towns and its sources in short
-    lists under faint headings (this page marked), then where the data comes from."""
+def about(projects, towns):
+    """What the site is, in full, for the foot of each page: what it follows, how much, from where, and how it
+    keeps up, with the numbers as of this build."""
+    active = [p for p in projects if p["status"] != "complete"]
+    return (
+        f"{NAME} follows new housing in Boston and the {len(towns) - 1} towns around it, from a project’s first "
+        f"filing until people move in: {len(projects):,} projects and {sum(p['units'] for p in projects):,} homes, "
+        f"{len(active):,} of those projects ({sum(p['units'] for p in active):,} homes) still in progress. It gathers "
+        "them from Boston’s Planning Department, Cambridge’s development log and MAPC’s MassBuilds every few hours "
+        "and notes each time a project moves along, so what’s just been filed, approved or broken ground rises to "
+        "the top of its town’s list."
+    )
+
+
+def footer(page, towns, said):
+    """The foot of each page, as Pushpin's: what the site is (said, in full), then its pages, its towns and its
+    sources in short lists under faint headings (this page marked), then where the data comes from."""
     root = "../" if page else ""
     here = PAGES[page][0] if page else ""
     marked = ' aria-current="page"'
@@ -1056,7 +1070,7 @@ def footer(page, towns):
         for heading, kind, links in groups
     )
     return (
-        f'<footer><p class="foot-tagline">{html.escape(TAGLINE)}</p>'
+        f'<footer><p class="foot-about">{html.escape(said)}</p>'
         f'<nav class="site-links" aria-label="{html.escape(NAME)}">{lists}</nav>'
         '<p>From <a href="https://data.boston.gov/dataset/article80-development-projects">Boston’s Article 80 '
         'projects</a> (anything over about 20,000 square feet or 15 homes), <a href="' + CAMBRIDGE_PAGE +
@@ -1076,6 +1090,7 @@ def render(projects, built_at, failed, page=None):
     updates, what's changed in the last RECENT_DAYS days, newest first, each saying what happened; Large
     projects, those of LARGE_HOMES homes or more, biggest first, each with how far along it is."""
     today = built_at.date()
+    everything = projects  # All of them, for the footer's numbers, whichever this page shows.
     towns = by_town(projects)
     changes = recently_changed(projects, today)
     if page == "recent":
@@ -1126,7 +1141,7 @@ def render(projects, built_at, failed, page=None):
     else:
         banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "recent/")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
-            f'{footer(page, towns)}{PANEL}'
+            f'{footer(page, towns, about(everything, towns))}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
             f'<script>const FRESH = {fresh};</script>')
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
