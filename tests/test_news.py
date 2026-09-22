@@ -31,6 +31,9 @@ ROUTES = {
     "https://waxy.org/": "waxy_home.html",
     "https://waxy.org/feed/": "waxy.xml",
     "https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A": "youtube.xml",
+    "https://pitchfork.com/feed/feed-album-reviews/rss": "pitchfork_reviews.xml",
+    "https://pitchfork.com/feed/reviews/best/albums/rss": "pitchfork_bnm.xml",
+    "https://pitchfork.com/reviews/albums/actress-radical-frame/": "pitchfork_review.html",
 }
 
 
@@ -137,6 +140,35 @@ class Reading(unittest.TestCase):
         self.assertEqual((parsed["name"], parsed["only"], parsed["days"]), ("Tiny Desk", "ratboys: tiny", 36500))
         feed = build.load(parsed)
         self.assertEqual([post["title"] for post in feed["posts"]], ["Ratboys: Tiny Desk Concert"])
+
+    def test_tag_and_page_titles_options(self):
+        parsed = build.parse_site('https://pitchfork.com/feed/reviews/best/albums/rss   Pitchfork   days=30   titles=page   tag="BNM"')
+        self.assertEqual((parsed["name"], parsed["days"], parsed["page_titles"], parsed["tag"]), ("Pitchfork", 30, True, "BNM"))
+        plain = build.parse_site("https://pitchfork.com/feed/feed-album-reviews/rss   Pitchfork")
+        self.assertEqual((plain["page_titles"], plain["tag"]), (False, ""))
+
+    def test_page_titles_add_what_the_feed_leaves_out(self):
+        sites = [site("https://pitchfork.com/feed/feed-album-reviews/rss", page_titles=True)]
+        feeds = [build.read_feed(sites[0])]
+        self.assertEqual(feeds[0]["posts"][0]["title"], "Radical Frame", "the feed has only the album")
+        build.fill_page_titles(sites, feeds, {})
+        titles = [post["title"] for post in feeds[0]["posts"]]
+        self.assertEqual(titles[0], "Actress: Radical Frame")
+        self.assertEqual(titles[1], "Fell Asleep in the Sun", "a page that can't be had keeps the feed's title")
+
+    def test_page_titles_come_from_the_last_build_when_it_had_them(self):
+        sites = [site("https://pitchfork.com/feed/feed-album-reviews/rss", page_titles=True)]
+        feeds = [build.read_feed(sites[0])]
+        link = feeds[0]["posts"][1]["link"]
+        previous = {"feeds": {"x": {"posts": [{"link": link, "title": "After: Fell Asleep in the Sun"}]}}}
+        with mock.patch.object(build, "page_title", return_value="") as fetched:
+            build.fill_page_titles(sites, feeds, previous)
+        self.assertNotIn(mock.call(link), fetched.call_args_list, "fetched a page the last build had")
+        self.assertEqual(feeds[0]["posts"][1]["title"], "After: Fell Asleep in the Sun")
+
+    def test_a_tagged_feed_tags_its_posts(self):
+        feed = build.read_feed(site("https://pitchfork.com/feed/reviews/best/albums/rss", tag="BNM"))
+        self.assertTrue(all(post["tag"] == "BNM" for post in feed["posts"]))
 
     def test_finds_a_homepages_feed(self):
         feed = self.read("https://waxy.org/")
@@ -260,6 +292,15 @@ class Fallback(unittest.TestCase):
         failing = build.still_failing({"A Blog": "timed out"}, earlier, self.built)
         self.assertEqual(failing["A Blog"], {"since": "2026-09-20T01:00:00+00:00", "error": "timed out"})
 
+    def test_a_post_in_two_feeds_shows_once_with_its_tag(self):
+        now = datetime.now(timezone.utc)
+        post = lambda link, tag="": {"title": link, "link": link, "date": now, "tag": tag}
+        feeds = [{"name": "Pitchfork", "posts": [post("a"), post("b")]},
+                 {"name": "Pitchfork", "posts": [post("b", "BNM"), post("c", "BNM")]}]
+        posts = build.all_posts(feeds)
+        self.assertEqual(sorted(p["link"] for p in posts), ["a", "b", "c"])
+        self.assertEqual({p["link"]: p["tag"] for p in posts}, {"a": "", "b": "BNM", "c": "BNM"})
+
     def test_saved_posts_survive_the_round_trip(self):
         post = self.post(2)
         self.assertEqual(build.restored(json.loads(json.dumps(build.saved(post)))), post)
@@ -285,6 +326,13 @@ class Page(unittest.TestCase):
         self.assertIn('<dialog class="player"', page)
         self.assertIn("Couldn’t load Broken Blog", page)
         self.assertIn("Couldn’t reach Slow Site", page)
+
+    def test_tags_show_beside_titles(self):
+        with mock.patch.object(build, "fetch", sample):
+            feeds = [build.read_feed(site("https://pitchfork.com/feed/reviews/best/albums/rss", tag="BNM"))]
+        posts = build.all_posts(feeds)
+        page = build.render_index(feeds, posts, [], [], datetime.now(timezone.utc))
+        self.assertEqual(page.count('</a> <span class="tag">BNM</span>'), len(posts))
 
 
 

@@ -1,7 +1,8 @@
 # One site per line. A homepage is fine — the build finds its feed.
 # Add a name after the URL to use instead of the feed's own title.
 # Options at the end of a line: limit=5 (at most 5 posts), days=14 (keep posts for 14 days), and
-# only="Full Performance" (only posts whose titles have that in them, in any case).
+# only="Full Performance" (only posts whose titles have that in them, in any case), tag="BNM" (a label beside
+# each of its posts' titles) and titles=page (each post's title from its own page).
 # Defaults are 15 posts from the last 3 days.
 # A podcast's episodes link to Apple Podcasts, the show found by searching its name and told apart by the
 # feed it carries. Where a show publishes under a feed address Apple doesn't list, apple=<show id> names
@@ -45,6 +46,12 @@ https://heatmap.news/           Heatmap   limit=8
 https://usa.streetsblog.org/
 https://grist.org/   Grist
 https://humantransit.org/feed   Human Transit   days=30
+
+# Music. Pitchfork's review feed titles are only the album, so titles=page takes "Artist: Album" from each
+# review. Best New Music picks are rarer (about one a week), so they stay a month and carry a BNM tag; a review
+# in both feeds shows once, tagged.
+https://pitchfork.com/feed/feed-album-reviews/rss   Pitchfork   titles=page
+https://pitchfork.com/feed/reviews/best/albums/rss   Pitchfork   days=30   titles=page   tag="BNM"
 
 # Podcasts (episodes open in Apple Podcasts). days= roughly matches how often each show posts.
 https://feeds.npr.org/510318/podcast.xml   Up First

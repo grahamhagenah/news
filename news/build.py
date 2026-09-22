@@ -53,14 +53,18 @@ def is_site_line(line):
 
 
 def parse_site(line):
-    """A feeds.txt line: a URL, then an optional name and options like limit=5, days=14 or only="Full
-    Performance" (only posts whose titles have that in them)."""
-    only = re.search(r'\sonly="([^"]*)"', line)
-    if only:
-        line = line[:only.start()] + line[only.end():]
+    """A feeds.txt line: a URL, then an optional name and options like limit=5, days=14, only="Full
+    Performance" (only posts whose titles have that in them), tag="BNM" (a label beside each of its posts'
+    titles) or titles=page (each post's title from its own page, for feeds whose titles leave things out)."""
+    site = {"url": "", "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "apple": "", "only": "",
+            "tag": "", "page_titles": False}
+    for quoted in ("only", "tag"):
+        found = re.search(rf'\s{quoted}="([^"]*)"', line)
+        if found:
+            line = line[:found.start()] + line[found.end():]
+            site[quoted] = found.group(1)
     url, *words = line.split()
-    site = {"url": url, "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "apple": "",
-            "only": only.group(1) if only else ""}
+    site["url"] = url
     name = []
     for word in words:
         option = re.fullmatch(r"(limit|days)=(\d+)", word)
@@ -69,6 +73,8 @@ def parse_site(line):
             site[option.group(1)] = int(option.group(2))
         elif show:
             site["apple"] = show.group(1)
+        elif word == "titles=page":
+            site["page_titles"] = True
         else:
             name.append(word)
     site["name"] = " ".join(name)
@@ -242,6 +248,7 @@ class MetaDescriptionFinder(HTMLParser):
     """Collects the summary a page offers for link previews."""
 
     KEYS = ("og:description", "twitter:description", "description")
+    TITLE_KEYS = ("og:title", "twitter:title")
 
     def __init__(self):
         super().__init__()
@@ -250,7 +257,7 @@ class MetaDescriptionFinder(HTMLParser):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         key = (attrs.get("property") or attrs.get("name") or "").lower()
-        if tag == "meta" and key in self.KEYS and attrs.get("content"):
+        if tag == "meta" and key in self.KEYS + self.TITLE_KEYS and attrs.get("content"):
             self.found.setdefault(key, attrs["content"])
 
 
@@ -267,6 +274,32 @@ def page_summary(url):
         if len(finder.found.get(key, "")) >= 40:
             return excerpt(html.escape(finder.found[key]))
     return []
+
+
+def page_title(url):
+    """The title a page gives for link previews, which on some sites says more than its feed does (Pitchfork's
+    review feed titles are only the album; its pages' are "Artist: Album")."""
+    try:
+        _, body = fetch(url, attempts=1, timeout=10)
+    except Exception:
+        return ""
+    finder = MetaDescriptionFinder()
+    finder.feed(body[:500_000].decode("utf-8", "replace"))
+    return next((clean(finder.found[key]) for key in finder.TITLE_KEYS if finder.found.get(key)), "")
+
+
+def fill_page_titles(sites, feeds, previous):
+    """For titles=page lines, each post's title from its page: from the last build when it had it, so a page
+    is fetched once, not every build. A page that can't be had leaves the feed's title."""
+    known = {post["link"]: post["title"] for kept in previous.get("feeds", {}).values() for post in kept.get("posts", [])}
+    wanted = [(post, feed) for site, feed in zip(sites, feeds) if site["page_titles"] for post in feed["posts"]]
+    missing = [post for post, _ in wanted if post["link"] not in known]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for post, title in zip(missing, pool.map(lambda post: page_title(post["link"]), missing)):
+            if title:
+                known[post["link"]] = title
+    for post, _ in wanted:
+        post["title"] = known.get(post["link"]) or post["title"]
 
 
 def read_feed(site):
@@ -301,6 +334,7 @@ def read_feed(site):
                 "audio": audio,
                 "podcast": audio is not None,
                 "video": video.group(1) if video else None,  # A YouTube video's id, for playing it here.
+                "tag": site["tag"],
             })
 
     return {
@@ -308,6 +342,7 @@ def read_feed(site):
         "url": site["url"],
         "feed_url": feed_url,
         "apple": site["apple"],
+        "tag": site["tag"],
         "posts": posts[: site["limit"]],
     }
 
@@ -437,7 +472,17 @@ def render_time(date, css_class=""):
 
 
 def all_posts(feeds):
-    posts = [dict(post, source=feed["name"]) for feed in feeds for post in feed["posts"]]
+    """Every feed's posts, newest first. A post two feeds share (a Pitchfork review also in its Best New Music)
+    shows once, with the tag either gives it."""
+    posts, by_link = [], {}
+    for feed in feeds:
+        for post in feed["posts"]:
+            same = by_link.get(post["link"])
+            if same:
+                same["tag"] = same.get("tag") or post.get("tag", "")
+                continue
+            by_link[post["link"]] = dict(post, source=feed["name"])
+            posts.append(by_link[post["link"]])
     # Newest first; posts without a date sink to the bottom.
     posts.sort(key=lambda post: post["date"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return posts
@@ -457,6 +502,7 @@ def render_json(posts, built_at):
                     "comments": post["comments"],
                     "podcast": post["podcast"],
                     "video": post.get("video"),
+                    "tag": post.get("tag") or None,
                 }
                 for post in posts
             ],
@@ -492,6 +538,7 @@ def render_index(feeds, posts, failed, stale, built_at):
         mark = icon(kind)
         marked = " data-podcast" if post["podcast"] else f' data-video="{post["video"]}"' if post.get("video") else ""
         preview = shared.preview(post["title"], post["summary"])
+        tag = f'<span class="tag">{html.escape(post["tag"])}</span>' if post.get("tag") else ""
         comments = ""
         if post["comments"]:
             count = post["comment_count"]
@@ -502,7 +549,7 @@ def render_index(feeds, posts, failed, stale, built_at):
         items.append(
             f'<li class="row" data-from="{html.escape(post["source"])}"{marked}>{mark}'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a> '
-            + " ".join(part for part in (when, comments) if part)
+            + " ".join(part for part in (tag, when, comments) if part)
             + f'{preview}</div> <span class="source"><span>{html.escape(post["source"])}</span></span></li>'
         )
 
@@ -842,7 +889,8 @@ def render_sources(feeds, built_at):
         remove = f"{REPO_URL}/issues/new?" + urlencode({"title": f"Remove {feed['url']}", "body": ISSUE_NOTE})
         rows.append(
             f'<li><a href="{html.escape(feed["url"])}">{html.escape(feed["name"])}</a>'
-            f'<span class="note">{status}</span><a class="remove" href="{html.escape(remove)}" target="_blank" rel="noopener">remove</a></li>'
+            + (f'<span class="tag">{html.escape(feed["tag"])}</span>' if feed.get("tag") else "")
+            + f'<span class="note">{status}</span><a class="remove" href="{html.escape(remove)}" target="_blank" rel="noopener">remove</a></li>'
         )
 
     body = f"""<h1>Add a site</h1>
@@ -932,7 +980,10 @@ CSS = """
   /* Until the script picks the page, show the first one, so the whole list never flashes up. */
   .posts:not(.paged) li:nth-child(n+PAGE_START) { display: none; }
   .note, time { color: #666; font-size: .8em; }
-  .headline time, .headline .comments { flex: none; }
+  .headline time, .headline .comments, .headline .tag { flex: none; }
+  /* A label a feeds.txt line gives its posts, like Pitchfork's Best New Music: red, like Pitchfork's own. */
+  .tag { margin-left: .6em; padding: .05em .45em; border: 1px solid #ff3530; border-radius: 4px; color: #ff3530;
+         font-size: .7em; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
   /* Each post's icon: in its kind's color while the post is unread, gray once it's read. */
   .row > .icon { color: #555; }
   .unread > .icon { color: var(--article); }
@@ -940,7 +991,7 @@ CSS = """
   .row[data-video].unread > .icon { color: var(--video); }
   @media (max-width: 34rem) {
     /* A phone's line: the headline, how long ago, its comments, and who it's from. */
-    .headline > time, .headline > .comments { margin-left: 0; }
+    .headline > time, .headline > .comments, .headline > .tag { margin-left: 0; }
     .row .source::before { content: "from "; }
   }
   /* The video player: a window of its own in the corner of the page, alone on black. */
@@ -1117,6 +1168,7 @@ def main():
 
     built_at = datetime.now(timezone.utc)
     previous = previous_build()
+    fill_page_titles(sites, feeds, previous)
     feeds, failed, stale, errors = gather(sites, feeds, previous, built_at)
     if len(failed) + len(stale) == len(sites) or not any(feed["posts"] for feed in feeds):
         sys.exit("No feeds loaded — not writing the page.")
