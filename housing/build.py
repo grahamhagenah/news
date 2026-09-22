@@ -24,6 +24,7 @@ OUT_DIR = ROOT.parent / "dist" / "housing"
 EDITS = ROOT / "edits.txt"
 USER_AGENT = "Mozilla/5.0 (compatible; housing-tracker/1.0)"
 SITE_URL = "https://buildhousing.org/"
+REPO_URL = "https://github.com/grahamhagenah/news"  # Where a correction's issue is opened, and where this lives.
 NAME = "Build Housing"
 # The city the site covers, which the header names after it as it names a page ("Build Housing / Boston").
 PLACE = "Boston"
@@ -720,7 +721,7 @@ PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <div class="panel-say"><h3>Have your say</h3><ul></ul></div>
 <dl class="panel-facts"></dl>
 <div class="panel-about"></div>
-<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-copy" type="button">Copy link</button><button class="panel-map" type="button">Show on map</button><p class="panel-updated"></p></div>
+<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-copy" type="button">Copy link</button><button class="panel-map" type="button">Show on map</button><a class="panel-wrong" target="_blank" rel="noopener">Suggest a correction</a><p class="panel-updated"></p></div>
 </div>
 </dialog>"""
 
@@ -1098,6 +1099,16 @@ SCRIPT = """
       part("source").href = p.link;
       part("source").textContent = (p.origin ? "View on " + p.origin : "View source") + " ↗";
       part("copy").textContent = "Copy link";
+      // A correction, as an issue with the project named and the fields a note can set; the site says nothing
+      // until it's been judged against the city's own record.
+      part("wrong").href = REPO + "/issues/new?" + new URLSearchParams({
+        title: `Note ${shown.id}`,
+        labels: "correction",
+        body: [`<!-- ${p.name} · ${location.origin}/p/${shown.id}/ -->`, "",
+               "What’s wrong, or what’s new:", "", "", "",
+               "status: (proposed, approved, under construction, complete, stalled — blank keeps it as it is)",
+               "date: (2026-09-22, optional)", "link: (optional)", ""].join("\\n"),
+      });
       part("site").hidden = !p.site;
       part("site").href = p.site;
       part("updated").textContent = p.updated ? "Last update " + p.updated : "";
@@ -1490,7 +1501,7 @@ def render(projects, built_at, failed, page=None, town=None):
         banner += say_line(projects, today, more="/have-your-say/", none=nothing)
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(path, towns, about(everything, towns))}{PANEL}'
-            f'<script>const FRESH = {fresh};</script>')
+            f'<script>const FRESH = {fresh}, REPO = {json.dumps(REPO_URL)};</script>')
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                         json.dumps({key: label for key, (label, _) in STATUSES.items()}))).replace(
         "    /*MAP*/\n", MAP_JS) + FRESH_SCRIPT

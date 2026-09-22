@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from housing import build, upstream  # noqa: E402
+from housing import build, notes, upstream  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures" / "housing"
 
@@ -315,6 +315,39 @@ class HaveYourSay(unittest.TestCase):
         home = build.render([later, sooner, quiet], built, [])
         self.assertIn("Have your say</span>", home)
         self.assertIn("Comments close Sep 30</span>", home)
+
+
+class Notes(unittest.TestCase):
+    """housing/notes.py: a note from an issue, applied to edits.txt."""
+
+    BODY = """<!-- 45 Townsend Street · https://buildhousing.org/p/boston-1/ -->
+
+Financing fell through; the developer says it's on hold.
+
+status: stalled
+date: 2026-09-22
+link: (optional)
+"""
+
+    def test_what_an_issue_says(self):
+        note, fields = notes.said(self.BODY)
+        self.assertEqual(note, "Financing fell through; the developer says it's on hold.")
+        # The template's own empty fields say nothing, and its comment isn't part of the note.
+        self.assertEqual(fields, {"status": "stalled", "date": "2026-09-22"})
+
+    def test_a_note_written_into_edits(self):
+        note, fields = notes.said(self.BODY)
+        text, how = notes.apply("boston-1", note, fields, "# a comment\n\nboston-2\nstatus: complete\n")
+        self.assertEqual(how, "added")
+        self.assertIn("boston-1\nnote: Financing fell through", text)
+        self.assertIn("status: stalled\ndate: 2026-09-22", text)
+        self.assertIn("boston-2\nstatus: complete", text)  # What was there already is left alone.
+        again, how = notes.apply("boston-1", "Started again.", {"status": "under construction"}, text)
+        self.assertEqual(how, "replaced")
+        self.assertNotIn("Financing fell through", again)
+        self.assertEqual(again.count("boston-1"), 1)
+        self.assertEqual(build.read_edits(again)["boston-1"],
+                         {"note": "Started again.", "status": "under construction"})
 
 
 if __name__ == "__main__":
