@@ -734,7 +734,7 @@ MAP_JS = """
     // lighter than the land, rather than black lines edged in gray, the bigger a little lighter (solid colors: a
     // road is drawn in many overlapping pieces, and see-through ones add up to a bright web downtown); parks barely
     // green; and the place names a little brighter than the style's.
-    const LAND = "#242426", WATER = "#0b1520";
+    const LAND = "#242426", WATER = "#0e2138";
     const RECOLOR = {
       "background": {"background-color": LAND},
       "water": {"fill-color": WATER},
