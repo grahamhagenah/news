@@ -376,6 +376,17 @@ class AppleMusic(unittest.TestCase):
         self.assertEqual([post["music"] for post in feeds[0]["posts"]][:2],
                          ["https://music.apple.com/found", "https://music.apple.com/us/search?term=a"])
 
+    def test_a_collaboration_credited_differently(self):
+        results = {"results": [{"artistName": "Charli xcx, Robyn & Yung Lean", "trackName": "360 featuring robyn & yung lean",
+                                "trackViewUrl": "https://music.apple.com/us/album/360/1?i=2&uo=4"}]}
+        with mock.patch.object(build, "apple_json", return_value=results):
+            self.assertEqual(build.apple_music("song", "Yung Lean / Charli xcx: “360”"), "https://music.apple.com/us/album/360/1?i=2")
+            self.assertIsNone(build.apple_music("song", "Yung Lean / Metro Boomin: “That’s It”"), "one artist in common isn't enough")
+
+    def test_artist_names(self):
+        self.assertEqual(build.artist_names("Yung Lean / Metro Boomin"), {"yung lean", "metro boomin"})
+        self.assertEqual(build.artist_names("Florence and the Machine"), {"florence and the machine"})
+
     def test_a_failed_search_still_gives_a_link(self):
         sites, feeds = self.feeds("Beck: Ride Lonesome")
         with mock.patch.object(build, "apple_json", side_effect=OSError("down")):

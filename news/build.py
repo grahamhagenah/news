@@ -485,17 +485,25 @@ def artist_and_title(title):
 
 
 def apple_music(kind, title):
-    """The album or song on Apple Music, from a search by artist and name that returns the same artist, or
-    None. Anything less than the same artist is too often somebody else's record of the same name."""
+    """The album or song on Apple Music, from a search by artist and name that returns the same name by one of
+    the same artists (a collaboration can be credited differently), or None. Anything less is too often somebody
+    else's record of the same name."""
     artist, name = artist_and_title(title)
     if not artist:
         return None
     found = apple_json(APPLE_SEARCH_URL, {"term": f"{artist} {name}", "entity": kind, "limit": 25, "country": "US"})
     field, link = ("trackName", "trackViewUrl") if kind == "song" else ("collectionName", "collectionViewUrl")
+    wanted = artist_names(artist)
     for item in found.get("results", []):
-        if comparable(item.get("artistName")) == comparable(artist) and comparable(name) in comparable(item.get(field)):
+        if wanted & artist_names(item.get("artistName")) and comparable(name) in comparable(item.get(field)):
             return re.sub(r"[?&]uo=\d+", "", item[link])
     return None
+
+
+def artist_names(artists):
+    """Each artist in a credit, for telling whether two credits share one: Pitchfork's "Yung Lean / Metro Boomin",
+    Apple's "Charli xcx, Robyn & Yung Lean". Only "/", "&" and "," split it, so "Florence and the Machine" is one."""
+    return {comparable(name) for name in re.split(r"\s*[/&,]\s*", artists or "") if comparable(name)}
 
 
 def music_search(title):
