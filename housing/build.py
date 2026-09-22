@@ -507,9 +507,18 @@ CSS = """
   .maplibregl-ctrl-group { background: #111; border: 1px solid #333; box-shadow: none !important; }
   .maplibregl-ctrl-group button + button { border-top-color: #333; }
   .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(.75); }
-  .maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(0, 0, 0, .6); color: #555; font-size: 9px; }
+  /* The credits: folded, only a small, faint ⓘ with nothing behind it; opened, a dark band. Its icon is drawn here
+     in gray rather than MapLibre's black inverted, which also turned the blue ring it's given when focused orange;
+     from the keyboard it gets a quiet ring of its own instead. */
+  .maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: none; color: #555; font-size: 9px; }
+  .maplibregl-ctrl-attrib.maplibregl-compact-show { background: rgba(0, 0, 0, .6); }
   .maplibregl-ctrl-attrib a { color: #666; }
-  .maplibregl-ctrl-attrib-button { filter: invert(.7); background-color: transparent; }
+  .maplibregl-ctrl-attrib-button, .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23888' fill-rule='evenodd' d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E") center / 16px no-repeat;
+    opacity: .45; transition: opacity .15s; }
+  .maplibregl-ctrl-attrib-button:hover, .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button { opacity: .8; }
+  .maplibregl-ctrl-attrib-button:focus { box-shadow: none; }
+  .maplibregl-ctrl-attrib-button:focus-visible { box-shadow: 0 0 0 1px #555; opacity: .8; }
   /* While the map loads, a quiet note in its middle, fading in only if loading takes a moment. */
   .map-loading { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; color: #666; font-size: .85rem;
                  pointer-events: none; animation: appear .3s ease-out .4s both; }
