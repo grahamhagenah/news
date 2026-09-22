@@ -437,8 +437,17 @@ def panel_data(project, today):
 CSS = """
   #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #242426; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
-  /* The filter under the map rather than under the header. */
-  #map + .filter { margin-top: 0; }
+  /* Under the map, the filter and the search: the filter's choices on the left, on two lines (the four steps of
+     a project's way, then Complete, Stalled and All), the search on the right, level with the first; on a phone,
+     the choices as they wrap, and the search on a line of its own under them, wide enough for a thumb. */
+  .controls { display: flex; justify-content: space-between; align-items: flex-start; gap: .9rem 2rem; margin: 0 0 1.75rem; }
+  .controls .filter { flex: 0 1 30rem; margin: 0; }
+  .controls .search { flex: 0 0 11rem; margin-left: 0; }
+  @media (max-width: 34rem) {
+    .controls { flex-direction: column; align-items: stretch; }
+    .controls .filter { flex: none; }
+    .controls .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
+  }
   /* Recently updated, a line over the map, as Pushpin's Just announced: one of the newest, and the way to the rest. */
   .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 1.25rem; padding: .5rem 0; font-size: .85rem;
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
@@ -480,17 +489,11 @@ CSS = """
     .site-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .site-links .towns { grid-column: 1 / -1; order: 3; }
   }
-  /* What the site is, under its name, with the search beside it. */
-  .intro { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; margin: -1.25rem 0 1.25rem; }
+  /* What the site is, under its name. */
+  .intro { margin: -1.25rem 0 1.25rem; }
   .tagline { min-width: 0; margin: 0; overflow: hidden; color: #888; font-size: .9rem; white-space: nowrap; text-overflow: ellipsis; }
   .sites .city { color: #777; }
-  /* The search gives up its width before the tagline does. */
-  .intro .search { flex: 0 1 10rem; min-width: 6rem; margin-left: 0; }
-  @media (max-width: 34rem) {
-    .intro { flex-direction: column; align-items: stretch; gap: .9rem; }
-    .intro .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
-    .tagline { font-size: .8rem; }
-  }
+  @media (max-width: 34rem) { .tagline { font-size: .8rem; } }
   /* The map's controls, notes and credits, quiet and dark like the page. */
   .maplibregl-map { font: inherit; }
   .maplibregl-map .map-hint { position: absolute; left: 0; bottom: 0; z-index: 2; }
@@ -1090,12 +1093,13 @@ def render(projects, built_at, failed, page=None):
     choices = [("active", "In progress")] + [(key, label) for key, (label, _) in STATUSES.items()] + [("all", "All")]
     def colored(key):
         return f' style="color:{STATUSES[key][1]}"' if key in STATUSES else ""
+    # Under the map: the filter on the left, the search on the right.
     filter_row = (
-        '<div class="filter">' + "".join(
+        '<div class="controls"><div class="filter">' + "".join(
             f'<button type="button" data-show="{key}" aria-pressed="{"true" if key == shown else "false"}">'
             f'<span{colored(key)}>{shared.icon(key.replace(" ", "-"))}</span>{label}</button>'
             for key, label in choices
-        ) + '</div>'
+        ) + f'</div>{shared.SEARCH}</div>'
     )
     # Named by source, not town: MassBuilds down is eleven towns at once.
     unreached = list(dict.fromkeys("MassBuilds" if town in INNER_RING else FROM.get(town, town) for town in failed))
@@ -1103,7 +1107,7 @@ def render(projects, built_at, failed, page=None):
                if failed else "")
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
     said = f'{PAGES[page][2]} <a href="../">All projects →</a>' if page else html.escape(TAGLINE)
-    intro = f'<div class="intro"><p class="tagline">{said}</p>{shared.SEARCH}</div>'
+    intro = f'<div class="intro"><p class="tagline">{said}</p></div>'
     banner, fresh = ("", "[]") if page else fresh_banner(changes, today)
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(page, towns)}{PANEL}'
