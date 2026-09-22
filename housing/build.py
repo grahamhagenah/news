@@ -511,7 +511,9 @@ CSS = """
      in gray rather than MapLibre's black inverted, which also turned the blue ring it's given when focused orange;
      from the keyboard it gets a quiet ring of its own instead. */
   .maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: none; color: #555; font-size: 9px; }
-  .maplibregl-ctrl-attrib.maplibregl-compact-show { background: rgba(0, 0, 0, .6); }
+  /* Opened, its line of credits centered in the band, level with the ⓘ at its end. */
+  .maplibregl-ctrl-attrib.maplibregl-compact-show { display: flex; align-items: center; box-sizing: border-box; min-height: 24px;
+                                                    padding-top: 0; padding-bottom: 0; background: rgba(0, 0, 0, .6); }
   .maplibregl-ctrl-attrib a { color: #666; }
   .maplibregl-ctrl-attrib-button, .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23888' fill-rule='evenodd' d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E") center / 16px no-repeat;
