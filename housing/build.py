@@ -447,6 +447,10 @@ CSS = """
   /* Full screen: the map the whole of it, without the corners and edge it has in the page. */
   #map:fullscreen { height: 100%; margin: 0; border: 0; border-radius: 0; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
+  /* Room to see: taller on a tall window, and out past the text on a wide one (the page itself never scrolls
+     sideways: body clips it). */
+  @media (min-height: 50rem) and (min-width: 46rem) { #map { height: 27rem; } }
+  @media (min-width: 62rem) { #map { width: calc(100% + 6rem); margin-left: -3rem; } }
   /* Under the map, the filter and the search: the filter's choices on the left, on two lines (the four steps of
      a project's way, then Complete, Stalled and All), the search on the right, level with the first; on a phone,
      the choices as they wrap, and the search on a line of its own under them, wide enough for a thumb. */
@@ -606,6 +610,8 @@ CSS = """
   @media (hover: hover) and (pointer: fine) {
     .row { transition: background-color .12s, box-shadow .12s; }
     .row:hover { background: #0f0f0f; box-shadow: -.5rem 0 #0f0f0f, .5rem 0 #0f0f0f; }
+    /* The row whose dot is under the pointer on the map, lit the same way. */
+    .row.near { background: #0f0f0f; box-shadow: -.5rem 0 #0f0f0f, .5rem 0 #0f0f0f; }
   }
   /* The project last opened, a faint band behind its row, reaching a little past the text on either side. */
   .row.lit { background: #141414; box-shadow: -.5rem 0 #141414, .5rem 0 #141414; }
@@ -823,6 +829,8 @@ MAP_JS = """
     map.addControl(new maplibregl.FullscreenControl(), "top-left");
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const radius = row => Math.max(2.2, Math.min(7, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 3.3));
+    // A number for each project, so a row and its dot can find each other and light up together.
+    const numbers = new Map(rows.map((row, at) => [row.id, at]));
     // A dot's note: its name, which opens its panel, and its homes and status.
     const note = row => {
       const status = row.dataset.status, box = document.createElement("div");
@@ -842,7 +850,9 @@ MAP_JS = """
       draw: shown => {
         const data = {type: "FeatureCollection", features: shown.map(row => ({
           type: "Feature", geometry: {type: "Point", coordinates: [+row.dataset.lon, +row.dataset.lat]},
-          properties: {row: row.id, color: colors[row.dataset.status], radius: radius(row), order: -row.dataset.units},
+          id: numbers.get(row.id),
+          properties: {row: row.id, name: row.querySelector(".title").textContent, homes: +row.dataset.units,
+                       color: colors[row.dataset.status], radius: radius(row), order: -row.dataset.units},
         }))};
         if (map.getSource("dots")) map.getSource("dots").setData(data); else waiting = data;
       },
@@ -869,11 +879,41 @@ MAP_JS = """
       map.addSource("dots", {type: "geojson", data: waiting || {type: "FeatureCollection", features: []}});
       map.addLayer({
         id: "dots", type: "circle", source: "dots", layout: {"circle-sort-key": ["get", "order"]},
-        // A ring in the status's color around a faint fill of the same.
-        paint: {"circle-color": ["get", "color"], "circle-radius": ["get", "radius"], "circle-opacity": .22,
-                "circle-stroke-color": ["get", "color"], "circle-stroke-width": 1.5},
+        // A ring in the status's color around a faint fill of the same; the one under the pointer, or under it
+        // in the list, brighter and thicker.
+        paint: {"circle-color": ["get", "color"],
+                "circle-radius": ["+", ["get", "radius"], ["case", ["boolean", ["feature-state", "lit"], false], 2, 0]],
+                "circle-opacity": ["case", ["boolean", ["feature-state", "lit"], false], .5, .22],
+                "circle-stroke-color": ["get", "color"],
+                "circle-stroke-width": ["case", ["boolean", ["feature-state", "lit"], false], 2.5, 1.5]},
+      });
+      // Close in, the bigger projects say what they are: at street level every one of them, further out only
+      // the largest, so the names never crowd the map.
+      map.addLayer({
+        id: "dot-names", type: "symbol", source: "dots", minzoom: 12.5,
+        filter: [">=", ["get", "homes"], ["step", ["zoom"], 300, 13.5, 150, 14.5, 50, 15.5, 0]],
+        layout: {"text-field": ["get", "name"], "text-font": ["Noto Sans Regular"], "text-size": 11,
+                 "text-offset": [0, 1.1], "text-anchor": "top", "text-max-width": 9, "text-optional": true,
+                 "symbol-sort-key": ["-", 0, ["get", "homes"]]},
+        paint: {"text-color": "#c9c9c9", "text-halo-color": "#242426", "text-halo-width": 1.4},
       });
       map.on("click", "dots", event => note(document.getElementById(event.features[0].properties.row)));
+      // The dot under the pointer and its row, lit together, and the same the other way about.
+      let lit = null;
+      const light = (id, on) => {
+        if (id === null || id === undefined) return;
+        map.setFeatureState({source: "dots", id}, {lit: on});
+        const row = rows[id];
+        if (row) row.classList.toggle("near", on);
+      };
+      dotMap.light = light;
+      map.on("mousemove", "dots", event => {
+        const id = event.features[0].id;
+        if (id === lit) return;
+        light(lit, false);
+        light(lit = id, true);
+      });
+      map.on("mouseleave", "dots", () => { light(lit, false); lit = null; });
       map.on("mouseenter", "dots", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "dots", () => { map.getCanvas().style.cursor = ""; });
     });
@@ -907,7 +947,7 @@ SCRIPT = """
       const fewest = least();
       // The biggest first, so the smaller are drawn over them and a small project beside a big one can be clicked.
       dotMap.draw(bySize.filter(row => !row.hidden && (+row.dataset.units >= fewest || row === pinned)));
-      dotMap.hint(fewest ? `Showing ${fewest}+ homes · zoom in for more` : "");
+      dotMap.hint(fewest ? `Showing ${fewest}+ homes · zoom in for more` : "Bigger dots, more homes");
     };
     dotMap.onZoom(draw);
     const show = () => {
@@ -1062,6 +1102,11 @@ SCRIPT = """
       dotMap.container.scrollIntoView({behavior: "smooth", block: "center"});
       dotMap.goTo(row);
     });
+    // Pointing at a row lights its dot on the map, as pointing at the dot lights the row.
+    for (const [at, row] of rows.entries()) {
+      row.addEventListener("pointerenter", () => dotMap.light && dotMap.light(at, true));
+      row.addEventListener("pointerleave", () => dotMap.light && dotMap.light(at, false));
+    }
     // Clicking anywhere on a row opens it; with a modifier key, its address opens in a new tab as usual.
     for (const row of rows) row.addEventListener("click", event => {
       if (event.metaKey || event.ctrlKey || event.shiftKey) return;
