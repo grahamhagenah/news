@@ -454,6 +454,7 @@ CSS = """
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
   .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
+  /* One line, cut short with "…" if it must: as it turns over, a longer one never pushes the page down. */
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
   .fresh-one b { color: #fff; font-weight: 500; }
   .fresh-none { color: #666; }
@@ -504,8 +505,6 @@ CSS = """
   .sites .city { color: #777; }
   @media (max-width: 34rem) {
     .tagline { font-size: .8rem; }
-    /* A phone's Recently updated: its project on as many lines as it takes, under the words over it. */
-    .fresh-one { white-space: normal; }
   }
   /* The map's controls, notes and credits, quiet and dark like the page. */
   .maplibregl-map { font: inherit; }
