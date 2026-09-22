@@ -55,9 +55,10 @@ def is_site_line(line):
 def parse_site(line):
     """A feeds.txt line: a URL, then an optional name and options like limit=5, days=14, only="Full
     Performance" (only posts whose titles have that in them), tag="BNM" (a label beside each of its posts'
-    titles) or titles=page (each post's title from its own page, for feeds whose titles leave things out)."""
+    titles), titles=page (each post's title from its own page, for feeds whose titles leave things out) or
+    music=album / music=song (a link to each reviewed album or song on Apple Music)."""
     site = {"url": "", "name": "", "limit": POSTS_PER_FEED, "days": DAYS_TO_KEEP, "apple": "", "only": "",
-            "tag": "", "page_titles": False}
+            "tag": "", "page_titles": False, "music": ""}
     for quoted in ("only", "tag"):
         found = re.search(rf'\s{quoted}="([^"]*)"', line)
         if found:
@@ -75,6 +76,8 @@ def parse_site(line):
             site["apple"] = show.group(1)
         elif word == "titles=page":
             site["page_titles"] = True
+        elif word in ("music=album", "music=song"):
+            site["music"] = word.split("=")[1]
         else:
             name.append(word)
     site["name"] = " ".join(name)
@@ -335,6 +338,7 @@ def read_feed(site):
                 "podcast": audio is not None,
                 "video": video.group(1) if video else None,  # A YouTube video's id, for playing it here.
                 "tag": site["tag"],
+                "music": None,  # Apple Music, for music=album or music=song lines; see link_to_apple_music.
             })
 
     return {
@@ -466,6 +470,62 @@ def link_to_apple(feed):
     print(f"  {feed['name']}: {linked} of {len(episodes)} episodes linked to Apple Podcasts")
 
 
+APPLE_MUSIC_SEARCH = "https://music.apple.com/us/search"
+MUSIC_RECHECK = timedelta(days=1)
+
+
+def artist_and_title(title):
+    """A review's "Artist: Album" or "Artist: “Song” [ft. Someone]" as the artist and the plain name."""
+    artist, colon, name = title.partition(": ")
+    if not colon:
+        artist, name = "", title
+    name = re.sub(r"\s*\[(?:ft|feat)\.[^\]]*\]", "", name).strip().strip("“”\"")
+    # Apple's search matches a plain apostrophe more reliably than a curly one.
+    return artist.strip().replace("’", "'"), name.replace("’", "'")
+
+
+def apple_music(kind, title):
+    """The album or song on Apple Music, from a search by artist and name that returns the same artist, or
+    None. Anything less than the same artist is too often somebody else's record of the same name."""
+    artist, name = artist_and_title(title)
+    if not artist:
+        return None
+    found = apple_json(APPLE_SEARCH_URL, {"term": f"{artist} {name}", "entity": kind, "limit": 25, "country": "US"})
+    field, link = ("trackName", "trackViewUrl") if kind == "song" else ("collectionName", "collectionViewUrl")
+    for item in found.get("results", []):
+        if comparable(item.get("artistName")) == comparable(artist) and comparable(name) in comparable(item.get(field)):
+            return re.sub(r"[?&]uo=\d+", "", item[link])
+    return None
+
+
+def music_search(title):
+    """Apple Music's search for a review's artist and name: on an iPhone, the Music app with it typed in."""
+    artist, name = artist_and_title(title)
+    return f"{APPLE_MUSIC_SEARCH}?{urllib.parse.urlencode({'term': f'{artist} {name}'.strip()})}"
+
+
+def link_to_apple_music(sites, feeds, previous, now):
+    """For music= lines, each post's album or song on Apple Music, or Apple Music's search for it when a search
+    doesn't find it. A found link is kept from build to build; one not found is looked for again a day later,
+    since a release often reaches Apple's search after its review. One search at a time, to go easy on Apple."""
+    known = {post["link"]: post for kept in previous.get("feeds", {}).values() for post in kept.get("posts", [])}
+    for site, feed in zip(sites, feeds):
+        if not site["music"]:
+            continue
+        for post in feed["posts"]:
+            before = known.get(post["link"], {})
+            checked = before.get("music_checked")
+            if before.get("music") and (before.get("music_found") or now - datetime.fromisoformat(checked) < MUSIC_RECHECK):
+                post.update(music=before["music"], music_found=before.get("music_found", False), music_checked=checked)
+                continue
+            try:
+                found = apple_music(site["music"], post["title"])
+            except Exception as error:
+                print(f"  {post['title']}: Apple Music search failed ({error})", file=sys.stderr)
+                found = None
+            post.update(music=found or music_search(post["title"]), music_found=bool(found), music_checked=now.isoformat())
+
+
 def render_time(date, css_class=""):
     attr = f' class="{css_class}"' if css_class else ""
     return f'<time{attr} datetime="{date.isoformat()}">{date.strftime("%b %-d")}</time>'
@@ -503,6 +563,7 @@ def render_json(posts, built_at):
                     "podcast": post["podcast"],
                     "video": post.get("video"),
                     "tag": post.get("tag") or None,
+                    "music": post.get("music"),
                 }
                 for post in posts
             ],
@@ -560,12 +621,13 @@ def render_index(feeds, posts, failed, stale, built_at):
             count = post["comment_count"]
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
+        music = f'<a class="comments" href="{html.escape(post["music"])}">Apple Music</a>' if post.get("music") else ""
         # As Pushpin's rows are: the kind's icon, the headline and how long ago with its comments, and the source
         # at the end of the row; spaces between the parts, for a phone's line to break at.
         items.append(
             f'<li class="row" data-from="{html.escape(post["source"])}"{marked}>{mark}'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a> '
-            + " ".join(part for part in (tag, when, comments) if part)
+            + " ".join(part for part in (tag, when, comments, music) if part)
             + f'{preview}</div> <span class="source"><span>{html.escape(post["source"])}</span></span></li>'
         )
 
@@ -1186,6 +1248,7 @@ def main():
     built_at = datetime.now(timezone.utc)
     previous = previous_build()
     fill_page_titles(sites, feeds, previous)
+    link_to_apple_music(sites, feeds, previous, built_at)
     feeds, failed, stale, errors = gather(sites, feeds, previous, built_at)
     if len(failed) + len(stale) == len(sites) or not any(feed["posts"] for feed in feeds):
         sys.exit("No feeds loaded — not writing the page.")

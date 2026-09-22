@@ -327,6 +327,67 @@ class Page(unittest.TestCase):
         self.assertIn("Couldn’t load Broken Blog", page)
         self.assertIn("Couldn’t reach Slow Site", page)
 
+    def test_artist_and_title(self):
+        self.assertEqual(build.artist_and_title("Beck: Ride Lonesome"), ("Beck", "Ride Lonesome"))
+        self.assertEqual(build.artist_and_title("Yung Lean: “That’s It” [ft. Future]"), ("Yung Lean", "That's It"))
+        self.assertEqual(build.artist_and_title("Fell Asleep in the Sun"), ("", "Fell Asleep in the Sun"))
+
+
+class AppleMusic(unittest.TestCase):
+    """Links to reviewed albums and songs, against a stand-in for Apple's search."""
+
+    RESULTS = {"results": [
+        {"artistName": "Some Tribute Band", "collectionName": "Ride Lonesome", "collectionViewUrl": "https://music.apple.com/us/album/wrong/1"},
+        {"artistName": "Beck", "collectionName": "Ride Lonesome", "collectionViewUrl": "https://music.apple.com/us/album/ride-lonesome/2?uo=4"},
+    ]}
+
+    def feeds(self, *titles, music="album"):
+        now = datetime.now(timezone.utc)
+        sites = [dict(build.parse_site("https://pitchfork.com/feed/feed-album-reviews/rss"), music=music)]
+        return sites, [{"posts": [{"title": title, "link": f"https://pitchfork.com/{i}", "date": now} for i, title in enumerate(titles)]}]
+
+    def test_links_the_same_artists_record(self):
+        with mock.patch.object(build, "apple_json", return_value=self.RESULTS):
+            self.assertEqual(build.apple_music("album", "Beck: Ride Lonesome"), "https://music.apple.com/us/album/ride-lonesome/2")
+
+    def test_someone_elses_record_of_the_same_name_is_no_match(self):
+        with mock.patch.object(build, "apple_json", return_value=self.RESULTS):
+            self.assertIsNone(build.apple_music("album", "Actress: Ride Lonesome"))
+
+    def test_falls_back_to_apple_musics_search(self):
+        sites, feeds = self.feeds("Actress: Radical Frame")
+        with mock.patch.object(build, "apple_json", return_value={"results": []}):
+            build.link_to_apple_music(sites, feeds, {}, datetime.now(timezone.utc))
+        post = feeds[0]["posts"][0]
+        self.assertEqual(post["music"], "https://music.apple.com/us/search?term=Actress+Radical+Frame")
+        self.assertFalse(post["music_found"])
+
+    def test_keeps_a_found_link_and_rechecks_a_search_after_a_day(self):
+        now = datetime.now(timezone.utc)
+        sites, feeds = self.feeds("Beck: Ride Lonesome", "Actress: Radical Frame", "Fine: Everything")
+        previous = {"feeds": {"x": {"posts": [
+            {"link": "https://pitchfork.com/0", "music": "https://music.apple.com/found", "music_found": True, "music_checked": (now - timedelta(days=9)).isoformat()},
+            {"link": "https://pitchfork.com/1", "music": "https://music.apple.com/us/search?term=a", "music_found": False, "music_checked": (now - timedelta(hours=2)).isoformat()},
+            {"link": "https://pitchfork.com/2", "music": "https://music.apple.com/us/search?term=b", "music_found": False, "music_checked": (now - timedelta(days=2)).isoformat()},
+        ]}}}
+        with mock.patch.object(build, "apple_json", return_value={"results": []}) as searched:
+            build.link_to_apple_music(sites, feeds, previous, now)
+        self.assertEqual(searched.call_count, 1, "only the search from two days ago is tried again")
+        self.assertEqual([post["music"] for post in feeds[0]["posts"]][:2],
+                         ["https://music.apple.com/found", "https://music.apple.com/us/search?term=a"])
+
+    def test_a_failed_search_still_gives_a_link(self):
+        sites, feeds = self.feeds("Beck: Ride Lonesome")
+        with mock.patch.object(build, "apple_json", side_effect=OSError("down")):
+            build.link_to_apple_music(sites, feeds, {}, datetime.now(timezone.utc))
+        self.assertIn("music.apple.com/us/search", feeds[0]["posts"][0]["music"])
+
+    def test_the_option(self):
+        self.assertEqual(build.parse_site("https://x/rss   Pitchfork   music=song")["music"], "song")
+        self.assertEqual(build.parse_site("https://x/rss   Pitchfork")["music"], "")
+
+
+class Tags(unittest.TestCase):
     def test_best_new_track_is_spelled_out(self):
         self.assertEqual(build.render_tag("BNT"), '<span class="tag" title="Best New Track"><img src="bnm.svg" '
                          'alt="Best New Track" width="17" height="9"><span aria-hidden="true">BNT</span></span>')
