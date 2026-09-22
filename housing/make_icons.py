@@ -15,14 +15,14 @@ def inside_rounded(x, y, x0, y0, x1, y1, r):
     return x0 <= x <= x1 and y0 <= y <= y1 and dx * dx + dy * dy <= r * r
 
 
-def png(size, rows):
+def png(width, rows):
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
     raw = b"".join(b"\x00" + row for row in rows)
     return (
         b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, len(rows), 8, 6, 0, 0, 0))
         + chunk(b"IDAT", zlib.compress(raw, 9))
         + chunk(b"IEND", b"")
     )
@@ -69,10 +69,70 @@ def draw(size, corner, scale):
     return rows
 
 
+# The five statuses' colors, as the site draws them.
+DOTS = ["#adadad", "#e0a93b", "#4c9be8", "#55b86a", "#d65a50"]
+LAND = (0x24, 0x24, 0x26)  # The map's land, along the top of the card; its water along the foot.
+WATER = (0x0b, 0x15, 0x20)
+BACK = (0x0a, 0x0a, 0x0b)
+
+
+def rgb(text):
+    return tuple(int(text[at:at + 2], 16) for at in (1, 3, 5))
+
+
+def over(under, color, alpha):
+    return tuple(round(a + (b - a) * alpha) for a, b in zip(under, color))
+
+
+def card(width, height):
+    """The picture a link to the site shows: the house on the site's black, a row of the map's rings under it in
+    the statuses' colors, and a band of the map's land and water at its edges. The words of a preview come from
+    the page's own title and description."""
+    house_size = height * 0.34
+    middle = (width / 2, height * 0.42)
+    outline, (dx0, dy0, dx1, dy1) = house(1)
+    radius, gap = height * 0.035, width * 0.085
+    dots = [(width / 2 + (at - (len(DOTS) - 1) / 2) * gap, height * 0.74, rgb(color)) for at, color in enumerate(DOTS)]
+    band = height * 0.012
+    rows = []
+    for py in range(height):
+        line = bytearray()
+        for px in range(width):
+            here = LAND if py < band else WATER if py >= height - band else BACK
+            covered = 0
+            for sy in range(SAMPLES):
+                for sx in range(SAMPLES):
+                    x, y = px + (sx + 0.5) / SAMPLES, py + (sy + 0.5) / SAMPLES
+                    hx, hy = (x - middle[0]) / house_size + 0.5, (y - middle[1]) / house_size + 0.5
+                    if inside_polygon(hx, hy, outline) and not (dx0 <= hx <= dx1 and dy0 <= hy <= dy1):
+                        covered += 1
+            if covered:
+                here = over(here, (255, 255, 255), covered / SAMPLES ** 2)
+            for cx, cy, color in dots:
+                ring = inside = 0
+                for sy in range(SAMPLES):
+                    for sx in range(SAMPLES):
+                        x, y = px + (sx + 0.5) / SAMPLES, py + (sy + 0.5) / SAMPLES
+                        away = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+                        if abs(away - radius) <= radius * 0.13:
+                            ring += 1
+                        elif away < radius:
+                            inside += 1
+                if inside:
+                    here = over(here, color, .22 * inside / SAMPLES ** 2)
+                if ring:
+                    here = over(here, color, ring / SAMPLES ** 2)
+            line += bytes(here + (255,))
+        rows.append(bytes(line))
+    return rows
+
+
 # The tab's icon: a rounded square, the house as big as it'll go, to read at 16–32px. Matches favicon.svg.
 # Home-screen icons: square (the OS rounds the corners), the house kept inside the middle's safe zone.
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
+    (OUT / "share.png").write_bytes(png(1200, card(1200, 630)))
+    print("wrote share.png")
     for name, size, corner, scale in [
         ("favicon-32.png", 32, 0.22, 1.0),
         ("apple-touch-icon.png", 180, 0, 0.72),

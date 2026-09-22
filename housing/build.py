@@ -1334,11 +1334,17 @@ def as_data(page, town, projects, today, title, description):
 def head(path, title, description):
     """What a page tells search engines and link previews: what it's about, and its one address."""
     url = SITE_URL + path
+    # The picture a link to the site shows (housing/static/share.png, drawn by make_icons.py): the house and the
+    # statuses' rings on the site's black. The words of a preview are the page's own title and description.
     return (f'<meta name="description" content="{html.escape(description)}">'
             f'<link rel="canonical" href="{url}">'
             f'<meta property="og:type" content="website"><meta property="og:site_name" content="{html.escape(NAME)}">'
             f'<meta property="og:title" content="{html.escape(title)}">'
             f'<meta property="og:description" content="{html.escape(description)}"><meta property="og:url" content="{url}">'
+            f'<meta property="og:image" content="{SITE_URL}share.png">'
+            '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">'
+            f'<meta property="og:image:alt" content="{html.escape(NAME)}">'
+            '<meta name="twitter:card" content="summary_large_image">'
             + icons_head() + MAP_HEAD)
 
 
@@ -1466,7 +1472,8 @@ def render(projects, built_at, failed, page=None, town=None):
                         json.dumps({key: label for key, (label, _) in STATUSES.items()}))).replace(
         "    /*MAP*/\n", MAP_JS) + FRESH_SCRIPT
     name = town if page == "town" else PAGES[page][1] if page else None
-    title = f"New housing in {town} · {NAME}" if page == "town" else f"{name} · {NAME}" if page else NAME
+    title = (f"New housing in {town} · {NAME}" if page == "town" else f"{name} · {NAME}" if page else
+             f"{NAME}: new housing in Boston, Cambridge and the towns around it")
     description = (town_said if page == "town" else PAGES[page][2] if page else
                    f"{TAGLINE} {len(active):,} projects in progress across Boston and the towns around it, on a map "
                    "and in a list for each town, with their status, size and details.")
