@@ -677,7 +677,9 @@ CSS = """
   .panel-facts dt { padding-right: 1rem; color: #777; }
   .panel-facts dd { color: #ddd; }
   .panel-about p { margin: 0 0 .8em; color: #bbb; }
-  .panel-foot { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: 1.2rem; }
+  /* The way to its source on a line of its own, the rest under it. */
+  .panel-foot { display: flex; flex-wrap: wrap; gap: .6rem .5rem; margin-top: auto; padding-top: 1.4rem; }
+  .panel-break { flex-basis: 100%; height: 0; }
   .panel-foot a, .panel-foot button { display: inline-flex; align-items: center; padding: .4rem .9rem; border: 1px solid #333;
                 border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; text-decoration: none; }
   .panel-foot a:hover, .panel-foot button:hover, .panel-foot a:focus-visible, .panel-foot button:focus-visible {
@@ -721,7 +723,7 @@ PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <div class="panel-say"><h3>Have your say</h3><ul></ul></div>
 <dl class="panel-facts"></dl>
 <div class="panel-about"></div>
-<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-copy" type="button">Copy link</button><button class="panel-map" type="button">Show on map</button><a class="panel-wrong" target="_blank" rel="noopener">Suggest a correction</a><p class="panel-updated"></p></div>
+<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><span class="panel-break"></span><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-copy" type="button">Copy link</button><button class="panel-map" type="button">Show on map</button><a class="panel-wrong" target="_blank" rel="noopener">Suggest a correction</a><p class="panel-updated"></p></div>
 </div>
 </dialog>"""
 
