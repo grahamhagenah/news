@@ -444,6 +444,8 @@ def panel_data(project, today):
 
 CSS = """
   #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #242426; }
+  /* Full screen: the map the whole of it, without the corners and edge it has in the page. */
+  #map:fullscreen { height: 100%; margin: 0; border: 0; border-radius: 0; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
   /* Under the map, the filter and the search: the filter's choices on the left, on two lines (the four steps of
      a project's way, then Complete, Stalled and All), the search on the right, level with the first; on a phone,
@@ -715,7 +717,8 @@ SAY_MARK = ('<svg class="spark-mark" viewBox="0 0 24 24" aria-hidden="true"><g f
 FRESH_SCRIPT = """
 <script>
   {
-    const banner = document.querySelector(".fresh-one[href]");
+    // Recently updated's own project, not Have your say's, which is the other line in that band.
+    const banner = document.querySelector(".fresh:not(.say) .fresh-one[href]");
     if (banner) {
       const show = pick => {
         banner.href = "?project=" + encodeURIComponent(pick.id);
@@ -817,6 +820,7 @@ MAP_JS = """
     });
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
+    map.addControl(new maplibregl.FullscreenControl(), "top-left");
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const radius = row => Math.max(2.2, Math.min(7, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 3.3));
     // A dot's note: its name, which opens its panel, and its homes and status.
