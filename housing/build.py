@@ -491,38 +491,43 @@ CSS = """
     .intro .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
     .tagline { font-size: .8rem; }
   }
-  .leaflet-container { font: inherit; }
-  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111; color: #ddd; border: 1px solid #333; box-shadow: none; }
-  .leaflet-popup-content { margin: .7rem .9rem; font-size: .85rem; line-height: 1.4; }
-  .leaflet-popup-content a { color: #fff; }
-  .leaflet-popup-content .muted { color: #888; }
-  .leaflet-container a.leaflet-popup-close-button { color: #666; }
-  /* The map's credits, which Esri's and OpenStreetMap's terms ask to be on it: as small and quiet as they can be. */
-  .leaflet-control-attribution { background: none !important; color: #555; font-size: 9px; line-height: 1.4; }
-  .leaflet-control-attribution a { color: #555; }
+  /* The map's controls, notes and credits, quiet and dark like the page. */
+  .maplibregl-map { font: inherit; }
+  .maplibregl-map .map-hint { position: absolute; left: 0; bottom: 0; z-index: 2; }
+  .maplibregl-popup-content { padding: .7rem .9rem; border: 1px solid #333; border-radius: 6px; background: #111; color: #ddd;
+                              font-size: .85rem; line-height: 1.4; box-shadow: none; }
+  .maplibregl-popup-content a { color: #fff; }
+  .maplibregl-popup-content .muted { color: #888; }
+  .maplibregl-popup-close-button { color: #666; font-size: 1rem; }
+  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: #333; }
+  .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: #333; }
+  .maplibregl-ctrl-group { background: #111; border: 1px solid #333; box-shadow: none !important; }
+  .maplibregl-ctrl-group button + button { border-top-color: #333; }
+  .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(.75); }
+  .maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(0, 0, 0, .6); color: #555; font-size: 9px; }
+  .maplibregl-ctrl-attrib a { color: #666; }
+  .maplibregl-ctrl-attrib-button { filter: invert(.7); background-color: transparent; }
   /* What the map is leaving out at this zoom, quiet in its corner. */
   .map-hint { margin: 0 0 .45rem .55rem !important; padding: .1rem .45rem; border-radius: 3px; background: rgba(0, 0, 0, .65);
               color: #888; font-size: .72rem; pointer-events: none; }
   .map-hint:empty { display: none; }
-  .leaflet-bar a { background: #111; color: #999; border-color: #333; }
-  .leaflet-bar a:hover { background: #222; color: #fff; }
   .panel-pill .icon { width: 12px; height: 12px; }
-  details { border-top: 1px solid #1c1c1c; }
-  summary { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .8rem 0;
+  main > details { border-top: 1px solid #1c1c1c; }
+  main > details > summary { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .8rem 0;
             cursor: pointer; list-style: none; font-weight: 700; }
-  summary::-webkit-details-marker { display: none; }
+  main > details > summary::-webkit-details-marker { display: none; }
   /* A chevron drawn to a square and turned about its middle, so open or shut it sits level with the town's name
      (a "›" turned with its line of text drops below it). */
-  summary::before { content: ""; flex: none; align-self: center; width: 12px; height: 12px; margin-right: .1rem;
+  main > details > summary::before { content: ""; flex: none; align-self: center; width: 12px; height: 12px; margin-right: .1rem;
                     background: #666; transition: transform .15s;
                     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5 2.5L8 6l-3.5 3.5' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
                     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5 2.5L8 6l-3.5 3.5' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
-  summary:hover::before { background: #999; }
-  details[open] > summary::before { transform: rotate(90deg); }
+  main > details > summary:hover::before { background: #999; }
+  main > details[open] > summary::before { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }
-  summary .town { flex: 1; }
-  summary .count { color: #666; font-size: .8rem; font-weight: normal; }
-  details > ul { padding-bottom: 1rem; }
+  main > details > summary .town { flex: 1; }
+  main > details > summary .count { color: #666; font-size: .8rem; font-weight: normal; }
+  main > details > ul { padding-bottom: 1rem; }
   .from { margin: -.3rem 0 .6rem; color: #666; font-size: .8rem; }
   .from a { color: #999; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   .row .details { flex: none; margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
@@ -674,11 +679,76 @@ def icons_head(root):
             f'<link rel="manifest" href="{root}manifest.webmanifest">')
 
 
-LEAFLET = ('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">'
-           '<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>')
+# The map, drawn by MapLibre from OpenFreeMap's dark vector tiles, which need no key: the browser draws its roads
+# and names itself, so they're sharp on any screen. It gives the page a dotMap: its element; its zoom, a step
+# higher than MapLibre's own (whose tiles are twice the size), for the cutoffs in LEAST; a way to hear it zoom; to
+# draw a set of projects' dots (biggest first); to say what it's leaving out; to fit a set in view; and to go to
+# one project and open its note.
+MAP_JS = """
+    const map = new maplibregl.Map({
+      container: "map", style: "https://tiles.openfreemap.org/styles/dark", center: [-71.08, 42.365],
+      zoom: (innerWidth < 544 ? 11 : 12) - 1,  // A phone's narrower map, one step further out.
+      scrollZoom: false, dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: {compact: true},
+    });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
+    const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+    const radius = row => Math.max(3, Math.min(11, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 2.2));
+    // A dot's note: its name, which opens its panel, and its homes and status.
+    const note = row => {
+      const status = row.dataset.status, box = document.createElement("div");
+      box.innerHTML = `<a href="#${row.id}" class="to-row">${escape(row.querySelector(".title").textContent)}</a><br>`
+        + `<span class="muted">${(+row.dataset.units).toLocaleString()} homes · ${labels[status].toLowerCase()}</span>`;
+      box.querySelector("a").addEventListener("click", event => { event.preventDefault(); openProject(row, true); });
+      return new maplibregl.Popup({offset: radius(row) + 4, maxWidth: "280px"})
+        .setLngLat([+row.dataset.lon, +row.dataset.lat]).setDOMContent(box).addTo(map);
+    };
+    let waiting = null;  // What to draw once the map's style has loaded.
+    const hintBox = Object.assign(document.createElement("div"), {className: "map-hint"});
+    const dotMap = {
+      container: map.getContainer(),
+      zoom: () => Math.round(map.getZoom()) + 1,
+      onZoom: then => map.on("zoomend", then),
+      // The smaller over the bigger: a higher sort key is drawn on top.
+      draw: shown => {
+        const data = {type: "FeatureCollection", features: shown.map(row => ({
+          type: "Feature", geometry: {type: "Point", coordinates: [+row.dataset.lon, +row.dataset.lat]},
+          properties: {row: row.id, color: colors[row.dataset.status], radius: radius(row), order: -row.dataset.units},
+        }))};
+        if (map.getSource("dots")) map.getSource("dots").setData(data); else waiting = data;
+      },
+      hint: text => { hintBox.textContent = text; },
+      fit: shown => {
+        const bounds = new maplibregl.LngLatBounds();
+        for (const row of shown) bounds.extend([+row.dataset.lon, +row.dataset.lat]);
+        map.fitBounds(bounds, {padding: 30, maxZoom: 13, animate: false});
+      },
+      goTo: row => {
+        map.once("moveend", () => note(row));
+        map.flyTo({center: [+row.dataset.lon, +row.dataset.lat], zoom: 15});
+      },
+    };
+    dotMap.container.append(hintBox);
+    map.on("load", () => {
+      // The credits folded to their ⓘ, which the map's terms ask be on it; MapLibre opens them at first on a wide map.
+      const credits = dotMap.container.querySelector(".maplibregl-ctrl-attrib");
+      if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
+      map.addSource("dots", {type: "geojson", data: waiting || {type: "FeatureCollection", features: []}});
+      map.addLayer({
+        id: "dots", type: "circle", source: "dots", layout: {"circle-sort-key": ["get", "order"]},
+        paint: {"circle-color": ["get", "color"], "circle-radius": ["get", "radius"], "circle-opacity": .85,
+                "circle-stroke-color": "#000", "circle-stroke-width": 1},
+      });
+      map.on("click", "dots", event => note(document.getElementById(event.features[0].properties.row)));
+      map.on("mouseenter", "dots", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "dots", () => { map.getCanvas().style.cursor = ""; });
+    });
+"""
 
-# The filter, search and map work from the rows themselves: a dot on the map for each row showing, and each
-# town's count of what's showing. A dot opens a note naming its project, which leads to its row.
+MAP_HEAD = ('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.24.0/maplibre-gl.min.css">'
+               '<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.24.0/maplibre-gl.js"></script>')
+
+
 SCRIPT = """
 <script>
   {
@@ -686,57 +756,26 @@ SCRIPT = """
     const rows = [...document.querySelectorAll(".row")];
     const buttons = [...document.querySelectorAll(".filter button")];
     const search = document.querySelector(".search");
-    const map = L.map("map", {preferCanvas: true, scrollWheelZoom: false}).setView([42.365, -71.08], innerWidth < 544 ? 11 : 12);  // A phone's narrower map, one step further out.
-    map.attributionControl.setPrefix(false);  // Leaflet's own link and flag, which its license doesn't ask for.
-    // Esri's dark gray canvas, which needs no key: the land and water, then the place names over them.
-    const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
-    L.tileLayer(esri + "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-      maxNativeZoom: 16, maxZoom: 18, attribution: '&copy; <a href="https://www.esri.com/">Esri</a> · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
-    L.tileLayer(esri + "World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {maxNativeZoom: 16, maxZoom: 18}).addTo(map);
-    const dots = L.layerGroup().addTo(map);
-    const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-    const marker = row => {
-      const name = row.querySelector(".title").textContent, units = +row.dataset.units, status = row.dataset.status;
-      // A dot in its status's color, bigger for more homes.
-      const dot = L.circleMarker([+row.dataset.lat, +row.dataset.lon], {
-        radius: Math.max(3, Math.min(11, Math.sqrt(Math.max(0, units) || 0) / 2.2)), weight: 1, color: "#000",
-        fillColor: colors[status], fillOpacity: .85,
-      });
-      dot.bindPopup(`<a href="#${row.id}" class="to-row">${escape(name)}</a><br><span class="muted">`
-        + `${units.toLocaleString()} homes · ${labels[status].toLowerCase()}</span>`);
-      dot.on("popupopen", event => event.popup.getElement().querySelector(".to-row").addEventListener("click", click => {
-        click.preventDefault();
-        openProject(row, true);
-      }));
-      return dot;
-    };
-    const markers = new Map(rows.map(row => [row, marker(row)]));
+    /*MAP*/
     const bySize = [...rows].sort((a, b) => b.dataset.units - a.dataset.units);
     // Zoomed out, only the bigger projects, so the map isn't a carpet of dots; the smaller come in as it's zoomed
     // in, all of them at street level: at each zoom, the fewest homes a project needs to be drawn. A search, and
     // the pages of a few projects (Recent updates, Large projects), show every one that fits.
     const LEAST = [[16, 0], [15, 20], [14, 50], [13, 100], [12, 150]], FARTHEST = 300;
-    const fitting = map.getContainer().hasAttribute("data-fit");
+    const fitting = dotMap.container.hasAttribute("data-fit");
     let searching = false, pinned = null;  // pinned: a project Show on map went to, drawn whatever its size.
     const least = () => {
       if (fitting || searching) return 0;
-      const zoom = map.getZoom();
+      const zoom = dotMap.zoom();
       return (LEAST.find(([at]) => zoom >= at) || [0, FARTHEST])[1];
     };
-    const hint = L.control({position: "bottomleft"});
-    hint.onAdd = () => L.DomUtil.create("div", "map-hint");
-    hint.addTo(map);
     const draw = () => {
       const fewest = least();
-      dots.clearLayers();
       // The biggest first, so the smaller are drawn over them and a small project beside a big one can be clicked.
-      for (const row of bySize) {
-        if (!row.hidden && (+row.dataset.units >= fewest || row === pinned)) dots.addLayer(markers.get(row));
-      }
-      hint.getContainer().textContent = fewest ? `Showing ${fewest}+ homes · zoom in for more` : "";
+      dotMap.draw(bySize.filter(row => !row.hidden && (+row.dataset.units >= fewest || row === pinned)));
+      dotMap.hint(fewest ? `Showing ${fewest}+ homes · zoom in for more` : "");
     };
-    map.on("zoomend", draw);
+    dotMap.onZoom(draw);
     const show = () => {
       const chosen = buttons.find(button => button.getAttribute("aria-pressed") === "true").dataset.show;
       const words = search.value.trim().toLowerCase().split(/\\s+/).filter(Boolean);
@@ -749,7 +788,8 @@ SCRIPT = """
         row.hidden = !fits;
       }
       draw();
-      for (const details of document.querySelectorAll("details")) {
+      // The page's own lists, not a map's credits (MapLibre's are a <details> too).
+      for (const details of document.querySelectorAll("main > details")) {
         const showing = [...details.querySelectorAll(".row:not([hidden])")];
         const homes = showing.reduce((sum, row) => sum + +row.dataset.units, 0);
         details.querySelector(".count").textContent = showing.length
@@ -764,9 +804,7 @@ SCRIPT = """
     search.addEventListener("input", show);
     show();
     // Recent updates' few projects, wherever they are, all in view at once.
-    if (map.getContainer().hasAttribute("data-fit") && rows.length) {
-      map.fitBounds(L.latLngBounds(rows.map(row => [+row.dataset.lat, +row.dataset.lon])), {padding: [30, 30], maxZoom: 14});
-    }
+    if (fitting && rows.length) dotMap.fit(rows);
 
     // A project's panel: opened from its row or its dot, with its id in the address so it can be linked to.
     const data = JSON.parse(document.getElementById("projects").textContent);
@@ -848,13 +886,12 @@ SCRIPT = """
     view.addEventListener("click", event => { if (event.target === view && !pressedIn) closeProject(); });
     // Its dot, found and opened on the map.
     part("map").addEventListener("click", () => {
-      const row = shown, dot = markers.get(row);
+      const row = shown;
       closeProject();
       pinned = row;
       draw();
-      document.getElementById("map").scrollIntoView({behavior: "smooth", block: "center"});
-      map.once("moveend", () => dot.openPopup());
-      map.flyTo(dot.getLatLng(), 16);
+      dotMap.container.scrollIntoView({behavior: "smooth", block: "center"});
+      dotMap.goTo(row);
     });
     // Clicking anywhere on a row opens it; with a modifier key, its address opens in a new tab as usual.
     for (const row of rows) row.addEventListener("click", event => {
@@ -1017,12 +1054,13 @@ def render(projects, built_at, failed, page=None):
             f'{footer(page, towns)}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
             f'<script>const FRESH = {fresh};</script>')
-    script = SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
-                       json.dumps({key: label for key, (label, _) in STATUSES.items()})) + FRESH_SCRIPT
+    script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
+                        json.dumps({key: label for key, (label, _) in STATUSES.items()}))).replace(
+        "    /*MAP*/\n", MAP_JS) + FRESH_SCRIPT
     name = PAGES[page][1] if page else None
     root = "../" if page else ""
     return shared.page(
-        "news", f"{name} · {NAME}" if page else NAME, body + script, css=CSS, head=icons_head(root) + LEAFLET,
+        "news", f"{name} · {NAME}" if page else NAME, body + script, css=CSS, head=icons_head(root) + MAP_HEAD,
         symbols=ICON_SYMBOLS, updated=built_at, links=[(NAME, root or "./", not page)], marked={NAME: MARKED_NAME},
         here=name,
     )
@@ -1108,7 +1146,7 @@ def main():
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     recent = recently_changed(projects, built_at.date())
-    print(f"Wrote dist/housing/index.html, {', '.join(path for path, _, _ in PAGES.values())} and projects.json: {len(projects)} projects, {len(recent)} changed "
+    print(f"Wrote dist/{OUT_DIR.name}/index.html, {', '.join(path for path, _, _ in PAGES.values())} and projects.json: {len(projects)} projects, {len(recent)} changed "
           f"in the last {RECENT_DAYS} days")
 
 
