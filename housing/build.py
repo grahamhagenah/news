@@ -435,7 +435,7 @@ def panel_data(project, today):
 
 
 CSS = """
-  #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #0a0a0a; }
+  #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #1a1a1b; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
   /* The filter under the map rather than under the header. */
   #map + .filter { margin-top: 0; }
@@ -729,7 +729,52 @@ MAP_JS = """
       },
     };
     dotMap.container.append(hintBox);
+    // OpenFreeMap's dark style, recolored to read more easily: the land lifted a little from black and the water
+    // sunk below it in a deep blue, so the harbor and the rivers stand apart from the land; roads a shade or two
+    // lighter than the land, rather than black lines edged in gray, the bigger a little lighter (solid colors: a
+    // road is drawn in many overlapping pieces, and see-through ones add up to a bright web downtown); parks barely
+    // green; and the place names a little brighter than the style's.
+    const LAND = "#1a1a1b", WATER = "#0b1520";
+    const RECOLOR = {
+      "background": {"background-color": LAND},
+      "water": {"fill-color": WATER},
+      "waterway": {"line-color": WATER},
+      "landuse_residential": {"fill-opacity": 0},
+      "landcover_wood": {"fill-color": "#1b211c"},
+      "landuse_park": {"fill-color": "#1b211c"},
+      "building": {"fill-color": "#222223", "fill-outline-color": "#29292a"},
+      "aeroway-area": {"fill-color": "#1f1f20"},
+      "aeroway-runway": {"line-color": "#262627"},
+      "aeroway-taxiway": {"line-color": "#202021"},
+      "aeroway-runway-casing": {"line-opacity": 0},
+      "road_area_pier": {"fill-color": LAND},
+      "road_pier": {"line-color": LAND},
+      "highway_path": {"line-color": "#1e1e1f"},
+      "highway_minor": {"line-color": "#202021"},
+      "highway_major_casing": {"line-opacity": 0},
+      "highway_major_inner": {"line-color": "#262627"},
+      "highway_major_subtle": {"line-color": "#232324"},
+      "highway_motorway_casing": {"line-opacity": 0},
+      "highway_motorway_inner": {"line-color": "#2d2d2e"},
+      "highway_motorway_subtle": {"line-color": "#262627"},
+      "railway": {"line-color": "#232324"},
+      "railway_transit": {"line-color": "#232324"},
+      "railway_minor": {"line-color": "#202021"},
+      "railway_dashline": {"line-color": LAND},
+      "railway_transit_dashline": {"line-color": LAND},
+      "railway_minor_dashline": {"line-color": LAND},
+      "highway_name_other": {"text-color": "#6a6a6a", "text-halo-color": LAND},
+      "highway_name_motorway": {"text-color": "#7a7a7a"},
+      "water_name": {"text-color": "#5a7896", "text-halo-color": "rgba(0, 0, 0, 0)"},
+    };
+    for (const id of ["place_other", "place_suburb", "place_village", "place_town", "place_city", "place_city_large"]) {
+      RECOLOR[id] = {"text-color": "#9a9a9a", "text-halo-color": "rgba(26, 26, 27, .85)"};
+    }
     map.on("load", () => {
+      // Any layer a later version of the style renames is left as the style has it.
+      for (const [id, paint] of Object.entries(RECOLOR)) {
+        if (map.getLayer(id)) for (const [name, value] of Object.entries(paint)) map.setPaintProperty(id, name, value);
+      }
       // The credits folded to their ⓘ, which the map's terms ask be on it; MapLibre opens them at first on a wide map.
       const credits = dotMap.container.querySelector(".maplibregl-ctrl-attrib");
       if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
