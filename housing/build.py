@@ -1129,7 +1129,10 @@ SCRIPT = """
     part("close").addEventListener("click", closeProject);
     // The panel's address, which is the project's, to share: the whole of it, this page's and ?project=.
     part("copy").addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText(location.href); part("copy").textContent = "Copied"; }
+      // The share page's address, not this one's: shown in a message or a post, it carries the project's own
+      // picture and words, and whoever opens it lands back here, on its panel.
+      const link = new URL("/p/" + shown.id + "/", location.href).href;
+      try { await navigator.clipboard.writeText(link); part("copy").textContent = "Copied"; }
       catch { part("copy").textContent = "Couldn’t copy"; }
     });
     // Esc, wherever focus is: a panel opened by a link as the page loads has nothing in it focused, and the
@@ -1343,7 +1346,7 @@ def as_data(page, town, projects, today, title, description):
     return f'<script type="application/ld+json">{data}</script>'
 
 
-def head(path, title, description):
+def head(path, title, description, picture=None, mapped=True):
     """What a page tells search engines and link previews: what it's about, and its one address."""
     url = SITE_URL + path
     # The picture a link to the site shows (housing/static/share.png, drawn by make_icons.py): the house and the
@@ -1353,11 +1356,13 @@ def head(path, title, description):
             f'<meta property="og:type" content="website"><meta property="og:site_name" content="{html.escape(NAME)}">'
             f'<meta property="og:title" content="{html.escape(title)}">'
             f'<meta property="og:description" content="{html.escape(description)}"><meta property="og:url" content="{url}">'
-            f'<meta property="og:image" content="{SITE_URL}share.png">'
-            '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">'
-            f'<meta property="og:image:alt" content="{html.escape(NAME)}">'
+            f'<meta property="og:image" content="{picture or SITE_URL + "share.png"}">'
+            # The card's size, which a project's own picture doesn't share.
+            + ('' if picture else '<meta property="og:image:width" content="1200">'
+                                  '<meta property="og:image:height" content="630">')
+            + f'<meta property="og:image:alt" content="{html.escape(NAME)}">'
             '<meta name="twitter:card" content="summary_large_image">'
-            + icons_head() + MAP_HEAD)
+            + icons_head() + (MAP_HEAD if mapped else ""))
 
 
 def page_heading(page, town):
@@ -1497,10 +1502,49 @@ def render(projects, built_at, failed, page=None, town=None):
     )
 
 
+def share_page(project, today):
+    """A project's page for links to it: its own picture and words for whoever shows the link, what it is in a
+    few lines for anyone who lands here, and, for a reader whose browser runs scripts, the way on to its panel
+    where the site opens projects."""
+    label = STATUSES[project["status"]][0]
+    homes = f'{project["units"]:,} home{"s" if project["units"] != 1 else ""}'
+    place = ", ".join(part for part in (project["neighborhood"], project["town"]) if part)
+    panel = f"/?project={project['id']}"
+    path = f"p/{project['id']}/"
+    title = f"{project['name']}, {place} · {NAME}"
+    lead = project["description"].split("\n")[0].strip()
+    description = f"{project['name']} in {place}: {homes}, {label.lower()}. {lead}".strip()
+    if len(description) > 160:
+        description = description[:157].rsplit(" ", 1)[0] + "…"
+    said = "".join(part for part in (
+        f'<p>{html.escape(homes)} · {html.escape(label)} · {html.escape(place)}.</p>',
+        f'<p>{html.escape(lead)}</p>' if lead else "",
+    ) if part)
+    # A page of its own, not the site's: whoever lands here is on their way to its panel, so it carries none of
+    # the site's styles or scripts, only what a link shows and a few lines for a reader without them.
+    return (
+        f'<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        '<meta name="color-scheme" content="dark">\n<meta name="robots" content="index, follow">\n'
+        '<meta name="theme-color" content="#000000">\n'
+        f'{head(path, title, description, picture=project.get("image") or None, mapped=False)}\n'
+        f'<title>{html.escape(title)}</title>\n'
+        '<style>body { margin: 0; padding: 2rem 1.25rem; color: #ddd; background: #000;\n'
+        '  font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }\n'
+        '  main { max-width: 46rem; margin: 0 auto; } h1 { margin: 0 0 .5rem; color: #fff; font-size: 1.5rem; }\n'
+        '  p { margin: 0 0 .6rem; color: #bbb; } a { color: #fff; }</style>\n'
+        f'</head>\n<body>\n<main><h1>{html.escape(project["name"])}</h1>{said}'
+        f'<p><a href="{panel}">Open it on the map →</a></p></main>\n'
+        f'<script>location.replace({json.dumps(panel)});</script>\n</body>\n</html>\n'
+    )
+
+
 def sitemap(projects, towns, built_at):
-    """Every page, for search engines. A project's panel has no page of its own to list."""
+    """Every page, for search engines, each project's share page with the day it last changed."""
     paths = [("", built_at.date())] + [(path, built_at.date()) for path, _, _ in PAGES.values()]
     paths += [(f"{slug(town)}/", built_at.date()) for town in towns]
+    # A project's share page, which leads on to its panel: what a link to a project points at.
+    paths += [(f"p/{project['id']}/", updated(project)) for project in projects]
     entries = "".join(f"<url><loc>{SITE_URL}{path}</loc>{f'<lastmod>{day.isoformat()}</lastmod>' if day else ''}</url>"
                       for path, day in paths)
     return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>\n'
@@ -1741,6 +1785,9 @@ def main():
     for town in towns:
         (OUT_DIR / slug(town)).mkdir(exist_ok=True)
         (OUT_DIR / slug(town) / "index.html").write_text(render(projects, built_at, failed, "town", town))
+    for project in projects:
+        (OUT_DIR / "p" / project["id"]).mkdir(parents=True, exist_ok=True)
+        (OUT_DIR / "p" / project["id"] / "index.html").write_text(share_page(project, built_at.date()))
     # Every project's panel, for any page to ask for as one is opened.
     (OUT_DIR / "panels.json").write_text(json.dumps(
         {p["id"]: panel_data(p, built_at.date()) for p in projects}, ensure_ascii=False, default=str))
@@ -1750,7 +1797,7 @@ def main():
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     recent = recently_changed(projects, built_at.date())
     print(f"Wrote dist/{OUT_DIR.name}/index.html, {', '.join(path for path, _, _ in PAGES.values())}, {len(towns)} towns' "
-          f"pages, panels.json, sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
+          f"pages, {len(projects)} share pages (p/), panels.json, sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
           f"in the last {RECENT_DAYS} days")
 
 
