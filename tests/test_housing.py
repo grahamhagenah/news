@@ -278,6 +278,29 @@ class HaveYourSay(unittest.TestCase):
         self.assertEqual(build.say_text(meeting, self.TODAY, short=True), "Meeting Sep 28")
         self.assertEqual(build.say_text(comment, self.TODAY, short=True), "Comments close Sep 30")
 
+    def test_cambridge_planning_board(self):
+        page = """<table><tr><td>September 22, 2026</td><td>Meeting Portal</td>
+          <td>NOTE: remotely. •S pecial Permit Extension - 57 JFK Street (PB-390) – Materials
+          •H earing – Healthpeak Alewife Quadrangle PUD (PB-410) – Materials •Annual Utility Report - DPW</td></tr>
+          <tr><td>July 14, 2026</td><td>Portal</td><td>•Hearing – Past Thing (PB-999) - Materials</td></tr></table>"""
+        found = build.board_meetings(page, self.TODAY)
+        self.assertEqual([(item["when"], item["what"], sorted(item["cases"])) for item in found], [
+            (date(2026, 9, 22), "Planning Board meeting", ["PB390"]),
+            (date(2026, 9, 22), "Planning Board hearing", ["PB410"]),  # Its "H earing", as the city writes it.
+        ])  # Not the item with no case number, nor July's meeting, which has passed.
+
+    def test_a_meeting_with_no_time_says_only_its_day(self):
+        item = {"when": date(2026, 9, 22), "what": "Planning Board hearing", "link": "x", "kind": "meeting"}
+        self.assertEqual(build.say_text(item, self.TODAY), "Planning Board hearing · Tue, Sep 22")
+
+    def test_a_town_that_publishes_none_says_so(self):
+        built = datetime(2026, 9, 22, tzinfo=timezone.utc)
+        quiet = dict(project("massbuilds-1", town="Somerville"), since=None, was=None, say=[])
+        page = build.render([quiet], built, [], page="town", town="Somerville")
+        self.assertIn("Somerville doesn’t publish comment periods or meetings", page)
+        boston = build.render([dict(project("boston-1"), since=None, was=None, say=[])], built, [], page="town", town="Boston")
+        self.assertNotIn("doesn’t publish", boston)  # It does; it has nothing coming up just now.
+
     def test_have_your_say_page_soonest_first(self):
         built = datetime(2026, 9, 22, tzinfo=timezone.utc)
         later = dict(project("boston-1"), since=None, was=None,

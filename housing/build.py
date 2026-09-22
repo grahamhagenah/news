@@ -191,6 +191,7 @@ def cambridge(body):
             "lat": float(row["latitude"]), "lon": float(row["longitude"]),
             "link": CAMBRIDGE_PAGE,
             "origin": "Cambridge log",
+            "case": re.sub(r"[^A-Z0-9]", "", (row.get("planning_board_special_permit") or "").upper()),
             "description": (row.get("project_description") or "").strip(),
             "dated": date(finished, 12, 31) if status == "complete" and finished else None,
             "facts": facts(
@@ -1135,17 +1136,21 @@ PAGES = {
 }
 
 
-def say_line(projects, today, more):
+def say_line(projects, today, more, none=None):
     """Have your say, a line under Recently updated: the soonest comment deadline or meeting, which stays put (the
-    soonest is the one that matters), and the way to the rest. None on a page with nothing coming up."""
+    soonest is the one that matters), and the way to the rest. With nothing coming up it says none, if a page has
+    words for that (a town's: only Boston and Cambridge publish any), and is left out otherwise."""
     soonest = min(((say_day(p["say"][0]), p) for p in projects if p.get("say")), key=lambda pair: pair[0], default=None)
-    if not soonest:
+    if not soonest and not none:
         return ""
-    project = soonest[1]
     see_all = f'<a class="fresh-more" href="{more}">See all →</a>' if more else ""
-    return (f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>'
-            f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
-            f'{html.escape(say_text(project["say"][0], today, short=True))}</a>{see_all}</p>')
+    if soonest:
+        project = soonest[1]
+        one = (f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
+               f'{html.escape(say_text(project["say"][0], today, short=True))}</a>')
+    else:
+        one = f'<span class="fresh-one fresh-none">{html.escape(none)}</span>'
+    return f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>{one}{see_all}</p>'
 
 
 def about(projects, towns):
@@ -1289,7 +1294,10 @@ def render(projects, built_at, failed, page=None, town=None):
         banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "/recent/")
     # And under it, the soonest chance to have a say, but on Have your say itself, which is all of them.
     if page != "say":
-        banner += say_line(projects, today, more="/have-your-say/")
+        # A town that publishes no comment periods or meetings says so, rather than leaving the line out.
+        nothing = (f"{town} doesn’t publish comment periods or meetings" if page == "town"
+                   and town not in ("Boston", "Cambridge") else None)
+        banner += say_line(projects, today, more="/have-your-say/", none=nothing)
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(path, towns, about(everything, towns))}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
@@ -1354,6 +1362,37 @@ def comment_period(page):
     return datetime.strptime(found.group(1), "%b %d, %Y").date() if found else None
 
 
+# Cambridge's Planning Board meetings, in a table of what's scheduled for each: its items name their case
+# numbers ("(PB-410)"), which the development log gives for each project as well.
+CAMBRIDGE_BOARD = "https://www.cambridgema.gov/CDD/zoninganddevelopment/planningboard/planningboardmeetings"
+BOARD_CASE = re.compile(r"\(\s*(PB[\s-]?\d+)\s*\)", re.I)
+
+
+def board_meetings(page, today):
+    """The Planning Board's meetings from today on, as {when, what, cases}: one for each item with a case number,
+    a hearing said to be one. Its table holds a row for each meeting, the last column its items."""
+    found = []
+    for match in re.finditer(r"<tr[^>]*>(.*?)</tr>", page, re.S):
+        cells = [re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", cell))).strip()
+                 for cell in re.findall(r"<td[^>]*>(.*?)</td>", match.group(1), re.S)]
+        if len(cells) < 3:
+            continue
+        try:
+            day = datetime.strptime(cells[0].strip(), "%B %d, %Y").date()
+        except ValueError:
+            continue
+        if day < today:
+            continue
+        for item in cells[-1].split("•")[1:]:
+            case = BOARD_CASE.search(item)
+            if not case:
+                continue
+            # "H earing – 9&25 Birch Street (PB-412) - Materials": the city's own spacing, taken as it comes.
+            kind = "Planning Board hearing" if re.match(r"\s*h\s*earing", item, re.I) else "Planning Board meeting"
+            found.append({"when": day, "what": kind, "cases": {re.sub(r"[^A-Z0-9]", "", case.group(1).upper())}})
+    return sorted(found, key=lambda item: item["when"])
+
+
 def meetings(feed, today):
     """The calendar feed's meetings from today on, each about the projects its description links to: a list of
     {paths, title, starts, link}, soonest first."""
@@ -1406,6 +1445,12 @@ def add_say(projects, today):
     except Exception as error:
         print(f"✗ Boston's calendar: {error}", file=sys.stderr)
         calendar = []
+    try:
+        board = board_meetings(shared.fetch(CAMBRIDGE_BOARD, USER_AGENT, attempts=2, timeout=30)[1].decode("utf-8", "replace"), today)
+    except Exception as error:
+        print(f"✗ Cambridge's Planning Board: {error}", file=sys.stderr)
+        board = []
+    by_case = {p["case"]: p for p in projects if p.get("case")}
     by_path = {project_path(p["link"]): p for p in projects if p["id"].startswith("boston-")}
     for project in projects:
         project["say"] = []
@@ -1418,6 +1463,12 @@ def add_say(projects, today):
             if project:
                 project["say"].append({"when": meeting["starts"], "link": meeting["link"], "kind": "meeting",
                                        "what": meeting_kind(meeting["title"], project["name"])})
+    for meeting in board:
+        for case in meeting["cases"]:
+            project = by_case.get(case)
+            if project:
+                project["say"].append({"when": meeting["when"], "what": meeting["what"], "kind": "meeting",
+                                       "link": CAMBRIDGE_BOARD})
     for project in projects:
         project["say"].sort(key=say_day)
     open_ = sum(1 for p in projects for item in p["say"] if item["kind"] == "comment")
@@ -1436,8 +1487,10 @@ def say_text(item, today, short=False):
     if item["kind"] == "comment":
         return f"Comments close {when(day, today)}" if short else f"Comment period ends {day:%a, %b} {day.day}"
     moment = item["when"]
-    return (f"Meeting {when(day, today)}" if short
-            else f"{item['what']} · {moment:%a, %b} {moment.day}, {clock(moment)}")
+    if short:
+        return f"Meeting {when(day, today)}"
+    at = f", {clock(moment)}" if isinstance(moment, datetime) else ""  # Cambridge's table gives no time.
+    return f"{item['what']} · {day:%a, %b} {day.day}{at}"
 
 
 def add_images(projects, known):
