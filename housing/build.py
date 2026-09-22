@@ -435,7 +435,7 @@ def panel_data(project, today):
 
 
 CSS = """
-  #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #1a1a1b; }
+  #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #242426; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
   /* The filter under the map rather than under the header. */
   #map + .filter { margin-top: 0; }
@@ -734,32 +734,32 @@ MAP_JS = """
     // lighter than the land, rather than black lines edged in gray, the bigger a little lighter (solid colors: a
     // road is drawn in many overlapping pieces, and see-through ones add up to a bright web downtown); parks barely
     // green; and the place names a little brighter than the style's.
-    const LAND = "#1a1a1b", WATER = "#0b1520";
+    const LAND = "#242426", WATER = "#0b1520";
     const RECOLOR = {
       "background": {"background-color": LAND},
       "water": {"fill-color": WATER},
       "waterway": {"line-color": WATER},
       "landuse_residential": {"fill-opacity": 0},
-      "landcover_wood": {"fill-color": "#1b211c"},
-      "landuse_park": {"fill-color": "#1b211c"},
-      "building": {"fill-color": "#222223", "fill-outline-color": "#29292a"},
-      "aeroway-area": {"fill-color": "#1f1f20"},
-      "aeroway-runway": {"line-color": "#262627"},
-      "aeroway-taxiway": {"line-color": "#202021"},
+      "landcover_wood": {"fill-color": "#252b26"},
+      "landuse_park": {"fill-color": "#252b26"},
+      "building": {"fill-color": "#2c2c2e", "fill-outline-color": "#333335"},
+      "aeroway-area": {"fill-color": "#29292b"},
+      "aeroway-runway": {"line-color": "#303032"},
+      "aeroway-taxiway": {"line-color": "#2a2a2c"},
       "aeroway-runway-casing": {"line-opacity": 0},
       "road_area_pier": {"fill-color": LAND},
       "road_pier": {"line-color": LAND},
-      "highway_path": {"line-color": "#1e1e1f"},
-      "highway_minor": {"line-color": "#202021"},
+      "highway_path": {"line-color": "#28282a"},
+      "highway_minor": {"line-color": "#2a2a2c"},
       "highway_major_casing": {"line-opacity": 0},
-      "highway_major_inner": {"line-color": "#262627"},
-      "highway_major_subtle": {"line-color": "#232324"},
+      "highway_major_inner": {"line-color": "#303032"},
+      "highway_major_subtle": {"line-color": "#2d2d2f"},
       "highway_motorway_casing": {"line-opacity": 0},
-      "highway_motorway_inner": {"line-color": "#2d2d2e"},
-      "highway_motorway_subtle": {"line-color": "#262627"},
-      "railway": {"line-color": "#232324"},
-      "railway_transit": {"line-color": "#232324"},
-      "railway_minor": {"line-color": "#202021"},
+      "highway_motorway_inner": {"line-color": "#373739"},
+      "highway_motorway_subtle": {"line-color": "#303032"},
+      "railway": {"line-color": "#2d2d2f"},
+      "railway_transit": {"line-color": "#2d2d2f"},
+      "railway_minor": {"line-color": "#2a2a2c"},
       "railway_dashline": {"line-color": LAND},
       "railway_transit_dashline": {"line-color": LAND},
       "railway_minor_dashline": {"line-color": LAND},
@@ -768,7 +768,7 @@ MAP_JS = """
       "water_name": {"text-color": "#5a7896", "text-halo-color": "rgba(0, 0, 0, 0)"},
     };
     for (const id of ["place_other", "place_suburb", "place_village", "place_town", "place_city", "place_city_large"]) {
-      RECOLOR[id] = {"text-color": "#9a9a9a", "text-halo-color": "rgba(26, 26, 27, .85)"};
+      RECOLOR[id] = {"text-color": "#9a9a9a", "text-halo-color": "rgba(36, 36, 38, .85)"};
     }
     map.on("load", () => {
       // Any layer a later version of the style renames is left as the style has it.
