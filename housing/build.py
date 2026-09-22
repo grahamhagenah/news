@@ -571,6 +571,10 @@ CSS = """
   main > details > summary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .1rem 1rem; padding: .8rem 0;
             cursor: pointer; list-style: none; font-weight: 700; }
   main > details > summary::-webkit-details-marker { display: none; }
+  /* An open list's heading stays at the top of the window while its projects scroll under it, until the next
+     list's pushes it up; black behind it, so they're hidden there, and a faint line under it once it's stuck. */
+  main > details[open] > summary { position: sticky; top: 0; z-index: 1; background: #000; transition: box-shadow .15s; }
+  main > details[open] > summary.stuck { box-shadow: 0 1px 0 #262626; }
   /* A chevron drawn to a square and turned about its middle, so open or shut it sits level with the town's name
      (a "›" turned with its line of text drops below it). */
   main > details > summary::before { content: ""; flex: none; align-self: center; width: 12px; height: 12px; margin-right: .1rem;
@@ -924,6 +928,23 @@ SCRIPT = """
       show();
     });
     search.addEventListener("input", show);
+    // The faint line under a list's heading while it's stuck at the top: the one there whose list is still on
+    // screen. Checked as the page scrolls, once a frame at most, and when a list opens or closes.
+    {
+      const headings = [...document.querySelectorAll("main > details > summary")];
+      let queued = false;
+      const mark = () => {
+        queued = false;
+        for (const heading of headings) {
+          const list = heading.parentElement.getBoundingClientRect();
+          heading.classList.toggle("stuck", heading.parentElement.open && list.top < 0 && list.bottom > heading.offsetHeight);
+        }
+      };
+      const soon = () => { if (!queued) { queued = true; requestAnimationFrame(mark); } };
+      addEventListener("scroll", soon, {passive: true});
+      for (const heading of headings) heading.parentElement.addEventListener("toggle", soon);
+      mark();
+    }
     show();
     // Recent updates' few projects, wherever they are, all in view at once.
     if (fitting && rows.length) dotMap.fit(rows);
