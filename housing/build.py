@@ -827,6 +827,11 @@ MAP_JS = """
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
     map.addControl(new maplibregl.FullscreenControl(), "top-left");
+    // Full screen has no page to scroll past, so there the trackpad and wheel zoom the map; in the page they
+    // don't, where they'd take the scroll the reader meant for the page itself.
+    document.addEventListener("fullscreenchange", () => {
+      if (document.fullscreenElement === map.getContainer()) map.scrollZoom.enable(); else map.scrollZoom.disable();
+    });
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const radius = row => Math.max(2.2, Math.min(7, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 3.3));
     // A number for each project, so a row and its dot can find each other and light up together.
