@@ -696,7 +696,7 @@ MAP_JS = """
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-    const radius = row => Math.max(3, Math.min(11, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 2.2));
+    const radius = row => Math.max(2.5, Math.min(8.5, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 2.8));
     // A dot's note: its name, which opens its panel, and its homes and status.
     const note = row => {
       const status = row.dataset.status, box = document.createElement("div");
