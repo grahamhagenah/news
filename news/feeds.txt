@@ -9,7 +9,8 @@
 # it outright (the id is the number after /id in its podcasts.apple.com address).
 
 # News
-https://www.nytimes.com/        The New York Times
+# Its homepage turns away automated requests (403 since Sept 2026), so name the feed itself.
+https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml   The New York Times
 https://feeds.bbci.co.uk/news/rss.xml   BBC News   limit=8
 https://www.propublica.org/     ProPublica
 https://restofworld.org/        Rest of World   days=7
