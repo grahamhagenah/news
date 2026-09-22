@@ -536,39 +536,51 @@ CSS = """
   @media (max-width: 34rem) {
     .tagline { font-size: .8rem; }
   }
-  /* The map's controls, notes and credits, quiet and dark like the page. */
-  .maplibregl-map { font: inherit; }
-  .maplibregl-map .map-hint { position: absolute; left: 0; bottom: 0; z-index: 2; }
-  .maplibregl-popup-content { padding: .7rem .9rem; border: 1px solid #333; border-radius: 6px; background: #111; color: #ddd;
+  /* The map's controls, notes and credits, quiet and dark like the page. Each is written from #map, so they
+     hold whether MapLibre's own stylesheet has arrived yet or not (it's fetched with the map, after these). */
+  #map .maplibregl-map { font: inherit; }
+  #map .maplibregl-map .map-hint { position: absolute; left: 0; bottom: 0; z-index: 2; }
+  #map .maplibregl-popup-content { padding: .7rem .9rem; border: 1px solid #333; border-radius: 6px; background: #111; color: #ddd;
                               font-size: .85rem; line-height: 1.4; box-shadow: none; }
-  .maplibregl-popup-content a { color: #fff; }
-  .maplibregl-popup-content .muted { color: #888; }
-  .maplibregl-popup-close-button { color: #666; font-size: 1rem; }
+  #map .maplibregl-popup-content a { color: #fff; }
+  #map .maplibregl-popup-content .muted { color: #888; }
+  #map .maplibregl-popup-close-button { color: #666; font-size: 1rem; }
   /* The arrow to its dot, whichever side the note opens on (MapLibre picks the side with room), in the note's own
      color, so it reads as part of it. */
   .maplibregl-popup-anchor-bottom .maplibregl-popup-tip, .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
-  .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: #111; }
+  #map .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: #111; }
   .maplibregl-popup-anchor-top .maplibregl-popup-tip, .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
-  .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: #111; }
-  .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #111; }
-  .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #111; }
-  .maplibregl-ctrl-group { background: #111; border: 1px solid #333; box-shadow: none !important; }
-  .maplibregl-ctrl-group button + button { border-top-color: #333; }
-  .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(.75); }
+  #map .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: #111; }
+  #map .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #111; }
+  #map .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #111; }
+  /* The map's buttons: a dark pane over the map, its marks gray until they're pointed at. MapLibre draws them
+     black on white, so each mark is turned about (invert) rather than replaced. */
+  #map .maplibregl-ctrl-group { border: 1px solid #2c2c2e; border-radius: 6px; overflow: hidden;
+                           background: rgba(16, 16, 17, .82); box-shadow: none !important;
+                           -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  #map .maplibregl-ctrl-group button + button { border-top: 1px solid #2c2c2e; }
+  #map .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(.58); transition: filter .15s; }
+  #map .maplibregl-ctrl-group button:hover { background: rgba(255, 255, 255, .06); }
+  #map .maplibregl-ctrl-group button:hover .maplibregl-ctrl-icon { filter: invert(.92); }
+  #map .maplibregl-ctrl-group button:active { background: rgba(255, 255, 255, .1); }
+  /* No blue ring (which the mark's invert would turn orange); a quiet one from the keyboard instead. */
+  #map .maplibregl-ctrl-group button:focus { box-shadow: none; }
+  #map .maplibregl-ctrl-group button:focus-visible { box-shadow: inset 0 0 0 1px #6a6a6a; }
+  #map .maplibregl-ctrl-group button:disabled .maplibregl-ctrl-icon { filter: invert(.3); }
   /* The credits: folded, only a small, faint ⓘ with nothing behind it; opened, a dark band. Its icon is drawn here
      in gray rather than MapLibre's black inverted, which also turned the blue ring it's given when focused orange;
      from the keyboard it gets a quiet ring of its own instead. */
-  .maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: none; color: #555; font-size: 9px; }
+  #map .maplibregl-ctrl-attrib, #map .maplibregl-ctrl-attrib.maplibregl-compact { background: none; color: #555; font-size: 9px; }
   /* Opened, its line of credits centered in the band, level with the ⓘ at its end. */
-  .maplibregl-ctrl-attrib.maplibregl-compact-show { display: flex; align-items: center; box-sizing: border-box; min-height: 24px;
+  #map .maplibregl-ctrl-attrib.maplibregl-compact-show { display: flex; align-items: center; box-sizing: border-box; min-height: 24px;
                                                     padding-top: 0; padding-bottom: 0; background: rgba(0, 0, 0, .6); }
-  .maplibregl-ctrl-attrib a { color: #666; }
-  .maplibregl-ctrl-attrib-button, .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
+  #map .maplibregl-ctrl-attrib a { color: #666; }
+  #map .maplibregl-ctrl-attrib-button, #map .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23888' fill-rule='evenodd' d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E") center / 16px no-repeat;
     opacity: .45; transition: opacity .15s; }
-  .maplibregl-ctrl-attrib-button:hover, .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button { opacity: .8; }
-  .maplibregl-ctrl-attrib-button:focus { box-shadow: none; }
-  .maplibregl-ctrl-attrib-button:focus-visible { box-shadow: 0 0 0 1px #555; opacity: .8; }
+  #map .maplibregl-ctrl-attrib-button:hover, #map .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button { opacity: .8; }
+  #map .maplibregl-ctrl-attrib-button:focus { box-shadow: none; }
+  #map .maplibregl-ctrl-attrib-button:focus-visible { box-shadow: 0 0 0 1px #555; opacity: .8; }
   /* While the map loads, a quiet note in its middle, fading in only if loading takes a moment. */
   .map-loading { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; color: #666; font-size: .85rem;
                  pointer-events: none; animation: appear .3s ease-out .4s both; }
