@@ -686,7 +686,7 @@ SCRIPT = """
     const rows = [...document.querySelectorAll(".row")];
     const buttons = [...document.querySelectorAll(".filter button")];
     const search = document.querySelector(".search");
-    const map = L.map("map", {preferCanvas: true, scrollWheelZoom: false}).setView([42.345, -71.08], innerWidth < 544 ? 12 : 13);  // A phone's narrower map, one step further out.
+    const map = L.map("map", {preferCanvas: true, scrollWheelZoom: false}).setView([42.345, -71.08], innerWidth < 544 ? 11 : 12);  // A phone's narrower map, one step further out.
     map.attributionControl.setPrefix(false);  // Leaflet's own link and flag, which its license doesn't ask for.
     // Esri's dark gray canvas, which needs no key: the land and water, then the place names over them.
     const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
