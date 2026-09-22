@@ -55,6 +55,8 @@ https://humantransit.org/feed   Human Transit   days=30
 https://pitchfork.com/feed/feed-album-reviews/rss   Pitchfork   titles=page   music=album
 https://pitchfork.com/feed/reviews/best/albums/rss   Pitchfork   days=30   titles=page   music=album   tag="BNM"
 https://pitchfork.com/feed/reviews/best/tracks/rss   Pitchfork   days=30   titles=page   music=song   tag="BNT"
+# Track reviews come a few a week; most are Best New Track picks too, which show once, tagged.
+https://pitchfork.com/feed/feed-track-reviews/rss   Pitchfork   days=14   titles=page   music=song
 
 # Podcasts (episodes open in Apple Podcasts). days= roughly matches how often each show posts.
 https://feeds.npr.org/510318/podcast.xml   Up First
