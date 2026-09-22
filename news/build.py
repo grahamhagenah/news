@@ -530,6 +530,17 @@ def icon(kind, decorative=False):
     return shared.icon(kind, None if decorative else kind.capitalize())
 
 
+# Tags with a mark of their own, drawn before the label: Pitchfork's arrows for its Best New Music.
+TAG_ICONS = {"BNM": "bnm.svg"}
+
+
+def render_tag(tag):
+    if not tag:
+        return ""
+    mark = f'<img src="{TAG_ICONS[tag]}" alt="" width="17" height="9">' if tag in TAG_ICONS else ""
+    return f'<span class="tag">{mark}{html.escape(tag)}</span>'
+
+
 def render_index(feeds, posts, failed, stale, built_at):
     items = []
     for post in posts:
@@ -538,7 +549,7 @@ def render_index(feeds, posts, failed, stale, built_at):
         mark = icon(kind)
         marked = " data-podcast" if post["podcast"] else f' data-video="{post["video"]}"' if post.get("video") else ""
         preview = shared.preview(post["title"], post["summary"])
-        tag = f'<span class="tag">{html.escape(post["tag"])}</span>' if post.get("tag") else ""
+        tag = render_tag(post.get("tag"))
         comments = ""
         if post["comments"]:
             count = post["comment_count"]
@@ -889,7 +900,7 @@ def render_sources(feeds, built_at):
         remove = f"{REPO_URL}/issues/new?" + urlencode({"title": f"Remove {feed['url']}", "body": ISSUE_NOTE})
         rows.append(
             f'<li><a href="{html.escape(feed["url"])}">{html.escape(feed["name"])}</a>'
-            + (f'<span class="tag">{html.escape(feed["tag"])}</span>' if feed.get("tag") else "")
+            + render_tag(feed.get("tag"))
             + f'<span class="note">{status}</span><a class="remove" href="{html.escape(remove)}" target="_blank" rel="noopener">remove</a></li>'
         )
 
@@ -984,6 +995,7 @@ CSS = """
   /* A label a feeds.txt line gives its posts, like Pitchfork's Best New Music: small, in a muted take on
      Pitchfork's red, sitting with the time rather than shouting over the headline. */
   .tag { margin-left: .6em; color: #b8534c; font-size: .7em; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
+  .tag img { height: .85em; width: auto; margin-right: .35em; vertical-align: -.05em; }
   /* Each post's icon: in its kind's color while the post is unread, gray once it's read. */
   .row > .icon { color: #555; }
   .unread > .icon { color: var(--article); }
