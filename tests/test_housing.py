@@ -134,7 +134,7 @@ class Recent(unittest.TestCase):
         self.assertIn("Proposed → Approved", page)
         home = build.render(projects, built, [])
         self.assertIn('class="fresh"', home)
-        self.assertIn('href="recent/"', home)
+        self.assertIn('href="/recent/"', home)
 
     def test_large_projects_biggest_first_with_their_steps(self):
         built = datetime(2026, 9, 21, tzinfo=timezone.utc)
@@ -153,10 +153,10 @@ class Recent(unittest.TestCase):
                     dict(project("massbuilds-1", town="Somerville"), since=None, was=None)]
         home = build.render(projects, built, [])
         self.assertIn('id="town-somerville"', home)
-        self.assertIn('href="somerville/"', home)
+        self.assertIn('href="/somerville/"', home)  # From the site's root, as Pushpin's links are.
         large = build.render(projects, built, [], page="large")
-        self.assertIn('href="../somerville/"', large)
-        self.assertIn('href="../large/" aria-current="page"', large)
+        self.assertIn('href="/somerville/"', large)
+        self.assertIn('href="/large/" aria-current="page"', large)
 
     def test_town_page_has_only_its_towns_projects(self):
         built = datetime(2026, 9, 21, tzinfo=timezone.utc)

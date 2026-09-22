@@ -741,11 +741,11 @@ FRESH_SCRIPT = """
 </script>"""
 
 # The site's icons (static/, drawn by make_icons.py), from a page root levels up.
-def icons_head(root):
-    return (f'<link rel="icon" href="{root}favicon.svg" type="image/svg+xml">'
-            f'<link rel="icon" href="{root}favicon-32.png" sizes="32x32" type="image/png">'
-            f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png">'
-            f'<link rel="manifest" href="{root}manifest.webmanifest">')
+def icons_head():
+    return ('<link rel="icon" href="/favicon.svg" type="image/svg+xml">'
+            '<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">'
+            '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
+            '<link rel="manifest" href="/manifest.webmanifest">')
 
 
 # OpenFreeMap's dark style as this site draws it, for any map on it (the main one, a project page's): it needs a
@@ -1083,7 +1083,7 @@ SCRIPT = """
 def source_note(town, rows, today):
     """Where a town's list comes from, and for a MassBuilds town, when anything in it was last updated, since
     some towns' entries go a year or more without."""
-    page = f' <a class="to-town" href="{slug(town)}/">{html.escape(town)}’s page →</a>'
+    page = f' <a class="to-town" href="/{slug(town)}/">{html.escape(town)}’s page →</a>'
     if town in FROM:
         return f'<p class="from">From {FROM[town]}.{page}</p>'
     if town not in INNER_RING:
@@ -1102,7 +1102,7 @@ def recently_changed(projects, today):
     return sorted(found, key=lambda pair: (pair[1][0], pair[0]["units"]), reverse=True)
 
 
-def fresh_banner(recent, today, more="recent/"):
+def fresh_banner(recent, today, more="/recent/"):
     """The home page's Recently updated line: one of the newest few, which its script turns over, and the way to
     the rest. It stays when nothing's changed lately, saying so."""
     fresh = [{"id": project["id"], "name": project["name"], "what": changed[1], "when": when(changed[0], today)}
@@ -1159,10 +1159,10 @@ def about(projects, towns):
     )
 
 
-def footer(root, here, towns, said):
+def footer(here, towns, said):
     """The foot of each page, as Pushpin's: what the site is (said, in full), then its pages, its towns and its
     sources in short lists under faint headings (the page it's on, at here, marked), then where the data comes
-    from. root is the way from the page to the site's."""
+    from. Its links, like every link between the site's pages, are from the site's root."""
     marked = ' aria-current="page"'
     groups = [
         ("Browse", "browse", [("All projects", "")] + [(name, path) for path, name, _ in PAGES.values()]),
@@ -1172,8 +1172,8 @@ def footer(root, here, towns, said):
     ]
     def link(label, href):
         outside = href.startswith("http")
-        current = marked if not outside and href == here and not href.startswith("#") else ""
-        return f'<li><a href="{href if outside else root + href or "./"}"{current}>{html.escape(label)}</a></li>'
+        current = marked if not outside and href == here else ""
+        return f'<li><a href="{href if outside else "/" + href}"{current}>{html.escape(label)}</a></li>'
     lists = "".join(
         f'<div class="{kind}"><h2>{heading}</h2><ul>{"".join(link(label, href) for label, href in links)}</ul></div>'
         for heading, kind, links in groups
@@ -1194,7 +1194,7 @@ def by_town(projects):
     return sorted({project["town"] for project in projects}, key=lambda town: (town != "Boston", town))
 
 
-def head(root, path, title, description):
+def head(path, title, description):
     """What a page tells search engines and link previews: what it's about, and its one address."""
     url = SITE_URL + path
     return (f'<meta name="description" content="{html.escape(description)}">'
@@ -1202,7 +1202,7 @@ def head(root, path, title, description):
             f'<meta property="og:type" content="website"><meta property="og:site_name" content="{html.escape(NAME)}">'
             f'<meta property="og:title" content="{html.escape(title)}">'
             f'<meta property="og:description" content="{html.escape(description)}"><meta property="og:url" content="{url}">'
-            + icons_head(root) + MAP_HEAD)
+            + icons_head() + MAP_HEAD)
 
 
 def render(projects, built_at, failed, page=None, town=None):
@@ -1214,7 +1214,6 @@ def render(projects, built_at, failed, page=None, town=None):
     everything = projects  # All of them, for the footer's numbers, whichever this page shows.
     towns = by_town(projects)
     changes = recently_changed(projects, today)
-    root = "../" if page else ""
     path = f"{slug(town)}/" if page == "town" else PAGES[page][0] if page else ""
     if page == "town":
         order = lambda project: (updated(project) or date.min, project["units"])
@@ -1236,7 +1235,7 @@ def render(projects, built_at, failed, page=None, town=None):
         rows = "".join(row(project, today, large=True) for project in projects)
         heading = f"{LARGE_HOMES} homes or more"
     if page:
-        note = source_note(town, projects, today).replace(f' <a class="to-town" href="{slug(town)}/">', '<a hidden>') \
+        note = source_note(town, projects, today).replace(f' <a class="to-town" href="/{slug(town)}/">', '<a hidden>') \
             if page == "town" else ""
         sections = (f'<details open><summary><span class="town">{heading}</span><span class="count"></span></summary>'
                     f'{note}<ul>{rows}</ul></details>')
@@ -1273,23 +1272,23 @@ def render(projects, built_at, failed, page=None, town=None):
     active = [p for p in projects if p["status"] != "complete"]
     town_said = (f"New housing in {town}: {len(active):,} projects in progress, "
                  f"{sum(p['units'] for p in active):,} homes, from proposal to move-in.")
-    said = (f'{html.escape(town_said)} <a href="../">All towns →</a>' if page == "town"
-            else f'{PAGES[page][2]} <a href="../">All projects →</a>' if page else html.escape(TAGLINE))
+    said = (f'{html.escape(town_said)} <a href="/">All towns →</a>' if page == "town"
+            else f'{PAGES[page][2]} <a href="/">All projects →</a>' if page else html.escape(TAGLINE))
     intro = f'<div class="intro"><p class="tagline">{said}</p></div>'
     # Over every page's map: on Large projects, only its own projects' changes, so each opens here.
     if page == "large":
-        banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="../recent/")
+        banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="/recent/")
     elif page == "town":
-        banner, fresh = fresh_banner(changes, today, more="../recent/")
+        banner, fresh = fresh_banner(changes, today, more="/recent/")
     elif page == "say":
-        banner, fresh = fresh_banner([(p, c) for p, c in changes if p.get("say")], today, more="../recent/")
+        banner, fresh = fresh_banner([(p, c) for p, c in changes if p.get("say")], today, more="/recent/")
     else:
-        banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "recent/")
+        banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "/recent/")
     # And under it, the soonest chance to have a say, but on Have your say itself, which is all of them.
     if page != "say":
-        banner += say_line(projects, today, more=f"{root}have-your-say/")
+        banner += say_line(projects, today, more="/have-your-say/")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
-            f'{footer(root, path, towns, about(everything, towns))}{PANEL}'
+            f'{footer(path, towns, about(everything, towns))}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
             f'<script>const FRESH = {fresh};</script>')
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
@@ -1301,8 +1300,8 @@ def render(projects, built_at, failed, page=None, town=None):
                    f"{TAGLINE} {len(active):,} projects in progress across Boston and the towns around it, on a map "
                    "and in a list for each town, with their status, size and details.")
     return shared.page(
-        "news", title, body + script, css=CSS, head=head(root, path, title, description), symbols=ICON_SYMBOLS,
-        updated=built_at, links=[(NAME, root or "./", not page)], marked={NAME: MARKED_NAME}, here=name, indexable=True,
+        "news", title, body + script, css=CSS, head=head(path, title, description), symbols=ICON_SYMBOLS,
+        updated=built_at, links=[(NAME, "/", not page)], marked={NAME: MARKED_NAME}, here=name, indexable=True,
     )
 
 
