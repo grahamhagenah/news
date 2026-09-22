@@ -622,12 +622,20 @@ def render_index(feeds, posts, failed, stale, built_at):
             label = "comments" if count is None else "1 comment" if count == 1 else f"{count} comments"
             comments = f'<a class="comments" href="{html.escape(post["comments"])}">{label}</a>'
         music = f'<a class="comments" href="{html.escape(post["music"])}">Apple Music</a>' if post.get("music") else ""
+        # A phone's row reads as one line, so who it's from goes right after how long ago, before any links:
+        # "2d from Pitchfork · Apple Music", not "2d Apple Music from Pitchfork". On desktop the source has its
+        # own column at the end of the row, so this copy is hidden there, and that one on phones.
+        via = f'<span class="via">from {html.escape(post["source"])}</span>'
+        # A phone line breaks after the dot, never before it, so no line starts with a stray "·".
+        links = f'<span class="sep">\u00a0·</span> '.join(link for link in (comments, music) if link)
+        if links:
+            via += '<span class="sep">\u00a0·</span>'
         # As Pushpin's rows are: the kind's icon, the headline and how long ago with its comments, and the source
         # at the end of the row; spaces between the parts, for a phone's line to break at.
         items.append(
             f'<li class="row" data-from="{html.escape(post["source"])}"{marked}>{mark}'
             f'<div class="headline"><a class="title" href="{html.escape(post["link"])}">{html.escape(post["title"])}</a> '
-            + " ".join(part for part in (tag, when, comments, music) if part)
+            + " ".join(part for part in (tag, when, via, links) if part)
             + f'{preview}</div> <span class="source"><span>{html.escape(post["source"])}</span></span></li>'
         )
 
@@ -1059,6 +1067,7 @@ CSS = """
   .posts:not(.paged) li:nth-child(n+PAGE_START) { display: none; }
   .note, time { color: #666; font-size: .8em; }
   .headline time, .headline .comments, .headline .tag { flex: none; }
+  .headline > .via, .headline > .sep { display: none; }
   /* A label a feeds.txt line gives its posts, like Pitchfork's Best New Music: small, white like its mark,
      sitting with the time rather than shouting over the headline. */
   .tag { margin-left: .6em; color: #fff; font-size: .7em; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
@@ -1071,7 +1080,9 @@ CSS = """
   @media (max-width: 34rem) {
     /* A phone's line: the headline, how long ago, its comments, and who it's from. */
     .headline > time, .headline > .comments, .headline > .tag { margin-left: 0; }
-    .row .source::before { content: "from "; }
+    .headline > .via { display: inline; color: #666; font-size: .8em; white-space: nowrap; }
+    .headline > .sep { display: inline; color: #666; font-size: .8em; }
+    .posts .row > .source { display: none; }
   }
   /* The video player: a window of its own in the corner of the page, alone on black. */
   .player { max-width: none; max-height: none; padding: 0; border: 0; background: none; color: #fff;
