@@ -53,7 +53,7 @@ COMPLETE_SINCE = 2020
 
 # Where each project is along the way, in order, with the dot it's shown by on the map.
 STATUSES = {
-    "proposed": ("Proposed", "#8a8a8a"),
+    "proposed": ("Proposed", "#adadad"),
     "approved": ("Approved", "#e0a93b"),
     "under construction": ("Under construction", "#4c9be8"),
     "complete": ("Complete", "#55b86a"),
@@ -696,7 +696,7 @@ MAP_JS = """
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-    const radius = row => Math.max(2.5, Math.min(8.5, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 2.8));
+    const radius = row => Math.max(2.2, Math.min(7, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 3.3));
     // A dot's note: its name, which opens its panel, and its homes and status.
     const note = row => {
       const status = row.dataset.status, box = document.createElement("div");
