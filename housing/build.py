@@ -500,6 +500,10 @@ CSS = """
   /* The map's credits, which Esri's and OpenStreetMap's terms ask to be on it: as small and quiet as they can be. */
   .leaflet-control-attribution { background: none !important; color: #555; font-size: 9px; line-height: 1.4; }
   .leaflet-control-attribution a { color: #555; }
+  /* What the map is leaving out at this zoom, quiet in its corner. */
+  .map-hint { margin: 0 0 .45rem .55rem !important; padding: .1rem .45rem; border-radius: 3px; background: rgba(0, 0, 0, .65);
+              color: #888; font-size: .72rem; pointer-events: none; }
+  .map-hint:empty { display: none; }
   .leaflet-bar a { background: #111; color: #999; border-color: #333; }
   .leaflet-bar a:hover { background: #222; color: #fff; }
   .panel-pill .icon { width: 12px; height: 12px; }
@@ -709,18 +713,42 @@ SCRIPT = """
     };
     const markers = new Map(rows.map(row => [row, marker(row)]));
     const bySize = [...rows].sort((a, b) => b.dataset.units - a.dataset.units);
+    // Zoomed out, only the bigger projects, so the map isn't a carpet of dots; the smaller come in as it's zoomed
+    // in, all of them at street level: at each zoom, the fewest homes a project needs to be drawn. A search, and
+    // the pages of a few projects (Recent updates, Large projects), show every one that fits.
+    const LEAST = [[16, 0], [15, 20], [14, 50], [13, 100], [12, 150]], FARTHEST = 300;
+    const fitting = map.getContainer().hasAttribute("data-fit");
+    let searching = false, pinned = null;  // pinned: a project Show on map went to, drawn whatever its size.
+    const least = () => {
+      if (fitting || searching) return 0;
+      const zoom = map.getZoom();
+      return (LEAST.find(([at]) => zoom >= at) || [0, FARTHEST])[1];
+    };
+    const hint = L.control({position: "bottomleft"});
+    hint.onAdd = () => L.DomUtil.create("div", "map-hint");
+    hint.addTo(map);
+    const draw = () => {
+      const fewest = least();
+      dots.clearLayers();
+      // The biggest first, so the smaller are drawn over them and a small project beside a big one can be clicked.
+      for (const row of bySize) {
+        if (!row.hidden && (+row.dataset.units >= fewest || row === pinned)) dots.addLayer(markers.get(row));
+      }
+      hint.getContainer().textContent = fewest ? `Showing ${fewest}+ homes · zoom in for more` : "";
+    };
+    map.on("zoomend", draw);
     const show = () => {
       const chosen = buttons.find(button => button.getAttribute("aria-pressed") === "true").dataset.show;
       const words = search.value.trim().toLowerCase().split(/\\s+/).filter(Boolean);
-      dots.clearLayers();
+      searching = words.length > 0;
+      pinned = null;
       for (const row of rows) {
         const status = row.dataset.status;
         const fits = (chosen === "all" || (chosen === "active" ? status !== "complete" : status === chosen))
           && words.every(word => row.dataset.words.includes(word));
         row.hidden = !fits;
       }
-      // The biggest first, so the smaller are drawn over them and a small project beside a big one can be clicked.
-      for (const row of bySize) if (!row.hidden) dots.addLayer(markers.get(row));
+      draw();
       for (const details of document.querySelectorAll("details")) {
         const showing = [...details.querySelectorAll(".row:not([hidden])")];
         const homes = showing.reduce((sum, row) => sum + +row.dataset.units, 0);
@@ -822,7 +850,8 @@ SCRIPT = """
     part("map").addEventListener("click", () => {
       const row = shown, dot = markers.get(row);
       closeProject();
-      if (row.hidden) dots.addLayer(dot);
+      pinned = row;
+      draw();
       document.getElementById("map").scrollIntoView({behavior: "smooth", block: "center"});
       map.once("moveend", () => dot.openPopup());
       map.flyTo(dot.getLatLng(), 16);
