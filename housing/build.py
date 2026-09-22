@@ -477,8 +477,11 @@ CSS = """
   header { align-items: baseline; }
   .sites { flex-wrap: wrap; row-gap: .15rem; min-width: 0; }
   .sites a, .sites .here { white-space: nowrap; }
-  /* Recent updates' name for itself, after the site's in the header. */
+  /* A page's name for itself, after the site's in the header, a slash between them as on Pushpin; on a phone it
+     takes the time it was updated's room. */
   .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
+  .sites .here::before { content: "/"; margin-right: .5em; color: #444; font-weight: 400; }
+  @media (max-width: 34rem) { header:has(.here:not([hidden])) .header-note { display: none; } }
   .sites a:not([aria-current]) .city { color: inherit; }
   .tagline a { color: #bbb; }
   /* Large projects' bar of four steps, before its town: how far along the project is. */
