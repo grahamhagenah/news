@@ -530,15 +530,20 @@ def icon(kind, decorative=False):
     return shared.icon(kind, None if decorative else kind.capitalize())
 
 
-# Tags with a mark of their own, drawn before the label: Pitchfork's arrows for its Best New Music.
-TAG_ICONS = {"BNM": "bnm.svg"}
+# Tags with a mark of their own, drawn before the label, and what the label is short for: Pitchfork's arrows
+# for its Best New Music. The mark's alt text says it in full, so a screen reader reads that instead of the
+# letters, and hovering the label shows it.
+TAG_ICONS = {"BNM": ("bnm.svg", "Best New Music")}
 
 
 def render_tag(tag):
     if not tag:
         return ""
-    mark = f'<img src="{TAG_ICONS[tag]}" alt="" width="17" height="9">' if tag in TAG_ICONS else ""
-    return f'<span class="tag">{mark}{html.escape(tag)}</span>'
+    if tag not in TAG_ICONS:
+        return f'<span class="tag">{html.escape(tag)}</span>'
+    src, meaning = TAG_ICONS[tag]
+    return (f'<span class="tag" title="{html.escape(meaning)}"><img src="{src}" alt="{html.escape(meaning)}" width="17" height="9">'
+            f'<span aria-hidden="true">{html.escape(tag)}</span></span>')
 
 
 def render_index(feeds, posts, failed, stale, built_at):

@@ -332,7 +332,8 @@ class Page(unittest.TestCase):
             feeds = [build.read_feed(site("https://pitchfork.com/feed/reviews/best/albums/rss", tag="BNM"))]
         posts = build.all_posts(feeds)
         page = build.render_index(feeds, posts, [], [], datetime.now(timezone.utc))
-        self.assertEqual(page.count('</a> <span class="tag"><img src="bnm.svg" alt="" width="17" height="9">BNM</span>'), len(posts))
+        self.assertEqual(page.count('</a> <span class="tag" title="Best New Music"><img src="bnm.svg" alt="Best New Music" '
+                                    'width="17" height="9"><span aria-hidden="true">BNM</span></span>'), len(posts))
 
 
 
