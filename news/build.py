@@ -531,9 +531,9 @@ def icon(kind, decorative=False):
 
 
 # Tags with a mark of their own, drawn before the label, and what the label is short for: Pitchfork's arrows
-# for its Best New Music. The mark's alt text says it in full, so a screen reader reads that instead of the
+# for its Best New Music and Best New Track. The mark's alt text says it in full, so a screen reader reads that instead of the
 # letters, and hovering the label shows it.
-TAG_ICONS = {"BNM": ("bnm.svg", "Best New Music")}
+TAG_ICONS = {"BNM": ("bnm.svg", "Best New Music"), "BNT": ("bnm.svg", "Best New Track")}
 
 
 def render_tag(tag):

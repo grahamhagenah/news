@@ -327,6 +327,11 @@ class Page(unittest.TestCase):
         self.assertIn("Couldn’t load Broken Blog", page)
         self.assertIn("Couldn’t reach Slow Site", page)
 
+    def test_best_new_track_is_spelled_out(self):
+        self.assertEqual(build.render_tag("BNT"), '<span class="tag" title="Best New Track"><img src="bnm.svg" '
+                         'alt="Best New Track" width="17" height="9"><span aria-hidden="true">BNT</span></span>')
+        self.assertEqual(build.render_tag("Staff pick"), '<span class="tag">Staff pick</span>')
+
     def test_tags_show_beside_titles(self):
         with mock.patch.object(build, "fetch", sample):
             feeds = [build.read_feed(site("https://pitchfork.com/feed/reviews/best/albums/rss", tag="BNM"))]

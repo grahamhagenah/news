@@ -48,11 +48,12 @@ https://usa.streetsblog.org/
 https://grist.org/   Grist
 https://humantransit.org/feed   Human Transit   days=30
 
-# Music. Pitchfork's review feed titles are only the album, so titles=page takes "Artist: Album" from each
-# review. Best New Music picks are rarer (about one a week), so they stay a month and carry a BNM tag; a review
-# in both feeds shows once, tagged.
+# Music. Pitchfork's feed titles are only the album or song, so titles=page takes "Artist: Album" from each
+# review. Best New Music (albums) and Best New Track picks are rarer (one or two a week), so they stay a month
+# and carry a BNM or BNT tag; a review in two feeds shows once, tagged.
 https://pitchfork.com/feed/feed-album-reviews/rss   Pitchfork   titles=page
 https://pitchfork.com/feed/reviews/best/albums/rss   Pitchfork   days=30   titles=page   tag="BNM"
+https://pitchfork.com/feed/reviews/best/tracks/rss   Pitchfork   days=30   titles=page   tag="BNT"
 
 # Podcasts (episodes open in Apple Podcasts). days= roughly matches how often each show posts.
 https://feeds.npr.org/510318/podcast.xml   Up First
