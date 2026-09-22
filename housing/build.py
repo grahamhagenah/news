@@ -507,6 +507,9 @@ CSS = """
   .maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(0, 0, 0, .6); color: #555; font-size: 9px; }
   .maplibregl-ctrl-attrib a { color: #666; }
   .maplibregl-ctrl-attrib-button { filter: invert(.7); background-color: transparent; }
+  /* While the map loads, a quiet note in its middle, fading in only if loading takes a moment. */
+  .map-loading { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; color: #666; font-size: .85rem;
+                 pointer-events: none; animation: appear .3s ease-out .4s both; }
   /* What the map is leaving out at this zoom, quiet in its corner. */
   .map-hint { margin: 0 0 .45rem .55rem !important; padding: .1rem .45rem; border-radius: 3px; background: rgba(0, 0, 0, .65);
               color: #888; font-size: .72rem; pointer-events: none; }
@@ -729,6 +732,9 @@ MAP_JS = """
       },
     };
     dotMap.container.append(hintBox);
+    // Until the map has loaded (OpenFreeMap's servers are slow now and then), a note in its middle.
+    const loading = Object.assign(document.createElement("div"), {className: "map-loading", textContent: "Loading map…"});
+    dotMap.container.append(loading);
     // OpenFreeMap's dark style, recolored to read more easily: the land lifted a little from black and the water
     // sunk below it in a deep blue, so the harbor and the rivers stand apart from the land; roads a shade or two
     // lighter than the land, rather than black lines edged in gray, the bigger a little lighter (solid colors: a
@@ -770,11 +776,15 @@ MAP_JS = """
     for (const id of ["place_other", "place_suburb", "place_village", "place_town", "place_city", "place_city_large"]) {
       RECOLOR[id] = {"text-color": "#9a9a9a", "text-halo-color": "rgba(36, 36, 38, .85)"};
     }
-    map.on("load", () => {
-      // Any layer a later version of the style renames is left as the style has it.
+    // As soon as the style's read, before any of it is drawn, so its own colors never show. Any layer a later
+    // version of the style renames is left as the style has it.
+    map.on("style.load", () => {
       for (const [id, paint] of Object.entries(RECOLOR)) {
         if (map.getLayer(id)) for (const [name, value] of Object.entries(paint)) map.setPaintProperty(id, name, value);
       }
+    });
+    map.on("load", () => {
+      loading.remove();
       // The credits folded to their ⓘ, which the map's terms ask be on it; MapLibre opens them at first on a wide map.
       const credits = dotMap.container.querySelector(".maplibregl-ctrl-attrib");
       if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
