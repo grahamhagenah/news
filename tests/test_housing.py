@@ -153,10 +153,48 @@ class Recent(unittest.TestCase):
                     dict(project("massbuilds-1", town="Somerville"), since=None, was=None)]
         home = build.render(projects, built, [])
         self.assertIn('id="town-somerville"', home)
-        self.assertIn('href="#town-somerville"', home)
+        self.assertIn('href="somerville/"', home)
         large = build.render(projects, built, [], page="large")
-        self.assertIn('href="../#town-somerville"', large)
+        self.assertIn('href="../somerville/"', large)
         self.assertIn('href="../large/" aria-current="page"', large)
+
+    def test_town_page_has_only_its_towns_projects(self):
+        built = datetime(2026, 9, 21, tzinfo=timezone.utc)
+        projects = [dict(project("boston-1"), since=None, was=None),
+                    dict(project("massbuilds-1", town="Somerville"), since=None, was=None)]
+        page = build.render(projects, built, [], page="town", town="Somerville")
+        self.assertIn('id="massbuilds-1"', page)
+        self.assertNotIn('id="boston-1"', page)
+        self.assertIn("<title>New housing in Somerville", page)
+        self.assertIn('href="../p/massbuilds-1/"', page)
+        self.assertIn('<link rel="canonical" href="https://housing.grahamhagenah.com/somerville/">', page)
+        self.assertIn('content="index, follow"', page)
+
+
+class ProjectPages(unittest.TestCase):
+    def test_a_project_page_and_its_neighbors(self):
+        built = datetime(2026, 9, 21, tzinfo=timezone.utc)
+        here = dict(project("boston-1", name="45 Townsend Street", description="A mixed-use building.\nMore.",
+                            facts=[["Cost", "$80M"]], link="https://example.com/45", origin="Boston Planning"),
+                    since=None, was=None, lat=42.30, lon=-71.08)
+        near = dict(project("boston-2", name="Near", lat=42.301, lon=-71.081), since=None, was=None)
+        far = dict(project("boston-3", name="Far", lat=42.9, lon=-71.9), since=None, was=None)
+        page = build.render_project(here, [here, far, near], built, ["Boston"], "About.")
+        self.assertIn("<h1 class=\"panel-title\">45 Townsend Street</h1>", page)
+        self.assertIn("<dt>Cost</dt><dd>$80M</dd>", page)
+        self.assertIn("View on Boston Planning", page)
+        self.assertIn('<link rel="canonical" href="https://housing.grahamhagenah.com/p/boston-1/">', page)
+        self.assertIn('content="45 Townsend Street in Roxbury, Boston: 40 homes, approved. A mixed-use building."', page)
+        self.assertLess(page.index('id="boston-2"'), page.index('id="boston-3"'))  # The nearer first.
+        self.assertIn('href="../../boston/"', page)
+
+    def test_sitemap_lists_every_page(self):
+        built = datetime(2026, 9, 21, tzinfo=timezone.utc)
+        projects = [dict(project("boston-1"), since=None, was=None)]
+        xml = build.sitemap(projects, ["Boston"], built)
+        for path in ("", "recent/", "large/", "boston/", "p/boston-1/"):
+            self.assertIn(f"<loc>https://housing.grahamhagenah.com/{path}</loc>", xml)
+        self.assertIn("<lastmod>2025-01-01</lastmod>", xml)
 
 
 class Page(unittest.TestCase):
@@ -178,7 +216,7 @@ class Page(unittest.TestCase):
         data = page.split('<script type="application/json" id="projects">')[1].split("</script>")[0]
         self.assertIn('"Cost"', data)
         self.assertIn("<\\/script>", data)
-        self.assertIn('href="#boston-1"', page)
+        self.assertIn('href="p/boston-1/"', page)  # Its own page; a click opens its panel instead.
 
 
 class Upstream(unittest.TestCase):

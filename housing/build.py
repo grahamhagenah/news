@@ -7,6 +7,7 @@ Run from the repo's top folder: python3 -m housing.build, which writes dist/hous
 
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -401,10 +402,11 @@ def steps(status):
     return f'<span class="steps" role="img" aria-label="{label}, step {reached} of {len(STAGES)}">{bars}</span>'
 
 
-def row(project, today, changed=None, large=False):
+def row(project, today, changed=None, large=False, root=""):
     """A project's row. On Recent updates, changed is what happened and when: it takes the status's place after
     the name, and its day the row's date. On Large projects, a bar of four steps shows how far along it is.
-    Both name its town, the page having projects from all of them in one list."""
+    Both name its town, the page having projects from all of them in one list. Its name links to its own page,
+    root being the way from this page to the site's."""
     label, color = STATUSES[project["status"]]
     day = changed[0] if changed else updated(project)
     ident = html.escape(project["id"])
@@ -417,7 +419,7 @@ def row(project, today, changed=None, large=False):
         f'<li class="row" id="{ident}" data-status="{project["status"]}" data-units="{project["units"]}" '
         f'data-lat="{project["lat"]:.5f}" data-lon="{project["lon"]:.5f}" data-words="{html.escape(words.casefold())}">'
         f'{status_icon(project["status"], label)}'
-        f'<span class="headline"><a class="title" href="#{ident}">{html.escape(project["name"])}</a>'
+        f'<span class="headline"><a class="title" href="{root}p/{ident}/">{html.escape(project["name"])}</a>'
         f' <span class="details">{homes} · {html.escape(changed[1]) if changed else label.lower()}</span></span> '
         f'<span class="source">{steps(project["status"]) if large else ""}<span>{place}</span></span>{note}</li>'
     )
@@ -464,6 +466,11 @@ CSS = """
     .fresh-tag { grid-column: 1 / -1; }
     .fresh-more { margin-left: 0; }
   }
+  /* The header: the site's name and the page's each kept whole, the page's going to a line of its own when both
+     won't fit beside the time it was updated, which stays level with the first. */
+  header { align-items: baseline; }
+  .sites { flex-wrap: wrap; row-gap: .15rem; min-width: 0; }
+  .sites a, .sites .here { white-space: nowrap; }
   /* Recent updates' name for itself, after the site's in the header. */
   .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
   .sites a:not([aria-current]) .city { color: inherit; }
@@ -489,11 +496,28 @@ CSS = """
     .site-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .site-links .towns { grid-column: 1 / -1; order: 3; }
   }
+  /* A project's own page: what its panel shows, laid out on the page, its picture first. */
+  .project-page .project-image { display: block; width: 100%; aspect-ratio: 16 / 10; margin: 0 0 1.25rem; border-radius: 6px;
+                                 object-fit: cover; background: #151515; }
+  .project-page .panel-where a { color: #888; }
+  .project-page .panel-where a:hover { color: #fff; text-decoration: none; }
+  .project-page .panel-title { font-size: 1.6rem; }
+  .project-page .panel-about { max-width: 38rem; }
+  .project-page .panel-foot { margin-top: 1rem; }
+  #map.mini { height: 16rem; margin: 2rem 0 0; }
+  .nearby-head { margin: 2.25rem 0 .5rem; color: #777; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .from .to-town { margin-left: .4em; color: #999; text-decoration: none; }
+  .from .to-town:hover { color: #fff; }
   /* What the site is, under its name. */
   .intro { margin: -1.25rem 0 1.25rem; }
-  .tagline { min-width: 0; margin: 0; overflow: hidden; color: #888; font-size: .9rem; white-space: nowrap; text-overflow: ellipsis; }
+  /* On as many lines as it takes, rather than cut short: the home page's fits on one. */
+  .tagline { margin: 0; color: #888; font-size: .9rem; }
   .sites .city { color: #777; }
-  @media (max-width: 34rem) { .tagline { font-size: .8rem; } }
+  @media (max-width: 34rem) {
+    .tagline { font-size: .8rem; }
+    /* A phone's Recently updated: its project on as many lines as it takes, under the words over it. */
+    .fresh-one { white-space: normal; }
+  }
   /* The map's controls, notes and credits, quiet and dark like the page. */
   .maplibregl-map { font: inherit; }
   .maplibregl-map .map-hint { position: absolute; left: 0; bottom: 0; z-index: 2; }
@@ -530,7 +554,10 @@ CSS = """
   .map-hint:empty { display: none; }
   .panel-pill .icon { width: 12px; height: 12px; }
   main > details { border-top: 1px solid #1c1c1c; }
-  main > details > summary { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .8rem 0;
+  /* A list's heading kept whole, and its count on the next line when both won't fit on one. */
+  main > details > summary .town { white-space: nowrap; }
+  main > details > summary .count { margin-left: auto; }
+  main > details > summary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .1rem 1rem; padding: .8rem 0;
             cursor: pointer; list-style: none; font-weight: 700; }
   main > details > summary::-webkit-details-marker { display: none; }
   /* A chevron drawn to a square and turned about its middle, so open or shut it sits level with the town's name
@@ -641,7 +668,7 @@ PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <p class="panel-note"></p>
 <dl class="panel-facts"></dl>
 <div class="panel-about"></div>
-<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-map" type="button">Show on map</button><p class="panel-updated"></p></div>
+<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><a class="panel-page">Project page</a><button class="panel-map" type="button">Show on map</button><p class="panel-updated"></p></div>
 </div>
 </dialog>"""
 
@@ -696,6 +723,58 @@ def icons_head(root):
             f'<link rel="manifest" href="{root}manifest.webmanifest">')
 
 
+# OpenFreeMap's dark style as this site draws it, for any map on it (the main one, a project page's): it needs a
+# map already made, called map.
+STYLE_JS = """    // OpenFreeMap's dark style, recolored to read more easily: the land lifted a little from black and the water
+    // sunk below it in a deep blue, so the harbor and the rivers stand apart from the land; roads a shade or two
+    // lighter than the land, rather than black lines edged in gray, the bigger a little lighter (solid colors: a
+    // road is drawn in many overlapping pieces, and see-through ones add up to a bright web downtown); parks barely
+    // green; and the place names a little brighter than the style's.
+    const LAND = "#242426", WATER = "#0b1520";
+    const RECOLOR = {
+      "background": {"background-color": LAND},
+      "water": {"fill-color": WATER},
+      "waterway": {"line-color": WATER},
+      "landuse_residential": {"fill-opacity": 0},
+      "landcover_wood": {"fill-color": "#252b26"},
+      "landuse_park": {"fill-color": "#252b26"},
+      "building": {"fill-color": "#2c2c2e", "fill-outline-color": "#333335"},
+      "aeroway-area": {"fill-color": "#29292b"},
+      "aeroway-runway": {"line-color": "#303032"},
+      "aeroway-taxiway": {"line-color": "#2a2a2c"},
+      "aeroway-runway-casing": {"line-opacity": 0},
+      "road_area_pier": {"fill-color": LAND},
+      "road_pier": {"line-color": LAND},
+      "highway_path": {"line-color": "#28282a"},
+      "highway_minor": {"line-color": "#2a2a2c"},
+      "highway_major_casing": {"line-opacity": 0},
+      "highway_major_inner": {"line-color": "#303032"},
+      "highway_major_subtle": {"line-color": "#2d2d2f"},
+      "highway_motorway_casing": {"line-opacity": 0},
+      "highway_motorway_inner": {"line-color": "#373739"},
+      "highway_motorway_subtle": {"line-color": "#303032"},
+      "railway": {"line-color": "#2d2d2f"},
+      "railway_transit": {"line-color": "#2d2d2f"},
+      "railway_minor": {"line-color": "#2a2a2c"},
+      "railway_dashline": {"line-color": LAND},
+      "railway_transit_dashline": {"line-color": LAND},
+      "railway_minor_dashline": {"line-color": LAND},
+      "highway_name_other": {"text-color": "#6a6a6a", "text-halo-color": LAND},
+      "highway_name_motorway": {"text-color": "#7a7a7a"},
+      "water_name": {"text-color": "#5a7896", "text-halo-color": "rgba(0, 0, 0, 0)"},
+    };
+    for (const id of ["place_other", "place_suburb", "place_village", "place_town", "place_city", "place_city_large"]) {
+      RECOLOR[id] = {"text-color": "#9a9a9a", "text-halo-color": "rgba(36, 36, 38, .85)"};
+    }
+    // As soon as the style's read, before any of it is drawn, so its own colors never show. Any layer a later
+    // version of the style renames is left as the style has it.
+    map.on("style.load", () => {
+      for (const [id, paint] of Object.entries(RECOLOR)) {
+        if (map.getLayer(id)) for (const [name, value] of Object.entries(paint)) map.setPaintProperty(id, name, value);
+      }
+    });
+"""
+
 # The map, drawn by MapLibre from OpenFreeMap's dark vector tiles, which need no key: the browser draws its roads
 # and names itself, so they're sharp on any screen. It gives the page a dotMap: its element; its zoom, a step
 # higher than MapLibre's own (whose tiles are twice the size), for the cutoffs in LEAST; a way to hear it zoom; to
@@ -749,55 +828,7 @@ MAP_JS = """
     // Until the map has loaded (OpenFreeMap's servers are slow now and then), a note in its middle.
     const loading = Object.assign(document.createElement("div"), {className: "map-loading", textContent: "Loading map…"});
     dotMap.container.append(loading);
-    // OpenFreeMap's dark style, recolored to read more easily: the land lifted a little from black and the water
-    // sunk below it in a deep blue, so the harbor and the rivers stand apart from the land; roads a shade or two
-    // lighter than the land, rather than black lines edged in gray, the bigger a little lighter (solid colors: a
-    // road is drawn in many overlapping pieces, and see-through ones add up to a bright web downtown); parks barely
-    // green; and the place names a little brighter than the style's.
-    const LAND = "#242426", WATER = "#0b1520";
-    const RECOLOR = {
-      "background": {"background-color": LAND},
-      "water": {"fill-color": WATER},
-      "waterway": {"line-color": WATER},
-      "landuse_residential": {"fill-opacity": 0},
-      "landcover_wood": {"fill-color": "#252b26"},
-      "landuse_park": {"fill-color": "#252b26"},
-      "building": {"fill-color": "#2c2c2e", "fill-outline-color": "#333335"},
-      "aeroway-area": {"fill-color": "#29292b"},
-      "aeroway-runway": {"line-color": "#303032"},
-      "aeroway-taxiway": {"line-color": "#2a2a2c"},
-      "aeroway-runway-casing": {"line-opacity": 0},
-      "road_area_pier": {"fill-color": LAND},
-      "road_pier": {"line-color": LAND},
-      "highway_path": {"line-color": "#28282a"},
-      "highway_minor": {"line-color": "#2a2a2c"},
-      "highway_major_casing": {"line-opacity": 0},
-      "highway_major_inner": {"line-color": "#303032"},
-      "highway_major_subtle": {"line-color": "#2d2d2f"},
-      "highway_motorway_casing": {"line-opacity": 0},
-      "highway_motorway_inner": {"line-color": "#373739"},
-      "highway_motorway_subtle": {"line-color": "#303032"},
-      "railway": {"line-color": "#2d2d2f"},
-      "railway_transit": {"line-color": "#2d2d2f"},
-      "railway_minor": {"line-color": "#2a2a2c"},
-      "railway_dashline": {"line-color": LAND},
-      "railway_transit_dashline": {"line-color": LAND},
-      "railway_minor_dashline": {"line-color": LAND},
-      "highway_name_other": {"text-color": "#6a6a6a", "text-halo-color": LAND},
-      "highway_name_motorway": {"text-color": "#7a7a7a"},
-      "water_name": {"text-color": "#5a7896", "text-halo-color": "rgba(0, 0, 0, 0)"},
-    };
-    for (const id of ["place_other", "place_suburb", "place_village", "place_town", "place_city", "place_city_large"]) {
-      RECOLOR[id] = {"text-color": "#9a9a9a", "text-halo-color": "rgba(36, 36, 38, .85)"};
-    }
-    // As soon as the style's read, before any of it is drawn, so its own colors never show. Any layer a later
-    // version of the style renames is left as the style has it.
-    map.on("style.load", () => {
-      for (const [id, paint] of Object.entries(RECOLOR)) {
-        if (map.getLayer(id)) for (const [name, value] of Object.entries(paint)) map.setPaintProperty(id, name, value);
-      }
-    });
-    map.on("load", () => {
+""" + STYLE_JS + """    map.on("load", () => {
       loading.remove();
       // The credits folded to their ⓘ, which the map's terms ask be on it; MapLibre opens them at first on a wide map.
       const credits = dotMap.container.querySelector(".maplibregl-ctrl-attrib");
@@ -909,6 +940,7 @@ SCRIPT = """
       part("source").hidden = !p.link;
       part("source").href = p.link;
       part("source").textContent = (p.origin ? "View on " + p.origin : "View source") + " ↗";
+      part("page").href = row.querySelector(".title").href;
       part("site").hidden = !p.site;
       part("site").href = p.site;
       part("updated").textContent = p.updated ? "Last update " + p.updated : "";
@@ -989,15 +1021,16 @@ SCRIPT = """
 def source_note(town, rows, today):
     """Where a town's list comes from, and for a MassBuilds town, when anything in it was last updated, since
     some towns' entries go a year or more without."""
+    page = f' <a class="to-town" href="{slug(town)}/">{html.escape(town)}’s page →</a>'
     if town in FROM:
-        return f'<p class="from">From {FROM[town]}.</p>'
+        return f'<p class="from">From {FROM[town]}.{page}</p>'
     if town not in INNER_RING:
         return ""
     latest = max((p["dated"] for p in rows if p["id"].startswith("massbuilds-") and p["dated"]), default=None)
     stale = latest and (today - latest).days > 180
     return (f'<p class="from">From <a href="https://www.massbuilds.com/">MassBuilds</a>'
             f'{f", last updated here {when(latest, today)}" if latest else ""}'
-            f'{", so it may be out of date" if stale else ""}.</p>')
+            f'{", so it may be out of date" if stale else ""}.{page}</p>')
 
 
 def recently_changed(projects, today):
@@ -1049,15 +1082,14 @@ def about(projects, towns):
     )
 
 
-def footer(page, towns, said):
+def footer(root, here, towns, said):
     """The foot of each page, as Pushpin's: what the site is (said, in full), then its pages, its towns and its
-    sources in short lists under faint headings (this page marked), then where the data comes from."""
-    root = "../" if page else ""
-    here = PAGES[page][0] if page else ""
+    sources in short lists under faint headings (the page it's on, at here, marked), then where the data comes
+    from. root is the way from the page to the site's."""
     marked = ' aria-current="page"'
     groups = [
         ("Browse", "browse", [("All projects", "")] + [(name, path) for path, name, _ in PAGES.values()]),
-        ("Towns", "towns", [(town, f"#town-{slug(town)}") for town in towns]),
+        ("Towns", "towns", [(town, f"{slug(town)}/") for town in towns]),
         ("Sources", "sources", [("Boston Planning", "https://www.bostonplans.org/projects/development-projects"),
                                 ("Cambridge log", CAMBRIDGE_PAGE), ("MassBuilds", "https://www.massbuilds.com/")]),
     ]
@@ -1085,25 +1117,47 @@ def by_town(projects):
     return sorted({project["town"] for project in projects}, key=lambda town: (town != "Boston", town))
 
 
-def render(projects, built_at, failed, page=None):
+def head(root, path, title, description):
+    """What a page tells search engines and link previews: what it's about, and its one address."""
+    url = SITE_URL + path
+    return (f'<meta name="description" content="{html.escape(description)}">'
+            f'<link rel="canonical" href="{url}">'
+            f'<meta property="og:type" content="website"><meta property="og:site_name" content="{html.escape(NAME)}">'
+            f'<meta property="og:title" content="{html.escape(title)}">'
+            f'<meta property="og:description" content="{html.escape(description)}"><meta property="og:url" content="{url}">'
+            + icons_head(root) + MAP_HEAD)
+
+
+def render(projects, built_at, failed, page=None, town=None):
     """The home page, every project by town; or one of PAGES, each a single list across the towns: Recent
     updates, what's changed in the last RECENT_DAYS days, newest first, each saying what happened; Large
-    projects, those of LARGE_HOMES homes or more, biggest first, each with how far along it is."""
+    projects, those of LARGE_HOMES homes or more, biggest first, each with how far along it is; or, with page
+    "town", a town's page: its projects, most recently changed first."""
     today = built_at.date()
     everything = projects  # All of them, for the footer's numbers, whichever this page shows.
     towns = by_town(projects)
     changes = recently_changed(projects, today)
-    if page == "recent":
+    root = "../" if page else ""
+    path = f"{slug(town)}/" if page == "town" else PAGES[page][0] if page else ""
+    if page == "town":
+        order = lambda project: (updated(project) or date.min, project["units"])
+        projects = sorted((p for p in projects if p["town"] == town), key=order, reverse=True)
+        changes = [(p, c) for p, c in changes if p["town"] == town]
+        rows = "".join(row(project, today, root=root) for project in projects)
+        heading = html.escape(town)
+    elif page == "recent":
         projects = [project for project, _ in changes]
-        rows = "".join(row(project, today, changed) for project, changed in changes)
+        rows = "".join(row(project, today, changed, root=root) for project, changed in changes)
         heading = f"In the last {RECENT_DAYS} days"
     elif page == "large":
         projects = sorted((p for p in projects if p["units"] >= LARGE_HOMES), key=lambda p: p["units"], reverse=True)
-        rows = "".join(row(project, today, large=True) for project in projects)
+        rows = "".join(row(project, today, large=True, root=root) for project in projects)
         heading = f"{LARGE_HOMES} homes or more"
     if page:
+        note = source_note(town, projects, today).replace(f' <a class="to-town" href="{slug(town)}/">', '<a hidden>') \
+            if page == "town" else ""
         sections = (f'<details open><summary><span class="town">{heading}</span><span class="count"></span></summary>'
-                    f'<ul>{rows}</ul></details>')
+                    f'{note}<ul>{rows}</ul></details>')
     else:
         order = lambda project: (updated(project) or date.min, project["units"])
         in_town = {}
@@ -1115,8 +1169,9 @@ def render(projects, built_at, failed, page=None):
             f'<ul>{"".join(row(project, today) for project in in_town[town])}</ul></details>'
             for town in towns
         )
-    # The pages across the towns show every status, a finished project among them; the home page what's under way.
-    shown = "all" if page else "active"
+    # The pages across the towns show every status, a finished project among them; the home page and a town's,
+    # what's under way.
+    shown = "all" if page in ("recent", "large") else "active"
     choices = [("active", "In progress")] + [(key, label) for key, (label, _) in STATUSES.items()] + [("all", "All")]
     def colored(key):
         return f' style="color:{STATUSES[key][1]}"' if key in STATUSES else ""
@@ -1133,27 +1188,139 @@ def render(projects, built_at, failed, page=None):
     missing = (f'<p class="empty">Couldn’t reach {" or ".join(unreached)} this time; showing what the last build had.</p>'
                if failed else "")
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
-    said = f'{PAGES[page][2]} <a href="../">All projects →</a>' if page else html.escape(TAGLINE)
+    active = [p for p in projects if p["status"] != "complete"]
+    town_said = (f"New housing in {town}: {len(active):,} projects in progress, "
+                 f"{sum(p['units'] for p in active):,} homes, from proposal to move-in.")
+    said = (f'{html.escape(town_said)} <a href="../">All towns →</a>' if page == "town"
+            else f'{PAGES[page][2]} <a href="../">All projects →</a>' if page else html.escape(TAGLINE))
     intro = f'<div class="intro"><p class="tagline">{said}</p></div>'
     # Over every page's map: on Large projects, only its own projects' changes, so each opens here.
     if page == "large":
         banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="../recent/")
+    elif page == "town":
+        banner, fresh = fresh_banner(changes, today, more="../recent/")
     else:
         banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "recent/")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
-            f'{footer(page, towns, about(everything, towns))}{PANEL}'
+            f'{footer(root, path, towns, about(everything, towns))}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
             f'<script>const FRESH = {fresh};</script>')
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                         json.dumps({key: label for key, (label, _) in STATUSES.items()}))).replace(
         "    /*MAP*/\n", MAP_JS) + FRESH_SCRIPT
-    name = PAGES[page][1] if page else None
-    root = "../" if page else ""
+    name = town if page == "town" else PAGES[page][1] if page else None
+    title = f"New housing in {town} · {NAME}" if page == "town" else f"{name} · {NAME}" if page else NAME
+    description = (town_said if page == "town" else PAGES[page][2] if page else
+                   f"{TAGLINE} {len(active):,} projects in progress across Boston and the towns around it, on a map "
+                   "and in a list for each town, with their status, size and details.")
     return shared.page(
-        "news", f"{name} · {NAME}" if page else NAME, body + script, css=CSS, head=icons_head(root) + MAP_HEAD,
-        symbols=ICON_SYMBOLS, updated=built_at, links=[(NAME, root or "./", not page)], marked={NAME: MARKED_NAME},
-        here=name,
+        "news", title, body + script, css=CSS, head=head(root, path, title, description), symbols=ICON_SYMBOLS,
+        updated=built_at, links=[(NAME, root or "./", not page)], marked={NAME: MARKED_NAME}, here=name, indexable=True,
     )
+
+
+def distance(a, b):
+    """Roughly how far apart two projects are, in kilometers: near enough flat over a city."""
+    dx = (a["lon"] - b["lon"]) * 111.32 * math.cos(math.radians((a["lat"] + b["lat"]) / 2))
+    return math.hypot(dx, (a["lat"] - b["lat"]) * 110.57)
+
+
+NEARBY = 6  # How many of the nearest other projects a project's page lists.
+
+# A project page's small map: the project's dot, ringed in white, and its neighbors', each leading to its page.
+MINI_MAP_JS = """
+<script>
+  {
+    const here = %s, near = %s;
+    const map = new maplibregl.Map({
+      container: "map", style: "https://tiles.openfreemap.org/styles/dark", center: [here.lon, here.lat], zoom: 14,
+      scrollZoom: false, dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: {compact: true},
+    });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
+""" + STYLE_JS + """
+    map.on("load", () => {
+      const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+      if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
+      const point = (p, main) => ({type: "Feature", geometry: {type: "Point", coordinates: [p.lon, p.lat]},
+                                   properties: {href: p.href || "", color: p.color, main: main ? 1 : 0}});
+      map.addSource("dots", {type: "geojson", data: {type: "FeatureCollection",
+                                                     features: [...near.map(p => point(p, false)), point(here, true)]}});
+      map.addLayer({id: "dots", type: "circle", source: "dots", paint: {
+        "circle-color": ["get", "color"], "circle-radius": ["case", ["==", ["get", "main"], 1], 8, 5],
+        "circle-stroke-color": ["case", ["==", ["get", "main"], 1], "#fff", "#000"], "circle-stroke-width": 1.5,
+        "circle-opacity": .9,
+      }});
+      map.on("click", "dots", event => { const href = event.features[0].properties.href; if (href) location.href = href; });
+      map.on("mouseenter", "dots", event => { if (event.features[0].properties.href) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "dots", () => { map.getCanvas().style.cursor = ""; });
+    });
+    // A nearby project's row goes to its page wherever it's clicked, as its name does.
+    for (const row of document.querySelectorAll(".row")) row.addEventListener("click", event => {
+      if (event.target.closest("a") || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      location.href = row.querySelector(".title").href;
+    });
+  }
+</script>"""
+
+
+def render_project(project, projects, built_at, towns, said):
+    """A project's own page, at p/<its id>/: all its panel shows, for anyone who comes to it from a search or a
+    link, with a small map of it and its nearest neighbors, and the way to its town's page."""
+    today = built_at.date()
+    root = "../../"
+    path = f"p/{project['id']}/"
+    label, color = STATUSES[project["status"]]
+    near = sorted((p for p in projects if p is not project), key=lambda p: distance(project, p))[:NEARBY]
+    place = ", ".join(part for part in (project["neighborhood"], project["town"]) if part)
+    town_link = f'<a href="{root}{slug(project["town"])}/">{html.escape(project["town"])}</a>'
+    where = " · ".join(part for part in (town_link, html.escape(project["neighborhood"])) if part)
+    homes = f'{project["units"]:,} home{"s" if project["units"] != 1 else ""}'
+    image = (f'<img class="project-image" src="{html.escape(project["image"])}" alt="{html.escape(project["name"])}" '
+             f'loading="lazy" decoding="async" referrerpolicy="no-referrer">' if project.get("image") else "")
+    note = f'<p class="panel-note">{html.escape(project["note"])}</p>' if project.get("note") else ""
+    facts = "".join(f"<dt>{html.escape(label_)}</dt><dd>{html.escape(value)}</dd>" for label_, value in project.get("facts", []))
+    about_it = "".join(f"<p>{html.escape(line.strip())}</p>" for line in project["description"].split("\n") if line.strip())
+    source = (f'<a class="primary" href="{html.escape(project["link"])}" target="_blank" rel="noopener">'
+              f'View on {html.escape(project.get("origin") or "its source")} ↗</a>' if project["link"] else "")
+    site = (f'<a href="{html.escape(project["site"])}" target="_blank" rel="noopener">Project site ↗</a>'
+            if project.get("site") else "")
+    last = when(updated(project), today)
+    body = (
+        f'<article class="project-page">{image}<p class="panel-where">{where}</p>'
+        f'<h1 class="panel-title">{html.escape(project["name"])}</h1>'
+        f'<div class="panel-pills"><span class="panel-pill">{status_icon(project["status"])}{label}</span>'
+        f'<span class="panel-pill">{homes}</span></div>{note}'
+        f'<dl class="panel-facts">{facts}</dl><div class="panel-about">{about_it}</div>'
+        f'<div class="panel-foot">{source}{site}<a href="{root}#{html.escape(project["id"])}">On the big map</a>'
+        f'<p class="panel-updated">{"Last update " + last if last else ""}</p></div>'
+        f'<div id="map" class="mini"></div>'
+        f'<h2 class="nearby-head">Nearby</h2><ul>{"".join(row(p, today, root=root) for p in near)}</ul></article>'
+        + footer(root, path, towns, said)
+    )
+    spot = lambda p, href=None: {"lat": p["lat"], "lon": p["lon"], "color": STATUSES[p["status"]][1],
+                                 **({"href": href} if href else {})}
+    script = MINI_MAP_JS % (json.dumps(spot(project)),
+                            json.dumps([spot(p, f"{root}p/{p['id']}/") for p in near]))
+    title = f"{project['name']}, {place} · {NAME}"
+    lead = project["description"].split("\n")[0].strip()
+    description = f"{project['name']} in {place}: {homes}, {label.lower()}. {lead}"
+    if len(description) > 160:
+        description = description[:157].rsplit(" ", 1)[0] + "…"
+    return shared.page(
+        "news", title, body + script, css=CSS, head=head(root, path, title, description), symbols=ICON_SYMBOLS,
+        updated=built_at, links=[(NAME, root, False)], marked={NAME: MARKED_NAME}, indexable=True,
+    )
+
+
+def sitemap(projects, towns, built_at):
+    """Every page, for search engines, each project's with the day it last changed."""
+    paths = [("", built_at.date())] + [(path, built_at.date()) for path, _, _ in PAGES.values()]
+    paths += [(f"{slug(town)}/", built_at.date()) for town in towns]
+    paths += [(f"p/{p['id']}/", updated(p)) for p in projects]
+    entries = "".join(f"<url><loc>{SITE_URL}{path}</loc>{f'<lastmod>{day.isoformat()}</lastmod>' if day else ''}</url>"
+                      for path, day in paths)
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>\n'
 
 
 # The rendering at the head of a Boston project's page on bostonplans.org, which the city's data doesn't carry.
@@ -1233,10 +1400,21 @@ def main():
     for page, (path, _, _) in PAGES.items():
         (OUT_DIR / path).mkdir(exist_ok=True)
         (OUT_DIR / path / "index.html").write_text(render(projects, built_at, failed, page))
+    towns = by_town(projects)
+    for town in towns:
+        (OUT_DIR / slug(town)).mkdir(exist_ok=True)
+        (OUT_DIR / slug(town) / "index.html").write_text(render(projects, built_at, failed, "town", town))
+    said = about(projects, towns)
+    for project in projects:
+        (OUT_DIR / "p" / project["id"]).mkdir(parents=True, exist_ok=True)
+        (OUT_DIR / "p" / project["id"] / "index.html").write_text(render_project(project, projects, built_at, towns, said))
+    (OUT_DIR / "sitemap.xml").write_text(sitemap(projects, towns, built_at))
+    (OUT_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n")
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     recent = recently_changed(projects, built_at.date())
-    print(f"Wrote dist/{OUT_DIR.name}/index.html, {', '.join(path for path, _, _ in PAGES.values())} and projects.json: {len(projects)} projects, {len(recent)} changed "
+    print(f"Wrote dist/{OUT_DIR.name}/index.html, {', '.join(path for path, _, _ in PAGES.values())}, {len(towns)} towns' "
+          f"pages, {len(projects)} projects' pages (p/), sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
           f"in the last {RECENT_DAYS} days")
 
 
