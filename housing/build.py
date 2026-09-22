@@ -1007,7 +1007,7 @@ def recently_changed(projects, today):
     return sorted(found, key=lambda pair: (pair[1][0], pair[0]["units"]), reverse=True)
 
 
-def fresh_banner(recent, today, more=True):
+def fresh_banner(recent, today, more="recent/"):
     """The home page's Recently updated line: one of the newest few, which its script turns over, and the way to
     the rest. It stays when nothing's changed lately, saying so."""
     fresh = [{"id": project["id"], "name": project["name"], "what": changed[1], "when": when(changed[0], today)}
@@ -1018,8 +1018,8 @@ def fresh_banner(recent, today, more=True):
                f'{html.escape(first["what"])} · {html.escape(first["when"])}</a>')
     else:
         one = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
-    # The way to the rest, except on Recent updates, which is the rest.
-    see_all = '<a class="fresh-more" href="recent/">See all →</a>' if more else ""
+    # The way to the rest (Recent updates), except on Recent updates, which is the rest.
+    see_all = f'<a class="fresh-more" href="{more}">See all →</a>' if more else ""
     banner = f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>{one}{see_all}</p>'
     return banner, json.dumps(fresh, ensure_ascii=False).replace("</", "<\\/")
 
@@ -1120,8 +1120,11 @@ def render(projects, built_at, failed, page=None):
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
     said = f'{PAGES[page][2]} <a href="../">All projects →</a>' if page else html.escape(TAGLINE)
     intro = f'<div class="intro"><p class="tagline">{said}</p></div>'
-    # Over the home page's map and Recent updates'.
-    banner, fresh = fresh_banner(changes, today, more=not page) if page in (None, "recent") else ("", "[]")
+    # Over every page's map: on Large projects, only its own projects' changes, so each opens here.
+    if page == "large":
+        banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="../recent/")
+    else:
+        banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "recent/")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(page, towns)}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
