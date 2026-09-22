@@ -1007,7 +1007,7 @@ def recently_changed(projects, today):
     return sorted(found, key=lambda pair: (pair[1][0], pair[0]["units"]), reverse=True)
 
 
-def fresh_banner(recent, today):
+def fresh_banner(recent, today, more=True):
     """The home page's Recently updated line: one of the newest few, which its script turns over, and the way to
     the rest. It stays when nothing's changed lately, saying so."""
     fresh = [{"id": project["id"], "name": project["name"], "what": changed[1], "when": when(changed[0], today)}
@@ -1018,8 +1018,9 @@ def fresh_banner(recent, today):
                f'{html.escape(first["what"])} · {html.escape(first["when"])}</a>')
     else:
         one = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
-    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>{one}'
-              f'<a class="fresh-more" href="recent/">See all →</a></p>')
+    # The way to the rest, except on Recent updates, which is the rest.
+    see_all = '<a class="fresh-more" href="recent/">See all →</a>' if more else ""
+    banner = f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>{one}{see_all}</p>'
     return banner, json.dumps(fresh, ensure_ascii=False).replace("</", "<\\/")
 
 
@@ -1119,7 +1120,8 @@ def render(projects, built_at, failed, page=None):
     data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
     said = f'{PAGES[page][2]} <a href="../">All projects →</a>' if page else html.escape(TAGLINE)
     intro = f'<div class="intro"><p class="tagline">{said}</p></div>'
-    banner, fresh = ("", "[]") if page else fresh_banner(changes, today)
+    # Over the home page's map and Recent updates'.
+    banner, fresh = fresh_banner(changes, today, more=not page) if page in (None, "recent") else ("", "[]")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(page, towns)}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
