@@ -7,7 +7,6 @@ Run from the repo's top folder: python3 -m housing.build, which writes dist/hous
 
 import html
 import json
-import math
 import os
 import re
 import shutil
@@ -402,11 +401,11 @@ def steps(status):
     return f'<span class="steps" role="img" aria-label="{label}, step {reached} of {len(STAGES)}">{bars}</span>'
 
 
-def row(project, today, changed=None, large=False, root=""):
+def row(project, today, changed=None, large=False):
     """A project's row. On Recent updates, changed is what happened and when: it takes the status's place after
     the name, and its day the row's date. On Large projects, a bar of four steps shows how far along it is.
-    Both name its town, the page having projects from all of them in one list. Its name links to its own page,
-    root being the way from this page to the site's."""
+    Both name its town, the page having projects from all of them in one list. Its name links to its panel's
+    address on this page (?project=<id>)."""
     label, color = STATUSES[project["status"]]
     day = changed[0] if changed else updated(project)
     ident = html.escape(project["id"])
@@ -419,7 +418,7 @@ def row(project, today, changed=None, large=False, root=""):
         f'<li class="row" id="{ident}" data-status="{project["status"]}" data-units="{project["units"]}" '
         f'data-lat="{project["lat"]:.5f}" data-lon="{project["lon"]:.5f}" data-words="{html.escape(words.casefold())}">'
         f'{status_icon(project["status"], label)}'
-        f'<span class="headline"><a class="title" href="{root}p/{ident}/">{html.escape(project["name"])}</a>'
+        f'<span class="headline"><a class="title" href="?project={ident}">{html.escape(project["name"])}</a>'
         f' <span class="details">{homes} · {html.escape(changed[1]) if changed else label.lower()}</span></span> '
         f'<span class="source">{steps(project["status"]) if large else ""}<span>{place}</span></span>{note}</li>'
     )
@@ -496,16 +495,6 @@ CSS = """
     .site-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .site-links .towns { grid-column: 1 / -1; order: 3; }
   }
-  /* A project's own page: what its panel shows, laid out on the page, its picture first. */
-  .project-page .project-image { display: block; width: 100%; aspect-ratio: 16 / 10; margin: 0 0 1.25rem; border-radius: 6px;
-                                 object-fit: cover; background: #151515; }
-  .project-page .panel-where a { color: #888; }
-  .project-page .panel-where a:hover { color: #fff; text-decoration: none; }
-  .project-page .panel-title { font-size: 1.6rem; }
-  .project-page .panel-about { max-width: 38rem; }
-  .project-page .panel-foot { margin-top: 1rem; }
-  #map.mini { height: 16rem; margin: 2rem 0 0; }
-  .nearby-head { margin: 2.25rem 0 .5rem; color: #777; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   .from .to-town { margin-left: .4em; color: #999; text-decoration: none; }
   .from .to-town:hover { color: #fff; }
   /* What the site is, under its name. */
@@ -668,7 +657,7 @@ PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <p class="panel-note"></p>
 <dl class="panel-facts"></dl>
 <div class="panel-about"></div>
-<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><a class="panel-page">Project page</a><button class="panel-map" type="button">Show on map</button><p class="panel-updated"></p></div>
+<div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-copy" type="button">Copy link</button><button class="panel-map" type="button">Show on map</button><p class="panel-updated"></p></div>
 </div>
 </dialog>"""
 
@@ -689,13 +678,13 @@ FRESH_SCRIPT = """
     const banner = document.querySelector(".fresh-one[href]");
     if (banner) {
       const show = pick => {
-        banner.href = "#" + pick.id;
+        banner.href = "?project=" + encodeURIComponent(pick.id);
         banner.replaceChildren(Object.assign(document.createElement("b"), {textContent: pick.name}), ` · ${pick.what} · ${pick.when}`);
       };
       let at = Math.floor(Math.random() * FRESH.length);
       show(FRESH[at]);
       banner.addEventListener("click", event => {
-        const row = document.getElementById(banner.getAttribute("href").slice(1));
+        const row = document.getElementById(new URLSearchParams(banner.getAttribute("href")).get("project"));
         if (!row || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         row.click();
@@ -793,7 +782,7 @@ MAP_JS = """
     // A dot's note: its name, which opens its panel, and its homes and status.
     const note = row => {
       const status = row.dataset.status, box = document.createElement("div");
-      box.innerHTML = `<a href="#${row.id}" class="to-row">${escape(row.querySelector(".title").textContent)}</a><br>`
+      box.innerHTML = `<a href="?project=${row.id}" class="to-row">${escape(row.querySelector(".title").textContent)}</a><br>`
         + `<span class="muted">${(+row.dataset.units).toLocaleString()} homes · ${labels[status].toLowerCase()}</span>`;
       box.querySelector("a").addEventListener("click", event => { event.preventDefault(); openProject(row, true); });
       return new maplibregl.Popup({offset: radius(row) + 4, maxWidth: "280px"})
@@ -941,7 +930,7 @@ SCRIPT = """
       part("source").hidden = !p.link;
       part("source").href = p.link;
       part("source").textContent = (p.origin ? "View on " + p.origin : "View source") + " ↗";
-      part("page").href = row.querySelector(".title").href;
+      part("copy").textContent = "Copy link";
       part("site").hidden = !p.site;
       part("site").href = p.site;
       part("updated").textContent = p.updated ? "Last update " + p.updated : "";
@@ -956,19 +945,31 @@ SCRIPT = """
       part("image").hidden = true;
       view.classList.remove("shows-picture");
     });
+    // This page's address with a project's panel open in it (?project=<id>), or with none.
+    const withProject = id => {
+      const url = new URL(location.href);
+      if (id) url.searchParams.set("project", id); else url.searchParams.delete("project");
+      url.hash = "";
+      return url.pathname + url.search;
+    };
     function openProject(row, push) {
       fill(row);
-      if (push) { history.pushState(null, "", "#" + row.id); pushed = true; } else history.replaceState(null, "", "#" + row.id);
+      if (push) { history.pushState(null, "", withProject(row.id)); pushed = true; } else history.replaceState(null, "", withProject(row.id));
       if (!view.open) { view.showModal(); document.body.classList.add("viewing"); }
     }
     const closeProject = () => { if (view.open) view.close(); };
     // Closing takes its address away: Back, where opening it added one; otherwise in place.
     view.addEventListener("close", () => {
       document.body.classList.remove("viewing");
-      if (pushed) { pushed = false; history.back(); } else history.replaceState(null, "", location.pathname + location.search);
+      if (pushed) { pushed = false; history.back(); } else history.replaceState(null, "", withProject(null));
     });
     const step = where => { const near = beside(where); if (near) openProject(near, false); };
     part("close").addEventListener("click", closeProject);
+    // The panel's address, which is the project's, to share: the whole of it, this page's and ?project=.
+    part("copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(location.href); part("copy").textContent = "Copied"; }
+      catch { part("copy").textContent = "Couldn’t copy"; }
+    });
     // Esc, wherever focus is: a panel opened by a link as the page loads has nothing in it focused, and the
     // browser's own Esc for a dialog waits for focus inside it.
     document.addEventListener("keydown", event => {
@@ -1001,10 +1002,12 @@ SCRIPT = """
       event.preventDefault();
       openProject(row, true);
     });
-    // A link to a project opens it, with its town's list open behind it; Back and Forward follow the address.
+    // A link to a project (?project=<id>, or #<id> from before) opens its panel, with its town's list open behind
+    // it; Back and Forward follow the address.
     const fromAddress = () => {
-      const row = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
-      if (row && row.matches("details")) {  // A town's, from the footer: its list, open.
+      const id = new URLSearchParams(location.search).get("project") || decodeURIComponent(location.hash.slice(1));
+      const row = id && document.getElementById(id);
+      if (row && row.matches("details")) {  // A town's, from an old link: its list, open.
         if (view.open) { pushed = false; view.close(); }
         row.open = true;
         row.scrollIntoView({block: "start"});
@@ -1048,7 +1051,7 @@ def fresh_banner(recent, today, more="recent/"):
              for project, changed in recent[:FRESH_SHOWN]]
     if fresh:
         first = fresh[0]
-        one = (f'<a class="fresh-one" href="#{html.escape(first["id"])}"><b>{html.escape(first["name"])}</b> · '
+        one = (f'<a class="fresh-one" href="?project={html.escape(first["id"])}"><b>{html.escape(first["name"])}</b> · '
                f'{html.escape(first["what"])} · {html.escape(first["when"])}</a>')
     else:
         one = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
@@ -1144,15 +1147,15 @@ def render(projects, built_at, failed, page=None, town=None):
         order = lambda project: (updated(project) or date.min, project["units"])
         projects = sorted((p for p in projects if p["town"] == town), key=order, reverse=True)
         changes = [(p, c) for p, c in changes if p["town"] == town]
-        rows = "".join(row(project, today, root=root) for project in projects)
+        rows = "".join(row(project, today) for project in projects)
         heading = html.escape(town)
     elif page == "recent":
         projects = [project for project, _ in changes]
-        rows = "".join(row(project, today, changed, root=root) for project, changed in changes)
+        rows = "".join(row(project, today, changed) for project, changed in changes)
         heading = f"In the last {RECENT_DAYS} days"
     elif page == "large":
         projects = sorted((p for p in projects if p["units"] >= LARGE_HOMES), key=lambda p: p["units"], reverse=True)
-        rows = "".join(row(project, today, large=True, root=root) for project in projects)
+        rows = "".join(row(project, today, large=True) for project in projects)
         heading = f"{LARGE_HOMES} homes or more"
     if page:
         note = source_note(town, projects, today).replace(f' <a class="to-town" href="{slug(town)}/">', '<a hidden>') \
@@ -1220,106 +1223,10 @@ def render(projects, built_at, failed, page=None, town=None):
     )
 
 
-def distance(a, b):
-    """Roughly how far apart two projects are, in kilometers: near enough flat over a city."""
-    dx = (a["lon"] - b["lon"]) * 111.32 * math.cos(math.radians((a["lat"] + b["lat"]) / 2))
-    return math.hypot(dx, (a["lat"] - b["lat"]) * 110.57)
-
-
-NEARBY = 6  # How many of the nearest other projects a project's page lists.
-
-# A project page's small map: the project's dot, ringed in white, and its neighbors', each leading to its page.
-MINI_MAP_JS = """
-<script>
-  {
-    const here = %s, near = %s;
-    const map = new maplibregl.Map({
-      container: "map", style: "https://tiles.openfreemap.org/styles/dark", center: [here.lon, here.lat], zoom: 14,
-      scrollZoom: false, dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: {compact: true},
-    });
-    map.touchZoomRotate.disableRotation();
-    map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
-""" + STYLE_JS + """
-    map.on("load", () => {
-      const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-      if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
-      const point = (p, main) => ({type: "Feature", geometry: {type: "Point", coordinates: [p.lon, p.lat]},
-                                   properties: {href: p.href || "", color: p.color, main: main ? 1 : 0}});
-      map.addSource("dots", {type: "geojson", data: {type: "FeatureCollection",
-                                                     features: [...near.map(p => point(p, false)), point(here, true)]}});
-      map.addLayer({id: "dots", type: "circle", source: "dots", paint: {
-        // Rings, as on the main map; this project's the bigger, its ring the thicker.
-        "circle-color": ["get", "color"], "circle-radius": ["case", ["==", ["get", "main"], 1], 8, 5],
-        "circle-stroke-color": ["get", "color"], "circle-stroke-width": ["case", ["==", ["get", "main"], 1], 2.5, 1.5],
-        "circle-opacity": .22,
-      }});
-      map.on("click", "dots", event => { const href = event.features[0].properties.href; if (href) location.href = href; });
-      map.on("mouseenter", "dots", event => { if (event.features[0].properties.href) map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", "dots", () => { map.getCanvas().style.cursor = ""; });
-    });
-    // A nearby project's row goes to its page wherever it's clicked, as its name does.
-    for (const row of document.querySelectorAll(".row")) row.addEventListener("click", event => {
-      if (event.target.closest("a") || event.metaKey || event.ctrlKey || event.shiftKey) return;
-      location.href = row.querySelector(".title").href;
-    });
-  }
-</script>"""
-
-
-def render_project(project, projects, built_at, towns, said):
-    """A project's own page, at p/<its id>/: all its panel shows, for anyone who comes to it from a search or a
-    link, with a small map of it and its nearest neighbors, and the way to its town's page."""
-    today = built_at.date()
-    root = "../../"
-    path = f"p/{project['id']}/"
-    label, color = STATUSES[project["status"]]
-    near = sorted((p for p in projects if p is not project), key=lambda p: distance(project, p))[:NEARBY]
-    place = ", ".join(part for part in (project["neighborhood"], project["town"]) if part)
-    town_link = f'<a href="{root}{slug(project["town"])}/">{html.escape(project["town"])}</a>'
-    where = " · ".join(part for part in (town_link, html.escape(project["neighborhood"])) if part)
-    homes = f'{project["units"]:,} home{"s" if project["units"] != 1 else ""}'
-    image = (f'<img class="project-image" src="{html.escape(project["image"])}" alt="{html.escape(project["name"])}" '
-             f'loading="lazy" decoding="async" referrerpolicy="no-referrer">' if project.get("image") else "")
-    note = f'<p class="panel-note">{html.escape(project["note"])}</p>' if project.get("note") else ""
-    facts = "".join(f"<dt>{html.escape(label_)}</dt><dd>{html.escape(value)}</dd>" for label_, value in project.get("facts", []))
-    about_it = "".join(f"<p>{html.escape(line.strip())}</p>" for line in project["description"].split("\n") if line.strip())
-    source = (f'<a class="primary" href="{html.escape(project["link"])}" target="_blank" rel="noopener">'
-              f'View on {html.escape(project.get("origin") or "its source")} ↗</a>' if project["link"] else "")
-    site = (f'<a href="{html.escape(project["site"])}" target="_blank" rel="noopener">Project site ↗</a>'
-            if project.get("site") else "")
-    last = when(updated(project), today)
-    body = (
-        f'<article class="project-page">{image}<p class="panel-where">{where}</p>'
-        f'<h1 class="panel-title">{html.escape(project["name"])}</h1>'
-        f'<div class="panel-pills"><span class="panel-pill">{status_icon(project["status"])}{label}</span>'
-        f'<span class="panel-pill">{homes}</span></div>{note}'
-        f'<dl class="panel-facts">{facts}</dl><div class="panel-about">{about_it}</div>'
-        f'<div class="panel-foot">{source}{site}<a href="{root}#{html.escape(project["id"])}">On the big map</a>'
-        f'<p class="panel-updated">{"Last update " + last if last else ""}</p></div>'
-        f'<div id="map" class="mini"></div>'
-        f'<h2 class="nearby-head">Nearby</h2><ul>{"".join(row(p, today, root=root) for p in near)}</ul></article>'
-        + footer(root, path, towns, said)
-    )
-    spot = lambda p, href=None: {"lat": p["lat"], "lon": p["lon"], "color": STATUSES[p["status"]][1],
-                                 **({"href": href} if href else {})}
-    script = MINI_MAP_JS % (json.dumps(spot(project)),
-                            json.dumps([spot(p, f"{root}p/{p['id']}/") for p in near]))
-    title = f"{project['name']}, {place} · {NAME}"
-    lead = project["description"].split("\n")[0].strip()
-    description = f"{project['name']} in {place}: {homes}, {label.lower()}. {lead}"
-    if len(description) > 160:
-        description = description[:157].rsplit(" ", 1)[0] + "…"
-    return shared.page(
-        "news", title, body + script, css=CSS, head=head(root, path, title, description), symbols=ICON_SYMBOLS,
-        updated=built_at, links=[(NAME, root, False)], marked={NAME: MARKED_NAME}, indexable=True,
-    )
-
-
 def sitemap(projects, towns, built_at):
-    """Every page, for search engines, each project's with the day it last changed."""
+    """Every page, for search engines. A project's panel has no page of its own to list."""
     paths = [("", built_at.date())] + [(path, built_at.date()) for path, _, _ in PAGES.values()]
     paths += [(f"{slug(town)}/", built_at.date()) for town in towns]
-    paths += [(f"p/{p['id']}/", updated(p)) for p in projects]
     entries = "".join(f"<url><loc>{SITE_URL}{path}</loc>{f'<lastmod>{day.isoformat()}</lastmod>' if day else ''}</url>"
                       for path, day in paths)
     return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>\n'
@@ -1406,17 +1313,13 @@ def main():
     for town in towns:
         (OUT_DIR / slug(town)).mkdir(exist_ok=True)
         (OUT_DIR / slug(town) / "index.html").write_text(render(projects, built_at, failed, "town", town))
-    said = about(projects, towns)
-    for project in projects:
-        (OUT_DIR / "p" / project["id"]).mkdir(parents=True, exist_ok=True)
-        (OUT_DIR / "p" / project["id"] / "index.html").write_text(render_project(project, projects, built_at, towns, said))
     (OUT_DIR / "sitemap.xml").write_text(sitemap(projects, towns, built_at))
     (OUT_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n")
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     recent = recently_changed(projects, built_at.date())
     print(f"Wrote dist/{OUT_DIR.name}/index.html, {', '.join(path for path, _, _ in PAGES.values())}, {len(towns)} towns' "
-          f"pages, {len(projects)} projects' pages (p/), sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
+          f"pages, sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
           f"in the last {RECENT_DAYS} days")
 
 
