@@ -1,6 +1,6 @@
 {
-  "name": "Housing Tracker Boston",
-  "short_name": "Housing",
+  "name": "Build Housing Boston",
+  "short_name": "Build Housing",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

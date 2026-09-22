@@ -167,7 +167,7 @@ class Recent(unittest.TestCase):
         self.assertNotIn('id="boston-1"', page)
         self.assertIn("<title>New housing in Somerville", page)
         self.assertIn('href="?project=massbuilds-1"', page)  # Its panel, on this page.
-        self.assertIn('<link rel="canonical" href="https://housing.grahamhagenah.com/somerville/">', page)
+        self.assertIn('<link rel="canonical" href="https://buildhousing.org/somerville/">', page)
         self.assertIn('content="index, follow"', page)
 
 
@@ -177,7 +177,7 @@ class Sitemap(unittest.TestCase):
         projects = [dict(project("boston-1"), since=None, was=None)]
         xml = build.sitemap(projects, ["Boston"], built)
         for path in ("", "recent/", "large/", "boston/"):
-            self.assertIn(f"<loc>https://housing.grahamhagenah.com/{path}</loc>", xml)
+            self.assertIn(f"<loc>https://buildhousing.org/{path}</loc>", xml)
         self.assertNotIn("project", xml)  # A project's panel has no page of its own.
 
 

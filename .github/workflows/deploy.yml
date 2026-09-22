@@ -98,7 +98,7 @@ jobs:
             git push -qf git@github.com:grahamhagenah/pushpin.git gh-pages
 
       # The housing tracker, pushed to the grahamhagenah/housing repo's gh-pages branch, which publishes it to
-      # housing.grahamhagenah.com. The cities update their lists every few weeks or months, so it rebuilds every
+      # buildhousing.org. The cities update their lists every few weeks or months, so it rebuilds every
       # six hours, or at once after a push. Until the repo's deploy key is kept as HOUSING_DEPLOY_KEY, it's
       # built (so a problem shows here) but not published.
       - run: python3 -m housing.build
@@ -112,7 +112,7 @@ jobs:
           DEPLOY_KEY: ${{ secrets.HOUSING_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then echo "No HOUSING_DEPLOY_KEY yet; not publishing."; exit 0; fi
-          echo housing.grahamhagenah.com > dist/housing/CNAME
+          echo buildhousing.org > dist/housing/CNAME
           touch dist/housing/.nojekyll
           mkdir -p ~/.ssh && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/housing && chmod 600 ~/.ssh/housing
           cd dist/housing

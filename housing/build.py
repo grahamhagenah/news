@@ -23,12 +23,14 @@ ROOT = Path(__file__).parent
 OUT_DIR = ROOT.parent / "dist" / "housing"
 EDITS = ROOT / "edits.txt"
 USER_AGENT = "Mozilla/5.0 (compatible; housing-tracker/1.0)"
-SITE_URL = "https://housing.grahamhagenah.com/"
-NAME = "Housing Tracker Boston"
+SITE_URL = "https://buildhousing.org/"
+NAME = "Build Housing Boston"
 # The name as the header sets it, with the city in gray after it.
-MARKED_NAME = 'Housing Tracker <span class="city">Boston</span>'
+MARKED_NAME = 'Build Housing <span class="city">Boston</span>'
 TAGLINE = "New homes around Boston, from proposal to move-in."
-PROJECTS_URL = SITE_URL + "projects.json"
+# The last build's record, kept beside the site. The address before buildhousing.org is tried after it, so the
+# first builds at the new one keep what the old one knew: each project's status, and where to find its picture.
+PROJECTS_URLS = [SITE_URL + "projects.json", "https://housing.grahamhagenah.com/projects.json"]
 
 # Boston's projects under Article 80 review, the city's review of anything over about 20,000 square feet or
 # 15 homes, with their status, homes and dates: the Planning Department's own map of them, which the city's
@@ -1736,7 +1738,11 @@ def add_images(projects, known):
 
 def main():
     built_at = datetime.now(timezone.utc)
-    previous = shared.previous_build(PROJECTS_URL, USER_AGENT)
+    previous = {}
+    for where in PROJECTS_URLS:
+        previous = shared.previous_build(where, USER_AGENT)
+        if previous:
+            break
     every = float(os.environ.get("HOUSING_EVERY_HOURS") or 0)
     if every and previous.get("built") and \
             built_at - datetime.fromisoformat(previous["built"]) < timedelta(hours=every) - timedelta(minutes=10):
