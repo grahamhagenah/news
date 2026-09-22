@@ -29,9 +29,8 @@ NAME = "Build Housing"
 PLACE = "Boston"
 
 TAGLINE = "A tracker for new housing projects around Boston, from proposal to move-in."
-# The last build's record, kept beside the site. The address before buildhousing.org is tried after it, so the
-# first builds at the new one keep what the old one knew: each project's status, and where to find its picture.
-PROJECTS_URLS = [SITE_URL + "projects.json", "https://housing.grahamhagenah.com/projects.json"]
+# The last build's record, kept beside the site: each project's status, and where to find its picture.
+PROJECTS_URL = SITE_URL + "projects.json"
 
 # Boston's projects under Article 80 review, the city's review of anything over about 20,000 square feet or
 # 15 homes, with their status, homes and dates: the Planning Department's own map of them, which the city's
@@ -1744,11 +1743,7 @@ def add_images(projects, known):
 
 def main():
     built_at = datetime.now(timezone.utc)
-    previous = {}
-    for where in PROJECTS_URLS:
-        previous = shared.previous_build(where, USER_AGENT)
-        if previous:
-            break
+    previous = shared.previous_build(PROJECTS_URL, USER_AGENT)
     every = float(os.environ.get("HOUSING_EVERY_HOURS") or 0)
     if every and previous.get("built") and \
             built_at - datetime.fromisoformat(previous["built"]) < timedelta(hours=every) - timedelta(minutes=10):
