@@ -447,10 +447,8 @@ CSS = """
   /* Full screen: the map the whole of it, without the corners and edge it has in the page. */
   #map:fullscreen { height: 100%; margin: 0; border: 0; border-radius: 0; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
-  /* Room to see: taller on a tall window, and out past the text on a wide one (the page itself never scrolls
-     sideways: body clips it). */
+  /* Room to see: taller on a tall window, and in line with everything else on the page, whatever its width. */
   @media (min-height: 50rem) and (min-width: 46rem) { #map { height: 27rem; } }
-  @media (min-width: 62rem) { #map { width: calc(100% + 6rem); margin-left: -3rem; } }
   /* Under the map, the filter and the search: the filter's choices on the left, on two lines (the four steps of
      a project's way, then Complete, Stalled and All), the search on the right, level with the first; on a phone,
      the choices as they wrap, and the search on a line of its own under them, wide enough for a thumb. */
