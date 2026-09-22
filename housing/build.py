@@ -523,6 +523,11 @@ CSS = """
   .panel-say h3 { margin: 0 0 .4rem; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   .panel-say ul { display: grid; gap: .3rem; }
   .panel-say a { color: #eee; font-size: .88rem; }
+  /* A page's heading: the header says the same in its own way, so this is for search engines and screen readers. */
+  .page-heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+                  clip-path: inset(50%); white-space: nowrap; }
+  /* What a town's page says about its town, under the line that says what it is. */
+  .page-note { max-width: 38rem; margin: -.5rem 0 1.25rem; color: #999; font-size: .9rem; line-height: 1.6; }
   /* What the site is, under its name. */
   .intro { margin: -1.25rem 0 1.25rem; }
   /* On as many lines as it takes, rather than cut short: the home page's fits on one. */
@@ -1254,6 +1259,42 @@ def by_town(projects):
     return sorted({project["town"] for project in projects}, key=lambda town: (town != "Boston", town))
 
 
+def as_data(page, town, projects, today, title, description):
+    """What the page is, for search engines to read: the site itself; a town's list of projects; and Have your
+    say's meetings as events, each with when it starts and where to join."""
+    url = SITE_URL + (f"{slug(town)}/" if page == "town" else PAGES[page][0] if page else "")
+    graph = [{"@type": "WebSite", "@id": SITE_URL, "name": NAME, "url": SITE_URL, "description": TAGLINE,
+              "inLanguage": "en-US"},
+             {"@type": "WebPage", "name": title, "url": url, "description": description, "isPartOf": {"@id": SITE_URL}}]
+    if page == "town":
+        graph.append({"@type": "ItemList", "name": f"Housing projects in {town}", "url": url,
+                      "numberOfItems": len(projects), "itemListElement": [
+                          {"@type": "ListItem", "position": at, "name": project["name"],
+                           "url": f"{url}?project={project['id']}"}
+                          for at, project in enumerate(projects[:100], start=1)]})
+    if page == "say":
+        for project in projects:
+            for item in project.get("say", []):
+                if item["kind"] != "meeting":
+                    continue
+                starts = item["when"]
+                graph.append({
+                    "@type": "Event", "name": f"{item['what']}: {project['name']}",
+                    "startDate": starts.isoformat(),
+                    "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
+                    "eventStatus": "https://schema.org/EventScheduled",
+                    "location": {"@type": "VirtualLocation", "url": item["link"]},
+                    "organizer": {"@type": "Organization",
+                                  "name": "Boston Planning Department" if project["id"].startswith("boston-")
+                                  else "Cambridge Planning Board"},
+                    "description": f"{item['what']} about {project['name']}, {project['units']:,} homes in "
+                                   f"{project['neighborhood'] or project['town']}.",
+                    "url": item["link"],
+                })
+    data = json.dumps({"@context": "https://schema.org", "@graph": graph}, ensure_ascii=False).replace("</", "<\\/")
+    return f'<script type="application/ld+json">{data}</script>'
+
+
 def head(path, title, description):
     """What a page tells search engines and link previews: what it's about, and its one address."""
     url = SITE_URL + path
@@ -1263,6 +1304,36 @@ def head(path, title, description):
             f'<meta property="og:title" content="{html.escape(title)}">'
             f'<meta property="og:description" content="{html.escape(description)}"><meta property="og:url" content="{url}">'
             + icons_head() + MAP_HEAD)
+
+
+def page_heading(page, town):
+    """A page's own heading, for search engines and screen readers: the header shows it as the site's name and
+    the page's, which read as one line there but aren't a heading."""
+    return (f"New housing in {town}" if page == "town" else PAGES[page][1] if page
+            else "New housing around Boston")
+
+
+def counted(projects, status):
+    return sum(1 for project in projects if project["status"] == status)
+
+
+def town_note(town, projects, today):
+    """A few lines about a town, under its heading: how much is under way and at what stage, the largest of it,
+    and where the numbers come from."""
+    active = [p for p in projects if p["status"] != "complete"]
+    stages = ", ".join(f"{counted(active, key)} {label.lower()}" for key, (label, _) in STATUSES.items()
+                       if key != "complete" and counted(active, key))
+    biggest = sorted(active, key=lambda p: p["units"], reverse=True)[:3]
+    names = ", ".join(f'{html.escape(p["name"])} ({p["units"]:,} homes)' for p in biggest)
+    done = [p for p in projects if p["status"] == "complete"]
+    from_ = (FROM[town] if town in FROM else "MAPC’s MassBuilds")
+    latest = max((p["dated"] for p in projects if p["dated"]), default=None)
+    return (
+        f'<p class="page-note">{html.escape(town)} has {len(active):,} housing projects under way, '
+        f'{sum(p["units"] for p in active):,} homes in all: {stages}. The largest are {names}. '
+        f'{len(done):,} more have been finished since {COMPLETE_SINCE}. The list comes from {from_}'
+        f'{f", last updated {when(latest, today)}" if latest else ""}, and is rebuilt every few hours.</p>'
+    ) if active or done else ""
 
 
 def render(projects, built_at, failed, page=None, town=None):
@@ -1334,7 +1405,10 @@ def render(projects, built_at, failed, page=None, town=None):
                  f"{sum(p['units'] for p in active):,} homes, from proposal to move-in.")
     said = (f'{html.escape(town_said)} <a href="/">All towns →</a>' if page == "town"
             else f'{PAGES[page][2]} <a href="/">All projects →</a>' if page else html.escape(TAGLINE))
-    intro = f'<div class="intro"><p class="tagline">{said}</p></div>'
+    # The page's heading, which the header says in its own way, and on a town's page a few lines about it.
+    intro = (f'<h1 class="page-heading">{html.escape(page_heading(page, town))}</h1>'
+             f'<div class="intro"><p class="tagline">{said}</p></div>'
+             + (town_note(town, projects, today) if page == "town" else ""))
     # Over every page's map: on Large projects, only its own projects' changes, so each opens here.
     if page == "large":
         banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="/recent/")
@@ -1363,7 +1437,9 @@ def render(projects, built_at, failed, page=None, town=None):
                    f"{TAGLINE} {len(active):,} projects in progress across Boston and the towns around it, on a map "
                    "and in a list for each town, with their status, size and details.")
     return shared.page(
-        "news", title, body + script, css=CSS, head=head(path, title, description), symbols=ICON_SYMBOLS,
+        "news", title, body + script, css=CSS,
+        head=head(path, title, description) + as_data(page, town, projects, today, title, description),
+        symbols=ICON_SYMBOLS,
         updated=built_at, links=[(NAME, "/", not page)], marked={NAME: MARKED_NAME}, here=name, indexable=True,
     )
 
