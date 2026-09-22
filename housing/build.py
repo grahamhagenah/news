@@ -822,23 +822,28 @@ STYLE_JS = """    // OpenFreeMap's dark style, recolored to read more easily: th
 # draw a set of projects' dots (biggest first); to say what it's leaving out; to fit a set in view; and to go to
 # one project and open its note.
 MAP_JS = """
-    const map = new maplibregl.Map({
-      container: "map", style: "https://tiles.openfreemap.org/styles/dark", center: [-71.08, 42.365],
-      zoom: (innerWidth < 544 ? 11 : 12) - 1,  // A phone's narrower map, one step further out.
-      scrollZoom: false, dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: {compact: true},
-    });
-    map.touchZoomRotate.disableRotation();
-    map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
-    map.addControl(new maplibregl.FullscreenControl(), "top-left");
-    // Full screen has no page to scroll past, so there the trackpad and wheel zoom the map; in the page they
-    // don't, where they'd take the scroll the reader meant for the page itself.
-    document.addEventListener("fullscreenchange", () => {
-      if (document.fullscreenElement === map.getContainer()) map.scrollZoom.enable(); else map.scrollZoom.disable();
-    });
+    // MapLibre is a megabyte, so it's fetched when the map is about to be seen, not with the page. Until then
+    // the page talks to this stand-in, which keeps what it's asked for and hands it over once the map is up.
+    const MAP_CSS = "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.24.0/maplibre-gl.min.css";
+    const MAP_SRC = "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.24.0/maplibre-gl.js";
+    const mapBox = document.getElementById("map");
+    const hintBox = Object.assign(document.createElement("div"), {className: "map-hint"});
+    mapBox.append(hintBox);
+    const START = innerWidth < 544 ? 11 : 12;  // A phone's narrower map, one step further out.
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const radius = row => Math.max(2.2, Math.min(7, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 3.3));
     // A number for each project, so a row and its dot can find each other and light up together.
     const numbers = new Map(rows.map((row, at) => [row.id, at]));
+    let map = null, opening = null, lit = null;
+    const wanted = {shown: [], fit: null};  // What was asked for before the map was up.
+    const zoomHandlers = [];
+    // The smaller over the bigger: a higher sort key is drawn on top.
+    const geojson = shown => ({type: "FeatureCollection", features: shown.map(row => ({
+      type: "Feature", geometry: {type: "Point", coordinates: [+row.dataset.lon, +row.dataset.lat]},
+      id: numbers.get(row.id),
+      properties: {row: row.id, name: row.querySelector(".title").textContent, homes: +row.dataset.units,
+                   color: colors[row.dataset.status], radius: radius(row), order: -row.dataset.units},
+    }))});
     // A dot's note: its name, which opens its panel, and its homes and status.
     const note = row => {
       const status = row.dataset.status, box = document.createElement("div");
@@ -848,87 +853,109 @@ MAP_JS = """
       return new maplibregl.Popup({offset: radius(row) + 4, maxWidth: "280px"})
         .setLngLat([+row.dataset.lon, +row.dataset.lat]).setDOMContent(box).addTo(map);
     };
-    let waiting = null;  // What to draw once the map's style has loaded.
-    const hintBox = Object.assign(document.createElement("div"), {className: "map-hint"});
+    const fitTo = shown => {
+      const bounds = new maplibregl.LngLatBounds();
+      for (const row of shown) bounds.extend([+row.dataset.lon, +row.dataset.lat]);
+      map.fitBounds(bounds, {padding: 30, maxZoom: 13, animate: false});
+    };
     const dotMap = {
-      container: map.getContainer(),
-      zoom: () => Math.round(map.getZoom()) + 1,
-      onZoom: then => map.on("zoomend", then),
-      // The smaller over the bigger: a higher sort key is drawn on top.
+      container: mapBox,
+      zoom: () => map ? Math.round(map.getZoom()) + 1 : START,
+      onZoom: then => zoomHandlers.push(then),
       draw: shown => {
-        const data = {type: "FeatureCollection", features: shown.map(row => ({
-          type: "Feature", geometry: {type: "Point", coordinates: [+row.dataset.lon, +row.dataset.lat]},
-          id: numbers.get(row.id),
-          properties: {row: row.id, name: row.querySelector(".title").textContent, homes: +row.dataset.units,
-                       color: colors[row.dataset.status], radius: radius(row), order: -row.dataset.units},
-        }))};
-        if (map.getSource("dots")) map.getSource("dots").setData(data); else waiting = data;
+        wanted.shown = shown;
+        if (map && map.getSource("dots")) map.getSource("dots").setData(geojson(shown));
       },
       hint: text => { hintBox.textContent = text; },
-      fit: shown => {
-        const bounds = new maplibregl.LngLatBounds();
-        for (const row of shown) bounds.extend([+row.dataset.lon, +row.dataset.lat]);
-        map.fitBounds(bounds, {padding: 30, maxZoom: 13, animate: false});
-      },
-      goTo: row => {
+      fit: shown => { wanted.fit = shown; if (map && map.loaded()) fitTo(shown); },
+      // Asked to go somewhere before it's up (Show on map), the map is fetched there and then.
+      goTo: row => start().then(() => {
         map.once("moveend", () => note(row));
         map.flyTo({center: [+row.dataset.lon, +row.dataset.lat], zoom: 15});
-      },
-    };
-    dotMap.container.append(hintBox);
-    // Until the map has loaded (OpenFreeMap's servers are slow now and then), a note in its middle.
-    const loading = Object.assign(document.createElement("div"), {className: "map-loading", textContent: "Loading map…"});
-    dotMap.container.append(loading);
-""" + STYLE_JS + """    map.on("load", () => {
-      loading.remove();
-      // The credits folded to their ⓘ, which the map's terms ask be on it; MapLibre opens them at first on a wide map.
-      const credits = dotMap.container.querySelector(".maplibregl-ctrl-attrib");
-      if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
-      map.addSource("dots", {type: "geojson", data: waiting || {type: "FeatureCollection", features: []}});
-      map.addLayer({
-        id: "dots", type: "circle", source: "dots", layout: {"circle-sort-key": ["get", "order"]},
-        // A ring in the status's color around a faint fill of the same; the one under the pointer, or under it
-        // in the list, brighter and thicker.
-        paint: {"circle-color": ["get", "color"],
-                "circle-radius": ["+", ["get", "radius"], ["case", ["boolean", ["feature-state", "lit"], false], 2, 0]],
-                "circle-opacity": ["case", ["boolean", ["feature-state", "lit"], false], .5, .22],
-                "circle-stroke-color": ["get", "color"],
-                "circle-stroke-width": ["case", ["boolean", ["feature-state", "lit"], false], 2.5, 1.5]},
-      });
-      // Close in, the bigger projects say what they are: at street level every one of them, further out only
-      // the largest, so the names never crowd the map.
-      map.addLayer({
-        id: "dot-names", type: "symbol", source: "dots", minzoom: 12.5,
-        filter: [">=", ["get", "homes"], ["step", ["zoom"], 300, 13.5, 150, 14.5, 50, 15.5, 0]],
-        layout: {"text-field": ["get", "name"], "text-font": ["Noto Sans Regular"], "text-size": 11,
-                 "text-offset": [0, 1.1], "text-anchor": "top", "text-max-width": 9, "text-optional": true,
-                 "symbol-sort-key": ["-", 0, ["get", "homes"]]},
-        paint: {"text-color": "#c9c9c9", "text-halo-color": "#242426", "text-halo-width": 1.4},
-      });
-      map.on("click", "dots", event => note(document.getElementById(event.features[0].properties.row)));
-      // The dot under the pointer and its row, lit together, and the same the other way about.
-      let lit = null;
-      const light = (id, on) => {
+      }),
+      light: (id, on) => {
         if (id === null || id === undefined) return;
-        map.setFeatureState({source: "dots", id}, {lit: on});
+        if (map && map.getSource("dots")) map.setFeatureState({source: "dots", id}, {lit: on});
         const row = rows[id];
         if (row) row.classList.toggle("near", on);
-      };
-      dotMap.light = light;
-      map.on("mousemove", "dots", event => {
-        const id = event.features[0].id;
-        if (id === lit) return;
-        light(lit, false);
-        light(lit = id, true);
-      });
-      map.on("mouseleave", "dots", () => { light(lit, false); lit = null; });
-      map.on("mouseenter", "dots", () => { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", "dots", () => { map.getCanvas().style.cursor = ""; });
+      },
+    };
+    // The library, fetched once; then the map itself.
+    const library = () => new Promise((done, failed) => {
+      if (window.maplibregl) return done();
+      document.head.append(Object.assign(document.createElement("link"), {rel: "stylesheet", href: MAP_CSS}));
+      document.head.append(Object.assign(document.createElement("script"), {src: MAP_SRC, onload: done, onerror: failed}));
     });
+    const start = () => opening || (opening = library().then(build));
+    function build() {
+      // Until the map has loaded (OpenFreeMap's servers are slow now and then), a note in its middle.
+      const loading = Object.assign(document.createElement("div"), {className: "map-loading", textContent: "Loading map…"});
+      mapBox.append(loading);
+      map = new maplibregl.Map({
+        container: mapBox, style: "https://tiles.openfreemap.org/styles/dark", center: [-71.08, 42.365],
+        zoom: START - 1, scrollZoom: false, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+        attributionControl: {compact: true},
+      });
+      map.touchZoomRotate.disableRotation();
+      map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
+      map.addControl(new maplibregl.FullscreenControl(), "top-left");
+      // Full screen has no page to scroll past, so there the trackpad and wheel zoom the map; in the page they
+      // don't, where they'd take the scroll the reader meant for the page itself.
+      document.addEventListener("fullscreenchange", () => {
+        if (document.fullscreenElement === mapBox) map.scrollZoom.enable(); else map.scrollZoom.disable();
+      });
+      for (const then of zoomHandlers) map.on("zoomend", then);
+""" + STYLE_JS + """      map.on("load", () => {
+        loading.remove();
+        // The credits folded to their ⓘ, which the map's terms ask be on it; MapLibre opens them at first on a wide map.
+        const credits = mapBox.querySelector(".maplibregl-ctrl-attrib");
+        if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
+        map.addSource("dots", {type: "geojson", data: geojson(wanted.shown)});
+        map.addLayer({
+          id: "dots", type: "circle", source: "dots", layout: {"circle-sort-key": ["get", "order"]},
+          // A ring in the status's color around a faint fill of the same; the one under the pointer, or under it
+          // in the list, brighter and thicker.
+          paint: {"circle-color": ["get", "color"],
+                  "circle-radius": ["+", ["get", "radius"], ["case", ["boolean", ["feature-state", "lit"], false], 2, 0]],
+                  "circle-opacity": ["case", ["boolean", ["feature-state", "lit"], false], .5, .22],
+                  "circle-stroke-color": ["get", "color"],
+                  "circle-stroke-width": ["case", ["boolean", ["feature-state", "lit"], false], 2.5, 1.5]},
+        });
+        // Close in, the bigger projects say what they are: at street level every one of them, further out only
+        // the largest, so the names never crowd the map.
+        map.addLayer({
+          id: "dot-names", type: "symbol", source: "dots", minzoom: 12.5,
+          filter: [">=", ["get", "homes"], ["step", ["zoom"], 300, 13.5, 150, 14.5, 50, 15.5, 0]],
+          layout: {"text-field": ["get", "name"], "text-font": ["Noto Sans Regular"], "text-size": 11,
+                   "text-offset": [0, 1.1], "text-anchor": "top", "text-max-width": 9, "text-optional": true,
+                   "symbol-sort-key": ["-", 0, ["get", "homes"]]},
+          paint: {"text-color": "#c9c9c9", "text-halo-color": "#242426", "text-halo-width": 1.4},
+        });
+        if (wanted.fit && wanted.fit.length) fitTo(wanted.fit);
+        map.on("click", "dots", event => note(document.getElementById(event.features[0].properties.row)));
+        // The dot under the pointer and its row, lit together, and the same the other way about.
+        map.on("mousemove", "dots", event => {
+          const id = event.features[0].id;
+          if (id === lit) return;
+          dotMap.light(lit, false);
+          dotMap.light(lit = id, true);
+        });
+        map.on("mouseleave", "dots", () => { dotMap.light(lit, false); lit = null; map.getCanvas().style.cursor = ""; });
+        map.on("mouseenter", "dots", () => { map.getCanvas().style.cursor = "pointer"; });
+      });
+    }
+    // Fetched as the map comes near the window, so a reader who never reaches it never waits for it.
+    if (window.IntersectionObserver) {
+      const watcher = new IntersectionObserver(seen => {
+        if (seen.some(one => one.isIntersecting)) { watcher.disconnect(); start(); }
+      }, {rootMargin: "300px"});
+      watcher.observe(mapBox);
+    } else start();
 """
 
-MAP_HEAD = ('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.24.0/maplibre-gl.min.css">'
-               '<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.24.0/maplibre-gl.js"></script>')
+# The map's library and tiles are fetched later, by the script; this only warms the way to them.
+MAP_HEAD = ('<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>'
+            '<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>')
 
 
 SCRIPT = """
@@ -1006,7 +1033,15 @@ SCRIPT = """
     if (fitting && rows.length) dotMap.fit(rows);
 
     // A project's panel: opened from its row or its dot, with its id in the address so it can be linked to.
-    const data = JSON.parse(document.getElementById("projects").textContent);
+    // Their details are a file of their own (the same for every page, so a browser fetches it once), asked for
+    // as a project is about to be opened rather than with the page.
+    let panels = null, asking = null;
+    const details = () => asking || (asking = fetch("/panels.json").then(answer => answer.json())
+      .then(all => (panels = all)));
+    // Pointing at a row is a good sign one's about to be opened; failing that, once the page is quiet.
+    addEventListener("pointerover", event => { if (event.target.closest(".row, .fresh-one")) details(); },
+                     {once: true, passive: true});
+    (window.requestIdleCallback || (then => setTimeout(then, 2500)))(details);
     const view = document.querySelector("dialog.project");
     const part = name => view.querySelector(".panel-" + name);
     const make = (tag, props, ...children) => { const el = Object.assign(document.createElement(tag), props); el.append(...children); return el; };
@@ -1019,7 +1054,7 @@ SCRIPT = """
     };
     function fill(row) {
       shown = row;
-      const p = data[row.id];
+      const p = panels[row.id];
       rows.forEach(other => other.classList.toggle("lit", other === row));
       part("where").textContent = [p.town, p.neighborhood].filter(Boolean).join(" · ");
       part("title").textContent = p.name;
@@ -1066,7 +1101,8 @@ SCRIPT = """
       url.hash = "";
       return url.pathname + url.search;
     };
-    function openProject(row, push) {
+    async function openProject(row, push) {
+      await details();
       fill(row);
       if (push) { history.pushState(null, "", withProject(row.id)); pushed = true; } else history.replaceState(null, "", withProject(row.id));
       if (!view.open) { view.showModal(); document.body.classList.add("viewing"); }
@@ -1123,7 +1159,7 @@ SCRIPT = """
     });
     // A link to a project (?project=<id>, or #<id> from before) opens its panel, with its town's list open behind
     // it; Back and Forward follow the address.
-    const fromAddress = () => {
+    const fromAddress = async () => {
       const id = new URLSearchParams(location.search).get("project") || decodeURIComponent(location.hash.slice(1));
       const row = id && document.getElementById(id);
       if (row && row.matches("details")) {  // A town's, from an old link: its list, open.
@@ -1132,7 +1168,7 @@ SCRIPT = """
         row.scrollIntoView({block: "start"});
       } else if (row && row.classList.contains("row")) {
         row.closest("details").open = true;
-        if (view.open) fill(row); else openProject(row, false);
+        if (view.open) { await details(); fill(row); } else openProject(row, false);
       } else if (view.open) { pushed = false; view.close(); }
     };
     addEventListener("popstate", () => { pushed = false; fromAddress(); });
@@ -1399,7 +1435,6 @@ def render(projects, built_at, failed, page=None, town=None):
     unreached = list(dict.fromkeys("MassBuilds" if town in INNER_RING else FROM.get(town, town) for town in failed))
     missing = (f'<p class="empty">Couldn’t reach {" or ".join(unreached)} this time; showing what the last build had.</p>'
                if failed else "")
-    data = json.dumps({p["id"]: panel_data(p, today) for p in projects}, ensure_ascii=False).replace("</", "<\\/")
     active = [p for p in projects if p["status"] != "complete"]
     town_said = (f"New housing in {town}: {len(active):,} projects in progress, "
                  f"{sum(p['units'] for p in active):,} homes, from proposal to move-in.")
@@ -1426,7 +1461,6 @@ def render(projects, built_at, failed, page=None, town=None):
         banner += say_line(projects, today, more="/have-your-say/", none=nothing)
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(path, towns, about(everything, towns))}{PANEL}'
-            f'<script type="application/json" id="projects">{data}</script>'
             f'<script>const FRESH = {fresh};</script>')
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                         json.dumps({key: label for key, (label, _) in STATUSES.items()}))).replace(
@@ -1688,13 +1722,16 @@ def main():
     for town in towns:
         (OUT_DIR / slug(town)).mkdir(exist_ok=True)
         (OUT_DIR / slug(town) / "index.html").write_text(render(projects, built_at, failed, "town", town))
+    # Every project's panel, for any page to ask for as one is opened.
+    (OUT_DIR / "panels.json").write_text(json.dumps(
+        {p["id"]: panel_data(p, built_at.date()) for p in projects}, ensure_ascii=False, default=str))
     (OUT_DIR / "sitemap.xml").write_text(sitemap(projects, towns, built_at))
     (OUT_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n")
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     recent = recently_changed(projects, built_at.date())
     print(f"Wrote dist/{OUT_DIR.name}/index.html, {', '.join(path for path, _, _ in PAGES.values())}, {len(towns)} towns' "
-          f"pages, sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
+          f"pages, panels.json, sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
           f"in the last {RECENT_DAYS} days")
 
 

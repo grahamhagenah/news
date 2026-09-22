@@ -193,15 +193,16 @@ class Page(unittest.TestCase):
         self.assertIn("Aug 1", page)
         self.assertIn("Jan 2024", page)
 
-    def test_panel_data_is_on_the_page_and_cant_close_its_script(self):
+    def test_a_panels_details_are_asked_for_not_carried_by_the_page(self):
         projects = [project("boston-1", description="Ends </script> here", facts=[["Cost", "$5M"]])]
         projects[0]["since"] = None
         page = build.render(projects, datetime(2026, 9, 21, tzinfo=timezone.utc), [])
-        data = page.split('<script type="application/json" id="projects">')[1].split("</script>")[0]
-        self.assertIn('"Cost"', data)
-        self.assertIn("<\\/script>", data)
-        self.assertIn('href="?project=boston-1"', page)  # Its panel's address.
-
+        self.assertNotIn('id="projects"', page)  # In panels.json now, the same for every page.
+        self.assertIn('fetch("/panels.json")', page)
+        self.assertIn('href="?project=boston-1"', page)
+        details = build.panel_data(projects[0], date(2026, 9, 21))
+        self.assertEqual(details["facts"], [["Cost", "$5M"]])
+        self.assertEqual(details["name"], "1 Main Street")
 
 class Upstream(unittest.TestCase):
     RECORDS = {
