@@ -981,9 +981,9 @@ CSS = """
   .posts:not(.paged) li:nth-child(n+PAGE_START) { display: none; }
   .note, time { color: #666; font-size: .8em; }
   .headline time, .headline .comments, .headline .tag { flex: none; }
-  /* A label a feeds.txt line gives its posts, like Pitchfork's Best New Music: red, like Pitchfork's own. */
-  .tag { margin-left: .6em; padding: .05em .45em; border: 1px solid #ff3530; border-radius: 4px; color: #ff3530;
-         font-size: .7em; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
+  /* A label a feeds.txt line gives its posts, like Pitchfork's Best New Music: small, in a muted take on
+     Pitchfork's red, sitting with the time rather than shouting over the headline. */
+  .tag { margin-left: .6em; color: #b8534c; font-size: .7em; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
   /* Each post's icon: in its kind's color while the post is unread, gray once it's read. */
   .row > .icon { color: #555; }
   .unread > .icon { color: var(--article); }
