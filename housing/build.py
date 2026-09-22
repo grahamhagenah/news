@@ -531,8 +531,14 @@ CSS = """
   .maplibregl-popup-content a { color: #fff; }
   .maplibregl-popup-content .muted { color: #888; }
   .maplibregl-popup-close-button { color: #666; font-size: 1rem; }
-  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: #333; }
-  .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: #333; }
+  /* The arrow to its dot, whichever side the note opens on (MapLibre picks the side with room), in the note's own
+     color, so it reads as part of it. */
+  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip, .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+  .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: #111; }
+  .maplibregl-popup-anchor-top .maplibregl-popup-tip, .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+  .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: #111; }
+  .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #111; }
+  .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #111; }
   .maplibregl-ctrl-group { background: #111; border: 1px solid #333; box-shadow: none !important; }
   .maplibregl-ctrl-group button + button { border-top-color: #333; }
   .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(.75); }
