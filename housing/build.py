@@ -836,8 +836,9 @@ MAP_JS = """
       map.addSource("dots", {type: "geojson", data: waiting || {type: "FeatureCollection", features: []}});
       map.addLayer({
         id: "dots", type: "circle", source: "dots", layout: {"circle-sort-key": ["get", "order"]},
-        paint: {"circle-color": ["get", "color"], "circle-radius": ["get", "radius"], "circle-opacity": .85,
-                "circle-stroke-color": "#000", "circle-stroke-width": 1},
+        // A ring in the status's color around a faint fill of the same.
+        paint: {"circle-color": ["get", "color"], "circle-radius": ["get", "radius"], "circle-opacity": .22,
+                "circle-stroke-color": ["get", "color"], "circle-stroke-width": 1.5},
       });
       map.on("click", "dots", event => note(document.getElementById(event.features[0].properties.row)));
       map.on("mouseenter", "dots", () => { map.getCanvas().style.cursor = "pointer"; });
@@ -1247,9 +1248,10 @@ MINI_MAP_JS = """
       map.addSource("dots", {type: "geojson", data: {type: "FeatureCollection",
                                                      features: [...near.map(p => point(p, false)), point(here, true)]}});
       map.addLayer({id: "dots", type: "circle", source: "dots", paint: {
+        // Rings, as on the main map; this project's the bigger, its ring the thicker.
         "circle-color": ["get", "color"], "circle-radius": ["case", ["==", ["get", "main"], 1], 8, 5],
-        "circle-stroke-color": ["case", ["==", ["get", "main"], 1], "#fff", "#000"], "circle-stroke-width": 1.5,
-        "circle-opacity": .9,
+        "circle-stroke-color": ["get", "color"], "circle-stroke-width": ["case", ["==", ["get", "main"], 1], 2.5, 1.5],
+        "circle-opacity": .22,
       }});
       map.on("click", "dots", event => { const href = event.features[0].properties.href; if (href) location.href = href; });
       map.on("mouseenter", "dots", event => { if (event.features[0].properties.href) map.getCanvas().style.cursor = "pointer"; });
