@@ -13,6 +13,8 @@ import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import shared.site as shared
@@ -410,6 +412,9 @@ def row(project, today, changed=None, large=False):
     day = changed[0] if changed else updated(project)
     ident = html.escape(project["id"])
     note = f'<p class="note">{html.escape(project["note"])}</p>' if project.get("note") else ""
+    # Its soonest comment deadline or meeting, as a tag after its details, where they don't already say it.
+    say = project.get("say") or []
+    tag = f' <span class="say-tag">{html.escape(say_text(say[0], today, short=True))}</span>' if say and not changed else ""
     where = project["town"] if changed or large else project["neighborhood"]
     place = " · ".join(html.escape(part) for part in (where, when(day, today)) if part)
     homes = f'{project["units"]:,} home{"s" if project["units"] != 1 else ""}'
@@ -419,7 +424,7 @@ def row(project, today, changed=None, large=False):
         f'data-lat="{project["lat"]:.5f}" data-lon="{project["lon"]:.5f}" data-words="{html.escape(words.casefold())}">'
         f'{status_icon(project["status"], label)}'
         f'<span class="headline"><a class="title" href="?project={ident}">{html.escape(project["name"])}</a>'
-        f' <span class="details">{homes} · {html.escape(changed[1]) if changed else label.lower()}</span></span> '
+        f' <span class="details">{homes} · {html.escape(changed[1]) if changed else label.lower()}</span>{tag}</span> '
         f'<span class="source">{steps(project["status"]) if large else ""}<span>{place}</span></span>{note}</li>'
     )
 
@@ -432,6 +437,7 @@ def panel_data(project, today):
         "description": project["description"], "note": project.get("note", ""), "link": project["link"],
         "origin": project.get("origin", ""), "site": project.get("site", ""), "image": project.get("image", ""),
         "updated": when(updated(project), today),
+        "say": [[say_text(item, today), item["link"], item["kind"]] for item in project.get("say", [])],
     }
 
 
@@ -498,6 +504,17 @@ CSS = """
   }
   .from .to-town { margin-left: .4em; color: #999; text-decoration: none; }
   .from .to-town:hover { color: #fff; }
+  /* Have your say, under Recently updated: one band with it, the line between them shared. */
+  .fresh + .fresh.say { margin-top: -1.25rem; border-top: 0; }
+  /* A project's soonest comment deadline or meeting, a quiet tag after its details. */
+  .say-tag { flex: none; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #3a3a3a;
+             border-radius: 999px; color: #bbb; font-size: .72rem; line-height: 1.4; white-space: nowrap; }
+  /* In a project's panel: its open comment period and meetings, each a link to comment or join. */
+  .panel-say { margin: 0 0 1.1rem; padding: .7rem .85rem; border: 1px solid #2a2a2a; border-radius: 6px; }
+  .panel-say[hidden] { display: none; }
+  .panel-say h3 { margin: 0 0 .4rem; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .panel-say ul { display: grid; gap: .3rem; }
+  .panel-say a { color: #eee; font-size: .88rem; }
   /* What the site is, under its name. */
   .intro { margin: -1.25rem 0 1.25rem; }
   /* On as many lines as it takes, rather than cut short: the home page's fits on one. */
@@ -562,7 +579,10 @@ CSS = """
   main > details > ul { padding-bottom: 1rem; }
   .from { margin: -.3rem 0 .6rem; color: #666; font-size: .8rem; }
   .from a { color: #999; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
-  .row .details { flex: none; margin-left: .6em; color: #666; font-size: .8em; white-space: nowrap; }
+  /* A project's name keeps its room, up to most of the row; what follows it is cut short first. */
+  .row .headline .title { flex-shrink: 0; max-width: 70%; }
+  .row .details { flex: 0 1 auto; min-width: 0; margin-left: .6em; overflow: hidden; color: #666; font-size: .8em;
+                  white-space: nowrap; text-overflow: ellipsis; }
   .row .note { grid-column: 2 / -1; margin: -.2rem 0 0; color: #999; font-size: .8em; }
   .row { cursor: pointer; }
   /* The row under the pointer, a faint band just darker than the one left on the project last opened; where a
@@ -654,6 +674,7 @@ PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <h2 class="panel-title" id="panel-title"></h2>
 <div class="panel-pills"></div>
 <p class="panel-note"></p>
+<div class="panel-say"><h3>Have your say</h3><ul></ul></div>
 <dl class="panel-facts"></dl>
 <div class="panel-about"></div>
 <div class="panel-foot"><a class="panel-source primary" target="_blank" rel="noopener"></a><a class="panel-site" target="_blank" rel="noopener">Project site ↗</a><button class="panel-copy" type="button">Copy link</button><button class="panel-map" type="button">Show on map</button><p class="panel-updated"></p></div>
@@ -666,6 +687,12 @@ SPARK_MARK = ('<svg class="spark-mark" viewBox="0 0 24 24" aria-hidden="true"><g
               '<path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z"/>'
               '<path d="M16 6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z"/>'
               '<path d="M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"/></g></svg>')
+
+SAY_MARK = ('<svg class="spark-mark" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" '
+            'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a3 3 0 0 1 0 6"/>'
+            '<path d="M10 8v11a1 1 0 0 1 -1 1h-1a1 1 0 0 1 -1 -1v-5"/>'
+            '<path d="M12 8h0l4.524 -3.77a.9 .9 0 0 1 1.476 .692v12.156a.9 .9 0 0 1 -1.476 .692l-4.524 -3.77h-8a1 1 0 0 1 '
+            '-1 -1v-4a1 1 0 0 1 1 -1h8"/></g></svg>')
 
 # Recently updated, over the home page's map: the newest few, turning over one at a time so a visit shows
 # several, as Pushpin's Just announced does; each opens its project's panel here. It starts anywhere among them,
@@ -916,6 +943,11 @@ SCRIPT = """
       part("pills").replaceChildren(make("span", {className: "panel-pill"}, row.querySelector(".icon").cloneNode(true), labels[p.status]),
         make("span", {className: "panel-pill"}, p.units.toLocaleString() + (p.units === 1 ? " home" : " homes")));
       part("note").textContent = p.note;
+      // Have your say: each open comment period and upcoming meeting, linking to where to comment or to join.
+      part("say").hidden = !p.say.length;
+      part("say").querySelector("ul").replaceChildren(...p.say.map(([text, link, kind]) => make("li", {},
+        make("a", {href: link, target: "_blank", rel: "noopener",
+                   textContent: text + (kind === "comment" ? " · Comment ↗" : " ↗")}))));
       part("facts").replaceChildren(...p.facts.flatMap(([label, value]) => [make("dt", {textContent: label}), make("dd", {textContent: value})]));
       part("about").replaceChildren(...p.description.split(/\\n+/).map(text => text.trim()).filter(Boolean)
         .map(text => make("p", {textContent: text})));
@@ -1068,7 +1100,22 @@ def slug(town):
 PAGES = {
     "recent": ("recent/", "Recent updates", f"What’s changed in the last {RECENT_DAYS} days."),
     "large": ("large/", "Large projects", f"The biggest projects, {LARGE_HOMES} homes or more, and how far along each is."),
+    "say": ("have-your-say/", "Have your say", "Upcoming public meetings and open comment periods on Boston’s projects, "
+                                               "soonest first."),
 }
+
+
+def say_line(projects, today, more):
+    """Have your say, a line under Recently updated: the soonest comment deadline or meeting, which stays put (the
+    soonest is the one that matters), and the way to the rest. None on a page with nothing coming up."""
+    soonest = min(((say_day(p["say"][0]), p) for p in projects if p.get("say")), key=lambda pair: pair[0], default=None)
+    if not soonest:
+        return ""
+    project = soonest[1]
+    see_all = f'<a class="fresh-more" href="{more}">See all →</a>' if more else ""
+    return (f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>'
+            f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
+            f'{html.escape(say_text(project["say"][0], today, short=True))}</a>{see_all}</p>')
 
 
 def about(projects, towns):
@@ -1152,6 +1199,11 @@ def render(projects, built_at, failed, page=None, town=None):
         projects = [project for project, _ in changes]
         rows = "".join(row(project, today, changed) for project, changed in changes)
         heading = f"In the last {RECENT_DAYS} days"
+    elif page == "say":
+        coming = sorted((p for p in projects if p.get("say")), key=lambda p: say_day(p["say"][0]))
+        projects = coming
+        rows = "".join(row(p, today, (say_day(p["say"][0]), say_text(p["say"][0], today))) for p in coming)
+        heading = "Coming up"
     elif page == "large":
         projects = sorted((p for p in projects if p["units"] >= LARGE_HOMES), key=lambda p: p["units"], reverse=True)
         rows = "".join(row(project, today, large=True) for project in projects)
@@ -1174,7 +1226,7 @@ def render(projects, built_at, failed, page=None, town=None):
         )
     # The pages across the towns show every status, a finished project among them; the home page and a town's,
     # what's under way.
-    shown = "all" if page in ("recent", "large") else "active"
+    shown = "all" if page in ("recent", "large", "say") else "active"
     choices = [("active", "In progress")] + [(key, label) for key, (label, _) in STATUSES.items()] + [("all", "All")]
     def colored(key):
         return f' style="color:{STATUSES[key][1]}"' if key in STATUSES else ""
@@ -1202,8 +1254,13 @@ def render(projects, built_at, failed, page=None, town=None):
         banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="../recent/")
     elif page == "town":
         banner, fresh = fresh_banner(changes, today, more="../recent/")
+    elif page == "say":
+        banner, fresh = fresh_banner([(p, c) for p, c in changes if p.get("say")], today, more="../recent/")
     else:
         banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "recent/")
+    # And under it, the soonest chance to have a say, but on Have your say itself, which is all of them.
+    if page != "say":
+        banner += say_line(projects, today, more=f"{root}have-your-say/")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(root, path, towns, about(everything, towns))}{PANEL}'
             f'<script type="application/json" id="projects">{data}</script>'
@@ -1244,6 +1301,114 @@ def boston_image(link):
         return None  # Tried again next build.
     found = BOSTON_IMAGE.search(page)
     return "https://www.bostonplans.org" + found.group(1) if found else ""
+
+
+# Have your say: Boston's open comment periods, from each project's page, and its public meetings, from the
+# Planning Department's calendar, whose feed runs a few months ahead and links each meeting to its project's page.
+BOSTON = ZoneInfo("America/New_York")
+CALENDAR_URL = "https://www.bostonplans.org/news-calendar/calendar?view=month&rss=relationship"
+COMMENT_PERIOD = re.compile(r"Comment period ends (\w{3} \d{1,2}, \d{4})")
+PROJECT_LINK = re.compile(r"bostonplans\.org(/projects/development-projects/[^\"'?#\s<>]+)", re.I)
+# A project filed more recently than this may have a comment period open, whatever its status says.
+FILED_WITHIN = timedelta(days=120)
+
+
+def project_path(link):
+    """A Boston project's page as its path alone, to match a meeting's link to it however it's written."""
+    found = PROJECT_LINK.search(link or "")
+    return found.group(1).lower().rstrip("/") if found else None
+
+
+def comment_period(page):
+    """The day a project page's comment period ends, or None when it has none."""
+    found = COMMENT_PERIOD.search(page)
+    return datetime.strptime(found.group(1), "%b %d, %Y").date() if found else None
+
+
+def meetings(feed, today):
+    """The calendar feed's meetings from today on, each about the projects its description links to: a list of
+    {paths, title, starts, link}, soonest first."""
+    items = []
+    for item in re.findall(r"<item>(.*?)</item>", feed, re.S):
+        def field(name):
+            found = re.search(rf"<{name}>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{name}>", item, re.S)
+            return html.unescape(found.group(1).strip()) if found else ""
+        try:
+            starts = parsedate_to_datetime(field("pubDate")).astimezone(BOSTON)
+        except (TypeError, ValueError):
+            continue
+        paths = {project_path(match.group(0)) for match in PROJECT_LINK.finditer(field("description"))}
+        if starts.date() >= today and paths:
+            items.append({"paths": paths, "title": field("title"), "starts": starts, "link": field("link")})
+    return sorted(items, key=lambda item: item["starts"])
+
+
+def clock(moment):
+    """6 PM, 6:30 PM."""
+    hour = moment.hour % 12 or 12
+    return f"{hour}{f':{moment.minute:02d}' if moment.minute else ''} {'AM' if moment.hour < 12 else 'PM'}"
+
+
+def meeting_kind(title, name):
+    """What kind of meeting it is: its title with the project's name taken off its front ("25 Supertest Street IAG
+    Meeting": "IAG Meeting"); a title that names it further in ("Discussion of 121B Agreement for One Mystic
+    Avenue"), or not at all, whole."""
+    if title.lower().startswith(name.lower()):
+        return title[len(name):].strip(" -–|:/") or "Public meeting"
+    return title
+
+
+def add_say(projects, today):
+    """Each Boston project's open comment period and upcoming meetings, as project["say"]: a list of
+    {when, what, link}, soonest first. Pages are read for projects under review or filed lately; a source that
+    can't be reached leaves its part out, and the build goes on."""
+    wanted = [p for p in projects if p["id"].startswith("boston-") and p["link"] and p["status"] != "complete" and (
+        p["status"] == "proposed" or (iso_date(p.get("filed")) and today - iso_date(p["filed"]) <= FILED_WITHIN))]
+    def read(project):
+        try:
+            return comment_period(shared.fetch(project["link"], USER_AGENT, attempts=2, timeout=20)[1].decode("utf-8", "replace"))
+        except Exception as error:
+            print(f"  no comment period for {project['link']} ({error})", file=sys.stderr)
+            return None
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        closes = dict(zip((p["id"] for p in wanted), pool.map(read, wanted)))
+    try:
+        calendar = meetings(shared.fetch(CALENDAR_URL, USER_AGENT, attempts=2, timeout=30)[1].decode("utf-8", "replace"), today)
+    except Exception as error:
+        print(f"✗ Boston's calendar: {error}", file=sys.stderr)
+        calendar = []
+    by_path = {project_path(p["link"]): p for p in projects if p["id"].startswith("boston-")}
+    for project in projects:
+        project["say"] = []
+        ends = closes.get(project["id"])
+        if ends and ends >= today:
+            project["say"].append({"when": ends, "what": "Comment period ends", "link": project["link"], "kind": "comment"})
+    for meeting in calendar:
+        for path in meeting["paths"]:
+            project = by_path.get(path)
+            if project:
+                project["say"].append({"when": meeting["starts"], "link": meeting["link"], "kind": "meeting",
+                                       "what": meeting_kind(meeting["title"], project["name"])})
+    for project in projects:
+        project["say"].sort(key=say_day)
+    open_ = sum(1 for p in projects for item in p["say"] if item["kind"] == "comment")
+    print(f"✓ Have your say: {open_} comment periods open, "
+          f"{sum(1 for p in projects for item in p['say'] if item['kind'] == 'meeting')} meetings coming up")
+
+
+def say_day(item):
+    """The day of a comment deadline (a date) or a meeting (a moment)."""
+    return item["when"].date() if isinstance(item["when"], datetime) else item["when"]
+
+
+def say_text(item, today, short=False):
+    """One comment period or meeting, as a line says it: "Comments close Sep 30", "IAG Meeting · Mon, Sep 28, 6 PM"."""
+    day = say_day(item)
+    if item["kind"] == "comment":
+        return f"Comments close {when(day, today)}" if short else f"Comment period ends {day:%a, %b} {day.day}"
+    moment = item["when"]
+    return (f"Meeting {when(day, today)}" if short
+            else f"{item['what']} · {moment:%a, %b} {moment.day}, {clock(moment)}")
 
 
 def add_images(projects, known):
@@ -1299,6 +1464,7 @@ def main():
     raw = {town: [{key: value for key, value in project.items() if key != "source"}
                   for project in projects if project["source"] == town] for town, _, _ in SOURCES}
     images = add_images(projects, previous.get("images", {}))
+    add_say(projects, built_at.astimezone(BOSTON).date())
     projects = apply_edits(projects, read_edits(EDITS.read_text()))
     record = track(projects, previous, built_at.date())
 

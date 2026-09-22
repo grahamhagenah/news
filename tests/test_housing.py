@@ -237,5 +237,61 @@ class Upstream(unittest.TestCase):
         self.assertIn("Also needs: year_compl, commsf, descr", text)
 
 
+
+FEED = """<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel>
+<item><title><![CDATA[25 Supertest Street IAG Meeting]]></title>
+<description><![CDATA[About <a href="https://www.bostonplans.org/projects/development-projects/25-Supertest-Street">it</a>.]]></description>
+<pubDate>Mon, 28 Sep 2026 22:00:00 GMT</pubDate>
+<link><![CDATA[http://www.bostonplans.org/news-calendar/calendar/2026/09/28/25-supertest-street-iag-meeting]]></link></item>
+<item><title><![CDATA[Zoning Commission Hearing]]></title><description><![CDATA[No project.]]></description>
+<pubDate>Wed, 30 Sep 2026 14:00:00 GMT</pubDate><link><![CDATA[http://example.com/z]]></link></item>
+<item><title><![CDATA[Old Meeting]]></title>
+<description><![CDATA[<a href="https://www.bostonplans.org/projects/development-projects/25-supertest-street">it</a>]]></description>
+<pubDate>Mon, 14 Sep 2026 22:00:00 GMT</pubDate><link><![CDATA[http://example.com/old]]></link></item>
+</channel></rss>"""
+
+
+class HaveYourSay(unittest.TestCase):
+    TODAY = date(2026, 9, 22)
+
+    def test_comment_period_from_a_project_page(self):
+        page = "<p>Submit Your Comments</p><p>Comment period ends Sep 30, 2026. To submit a comment in a language...</p>"
+        self.assertEqual(build.comment_period(page), date(2026, 9, 30))
+        self.assertIsNone(build.comment_period("<p>No comments open.</p>"))
+
+    def test_meetings_upcoming_and_about_a_project(self):
+        found = build.meetings(FEED, self.TODAY)
+        self.assertEqual(len(found), 1)  # Not the one about no project, nor the one that's passed.
+        self.assertEqual(found[0]["paths"], {"/projects/development-projects/25-supertest-street"})
+        self.assertEqual((found[0]["starts"].hour, found[0]["starts"].minute), (18, 0))  # 22:00 GMT, 6 PM in Boston.
+
+    def test_meeting_titles(self):
+        self.assertEqual(build.meeting_kind("25 Supertest Street IAG Meeting", "25 Supertest Street"), "IAG Meeting")
+        title = "Discussion of 121B Agreement for One Mystic Avenue"
+        self.assertEqual(build.meeting_kind(title, "One Mystic Avenue"), title)
+
+    def test_what_a_row_and_a_panel_say(self):
+        found = build.meetings(FEED, self.TODAY)[0]
+        meeting = {"when": found["starts"], "what": "IAG Meeting", "link": found["link"], "kind": "meeting"}
+        comment = {"when": date(2026, 9, 30), "what": "Comment period ends", "link": "x", "kind": "comment"}
+        self.assertEqual(build.say_text(meeting, self.TODAY), "IAG Meeting · Mon, Sep 28, 6 PM")
+        self.assertEqual(build.say_text(meeting, self.TODAY, short=True), "Meeting Sep 28")
+        self.assertEqual(build.say_text(comment, self.TODAY, short=True), "Comments close Sep 30")
+
+    def test_have_your_say_page_soonest_first(self):
+        built = datetime(2026, 9, 22, tzinfo=timezone.utc)
+        later = dict(project("boston-1"), since=None, was=None,
+                     say=[{"when": date(2026, 10, 2), "what": "Comment period ends", "link": "x", "kind": "comment"}])
+        sooner = dict(project("boston-2"), since=None, was=None,
+                      say=[{"when": date(2026, 9, 30), "what": "Comment period ends", "link": "x", "kind": "comment"}])
+        quiet = dict(project("boston-3"), since=None, was=None, say=[])
+        page = build.render([later, sooner, quiet], built, [], page="say")
+        self.assertLess(page.index('id="boston-2"'), page.index('id="boston-1"'))
+        self.assertNotIn('id="boston-3"', page)
+        home = build.render([later, sooner, quiet], built, [])
+        self.assertIn("Have your say</span>", home)
+        self.assertIn("Comments close Sep 30</span>", home)
+
+
 if __name__ == "__main__":
     unittest.main()
