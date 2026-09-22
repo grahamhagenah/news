@@ -24,9 +24,10 @@ OUT_DIR = ROOT.parent / "dist" / "housing"
 EDITS = ROOT / "edits.txt"
 USER_AGENT = "Mozilla/5.0 (compatible; housing-tracker/1.0)"
 SITE_URL = "https://buildhousing.org/"
-NAME = "Build Housing Boston"
-# The name as the header sets it, with the city in gray after it.
-MARKED_NAME = 'Build Housing <span class="city">Boston</span>'
+NAME = "Build Housing"
+# The city the site covers, which the header names after it as it names a page ("Build Housing / Boston").
+PLACE = "Boston"
+
 TAGLINE = "New homes around Boston, from proposal to move-in."
 # The last build's record, kept beside the site. The address before buildhousing.org is tried after it, so the
 # first builds at the new one keep what the old one knew: each project's status, and where to find its picture.
@@ -1490,9 +1491,10 @@ def render(projects, built_at, failed, page=None, town=None):
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                         json.dumps({key: label for key, (label, _) in STATUSES.items()}))).replace(
         "    /*MAP*/\n", MAP_JS) + FRESH_SCRIPT
-    name = town if page == "town" else PAGES[page][1] if page else None
+    # After the site's name: the page's, or on the home page the city it's all in.
+    name = town if page == "town" else PAGES[page][1] if page else PLACE
     title = (f"New housing in {town} · {NAME}" if page == "town" else f"{name} · {NAME}" if page else
-             f"{NAME}: new housing in Boston, Cambridge and the towns around it")
+             f"{NAME}: new housing in {PLACE}, Cambridge and the towns around it")
     description = (town_said if page == "town" else PAGES[page][2] if page else
                    f"{TAGLINE} {len(active):,} projects in progress across Boston and the towns around it, on a map "
                    "and in a list for each town, with their status, size and details.")
@@ -1500,7 +1502,7 @@ def render(projects, built_at, failed, page=None, town=None):
         "news", title, body + script, css=CSS,
         head=head(path, title, description) + as_data(page, town, projects, today, title, description),
         symbols=ICON_SYMBOLS,
-        updated=built_at, links=[(NAME, "/", not page)], marked={NAME: MARKED_NAME}, here=name, indexable=True,
+        updated=built_at, links=[(NAME, "/", not page)], here=name, indexable=True,
     )
 
 
