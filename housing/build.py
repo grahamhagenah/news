@@ -28,7 +28,7 @@ NAME = "Build Housing"
 # The city the site covers, which the header names after it as it names a page ("Build Housing / Boston").
 PLACE = "Boston"
 
-TAGLINE = "New homes around Boston, from proposal to move-in."
+TAGLINE = "A tracker for new housing projects around Boston, from proposal to move-in."
 # The last build's record, kept beside the site. The address before buildhousing.org is tried after it, so the
 # first builds at the new one keep what the old one knew: each project's status, and where to find its picture.
 PROJECTS_URLS = [SITE_URL + "projects.json", "https://housing.grahamhagenah.com/projects.json"]
@@ -550,9 +550,11 @@ CSS = """
   #map .maplibregl-popup-close-button { color: #666; font-size: 1rem; }
   /* The arrow to its dot, whichever side the note opens on (MapLibre picks the side with room), in the note's own
      color, so it reads as part of it. */
-  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip, .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+  #map .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+  #map .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
   #map .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: #111; }
-  .maplibregl-popup-anchor-top .maplibregl-popup-tip, .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+  #map .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+  #map .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
   #map .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: #111; }
   #map .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #111; }
   #map .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #111; }
@@ -593,6 +595,8 @@ CSS = """
   .map-hint:empty { display: none; }
   .panel-pill .icon { width: 12px; height: 12px; }
   main > details { border-top: 1px solid #1c1c1c; }
+  /* On a phone the search sits right above the first list, its own line and the list's reading as a pair. */
+  @media (max-width: 34rem) { main > details:first-of-type { border-top: 0; } }
   /* A list's heading kept whole, and its count on the next line when both won't fit on one. */
   main > details > summary .town { white-space: nowrap; }
   main > details > summary .count { margin-left: auto; }
