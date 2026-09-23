@@ -953,7 +953,7 @@ MAP_JS = """
         // fitted map, each keeps its own dot. A project on its own stays a dot at every zoom either way.
         map.addSource("dots", {
           type: "geojson", data: geojson(wanted.shown),
-          cluster: !FITTED, clusterMaxZoom: APART - 1, clusterRadius: 48,
+          cluster: !FITTED, clusterMaxZoom: APART - 1, clusterRadius: 38,
           clusterProperties: {homes: ["+", ["get", "homes"]]},
         });
         map.addLayer({
@@ -982,7 +982,7 @@ MAP_JS = """
         map.addLayer({
           id: "groups", type: "circle", source: "dots", filter: ["has", "point_count"],
           paint: {"circle-color": "#101011", "circle-opacity": .82,
-                  "circle-radius": ["interpolate", ["linear"], ["get", "homes"], 0, 13, 500, 18, 3000, 26],
+                  "circle-radius": ["interpolate", ["linear"], ["get", "homes"], 0, 11, 500, 15, 3000, 22],
                   "circle-stroke-color": "#9a9a9a", "circle-stroke-width": 1.5},
         });
         map.addLayer({
