@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import sys
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from email.utils import format_datetime, parsedate_to_datetime
@@ -539,6 +540,7 @@ CSS = """
   /* How to be heard, under Have your say, and the lines that offer a calendar or a feed. */
   .how { max-width: 42rem; margin: 2.25rem 0 0; color: #b4b4b4; font-size: .9rem; line-height: 1.65; }
   .how h2 { margin: 0 0 .5rem; color: #eee; font-size: 1rem; }
+  .how h3 { margin: 1.9rem 0 0; color: #eee; font-size: .95rem; }
   .how p, .how ul { margin: 0 0 .7rem; }
   .how ul { display: grid; gap: .45rem; padding-left: 1.1rem; list-style: disc; }
   .how b { color: #e2e2e2; font-weight: 600; }
@@ -546,14 +548,14 @@ CSS = """
   .how a:hover, p.follow a:hover { color: #fff; }
   p.follow, .how-follow { margin: 1.75rem 0 .5rem; color: #999; font-size: .85rem; }
   /* The one thing to do on this page, said as a button, with the feed beside it. */
-  .how-do { display: flex; flex-wrap: wrap; gap: .7rem .6rem; margin: 2rem 0 1.4rem; }
-  .how-do .do { display: inline-flex; align-items: center; gap: .45rem; padding: .75rem 1.2rem; border: 1px solid #333;
+  .how p.how-do { display: flex; flex-wrap: wrap; gap: .75rem .5rem; margin: 1.6rem 0 1.3rem; }
+  .how-do .do { display: inline-flex; align-items: center; gap: .45rem; padding: .4rem .9rem; border: 1px solid #333;
                 border-radius: 999px; color: #ddd; font-size: .9rem; text-decoration: none; }
   .how-do .do:hover, .how-do .do:focus-visible { border-color: #888; color: #fff; outline: none; }
   .how-do .primary { border-color: #eee; background: #eee; color: #000; font-weight: 600; }
   .how-do .primary:hover, .how-do .primary:focus-visible { background: #fff; color: #000; }
   .how-do .primary svg { width: 1em; height: 1em; }
-  .how-follow { margin-top: 0; }
+  .how p.how-follow { margin: 0; }
   .panel-say .say-how { margin: .15rem 0 .1rem; color: #999; font-size: .8rem; line-height: 1.5; }
   /* A page's heading: the header says the same in its own way, so this is for search engines and screen readers. */
   .page-heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
@@ -1391,6 +1393,20 @@ def say_line(projects, today, more, none=None):
     return f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>{one}{see_all}</p>'
 
 
+def subscribe(path="say.ics", label="these dates"):
+    """The ways to subscribe to a calendar of ours. A browser with no calendar app behind it does nothing at all
+    with webcal://, which is most of Chrome, so Google's own way in is offered beside it and the file itself
+    under them both."""
+    web = f"webcal://buildhousing.org/{path}"
+    google = "https://calendar.google.com/calendar/r?cid=" + urllib.parse.quote(web, safe="")
+    return (f'<p class="how-do"><a class="do primary" href="{google}" target="_blank" rel="noopener">'
+            f'{CALENDAR_MARK}Google Calendar</a>'
+            f'<a class="do" href="{web}">Apple Calendar or Outlook</a>'
+            f'<a class="do" href="/{path}" download>Download the file</a></p>'
+            f'<p class="how-follow">Subscribing keeps {label} up to date by itself, so a deadline that moves moves '
+            'with it; the downloaded file is a copy of today’s.</p>')
+
+
 def how_to_be_heard():
     """Under Have your say: what a comment does, what makes one count, and where each city takes them. Dates on
     their own tell a reader when to act, not how."""
@@ -1410,11 +1426,7 @@ def how_to_be_heard():
         '<li><b>The towns around them:</b> most publish neither deadlines nor agendas anywhere we can read, so '
         'their projects show no dates here. Their planning department or town clerk will say when the board next '
         'meets.</li></ul>'
-        '<p class="how-do"><a class="do primary" href="webcal://buildhousing.org/say.ics">'
-        f'{CALENDAR_MARK}Add these dates to your calendar</a>'
-        '<a class="do" href="/updates.xml">Follow what’s changed by RSS</a></p>'
-        '<p class="how-follow">The calendar keeps itself up to date, so a deadline that moves moves with it.'
-        '</p></section>')
+        '<h3>Keep the dates</h3>' + subscribe() + '</section>')
 
 
 def about(projects, towns):
@@ -1648,10 +1660,10 @@ def render(projects, built_at, failed, page=None, town=None):
     banner += say_line(projects, today, more="" if page == "say" else "/have-your-say/", none=nothing)
     # Under Have your say, how to say it; under a town's list, that town's own calendar.
     after = (how_to_be_heard() if page == "say" else
-             f'<p class="follow"><a href="webcal://buildhousing.org/{slug(town)}/say.ics">Add {html.escape(town)}’s '
-             f'deadlines and meetings to your calendar →</a></p>' if page == "town" else
-             '<p class="follow"><a href="/updates.xml">Follow these updates by RSS →</a></p>' if page == "recent"
-             else "")
+             f'<section class="how"><h3>{html.escape(town)}’s deadlines and meetings, in your calendar</h3>'
+             + subscribe(f"{slug(town)}/say.ics", f"{html.escape(town)}’s dates") + '</section>' if page == "town"
+             else '<p class="follow"><a href="/updates.xml">Follow these updates by RSS →</a></p>'
+             if page == "recent" else "")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}{after}'
             f'{footer(path, towns, about(everything, towns))}{PANEL}'
             f'<script>const FRESH = {fresh}, REPO = {json.dumps(REPO_URL)};</script>')
