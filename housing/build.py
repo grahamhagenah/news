@@ -441,6 +441,8 @@ def panel_data(project, today):
         "description": project["description"], "note": project.get("note", ""), "link": project["link"],
         "origin": project.get("origin", ""), "site": project.get("site", ""), "image": project.get("image", ""),
         "updated": when(updated(project), today),
+        # What last happened to it, where that was lately: the same the Recent updates page says of it.
+        "change": [f"{changed[1]} · {long_date(changed[0])}"] if (changed := change(project, today)) else [],
         "say": [[say_text(item, today), item["link"], item["kind"]] for item in project.get("say", [])],
     }
 
@@ -520,10 +522,12 @@ CSS = """
   /* A project's soonest comment deadline or meeting, a quiet tag after its details. */
   .say-tag { flex: none; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #3a3a3a;
              border-radius: 999px; color: #bbb; font-size: .72rem; line-height: 1.4; white-space: nowrap; }
-  /* In a project's panel: its open comment period and meetings, each a link to comment or join. */
-  .panel-say { margin: 0 0 1.1rem; padding: .7rem .85rem; border: 1px solid #2a2a2a; border-radius: 6px; }
-  .panel-say[hidden] { display: none; }
-  .panel-say h3 { margin: 0 0 .4rem; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  /* In a project's panel: what last happened to it, and its open comment period and meetings, each a link to
+     comment or join. */
+  .panel-say, .panel-change { margin: 0 0 1.1rem; padding: .7rem .85rem; border: 1px solid #2a2a2a; border-radius: 6px; }
+  .panel-say[hidden], .panel-change[hidden] { display: none; }
+  .panel-change p { margin: 0; color: #ddd; font-size: .88rem; }
+  .panel-say h3, .panel-change h3 { margin: 0 0 .4rem; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   .panel-say ul { display: grid; gap: .3rem; }
   .panel-say a { color: #eee; font-size: .88rem; }
   /* A page's heading: the header says the same in its own way, so this is for search engines and screen readers. */
@@ -720,6 +724,7 @@ PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <h2 class="panel-title" id="panel-title"></h2>
 <div class="panel-pills"></div>
 <p class="panel-note"></p>
+<div class="panel-change"><h3>Recently updated</h3><p></p></div>
 <div class="panel-say"><h3>Have your say</h3><ul></ul></div>
 <dl class="panel-facts"></dl>
 <div class="panel-about"></div>
@@ -1083,6 +1088,8 @@ SCRIPT = """
         make("span", {className: "panel-pill"}, p.units.toLocaleString() + (p.units === 1 ? " home" : " homes")));
       part("note").textContent = p.note;
       // Have your say: each open comment period and upcoming meeting, linking to where to comment or to join.
+      part("change").hidden = !p.change.length;
+      part("change").querySelector("p").textContent = p.change[0] || "";
       part("say").hidden = !p.say.length;
       part("say").querySelector("ul").replaceChildren(...p.say.map(([text, link, kind]) => make("li", {},
         make("a", {href: link, target: "_blank", rel: "noopener",
