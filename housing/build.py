@@ -1001,10 +1001,10 @@ SCRIPT = """
     const search = document.querySelector(".search");
     /*MAP*/
     const bySize = [...rows].sort((a, b) => b.dataset.units - a.dataset.units);
-    // Zoomed out, only the bigger projects, so the map isn't a carpet of dots; the smaller come in as it's zoomed
-    // in, all of them at street level: at each zoom, the fewest homes a project needs to be drawn. A search, and
-    // the pages of a few projects (Recent updates, Large projects), show every one that fits.
-    const LEAST = [[16, 0], [15, 20], [14, 50], [13, 100], [12, 150]], FARTHEST = 300;
+    // Every project shows at the zooms a reader starts at, so a quiet-looking town is quiet; only further out,
+    // where the whole region is in view and the dots would be a carpet, are the smaller ones left out. At each
+    // zoom, the fewest homes a project needs to be drawn; a search and the pages of a few projects show all.
+    const LEAST = [[11, 0], [10, 40]], FARTHEST = 120;
     const fitting = dotMap.container.hasAttribute("data-fit");
     let searching = false, pinned = null;  // pinned: a project Show on map went to, drawn whatever its size.
     const least = () => {
