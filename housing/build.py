@@ -864,6 +864,7 @@ MAP_JS = """
     const hintBox = Object.assign(document.createElement("div"), {className: "map-hint"});
     mapBox.append(hintBox);
     const START = innerWidth < 544 ? 11 : 12;  // A phone's narrower map, one step further out.
+    const APART = 10;  // From here in, every project is its own dot; further out, they're grouped.
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const radius = row => Math.max(2.2, Math.min(7, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 3.3));
     // A number for each project, so a row and its dot can find each other and light up together.
@@ -898,8 +899,13 @@ MAP_JS = """
       onZoom: then => zoomHandlers.push(then),
       draw: shown => {
         wanted.shown = shown;
-        if (map && map.getSource("dots")) map.getSource("dots").setData(geojson(shown));
+        if (map && map.getSource("dots")) {
+          map.getSource("dots").setData(geojson(shown));
+          map.getSource("groups").setData(geojson(shown));
+        }
       },
+      // Whether it's drawing groups rather than each project: below the view it opens at.
+      grouping: () => !!map && map.getZoom() < APART,
       hint: text => { hintBox.textContent = text; },
       fit: shown => { wanted.fit = shown; if (map && map.loaded()) fitTo(shown); },
       // Asked to go somewhere before it's up (Show on map), the map is fetched there and then.
@@ -945,8 +951,13 @@ MAP_JS = """
         const credits = mapBox.querySelector(".maplibregl-ctrl-attrib");
         if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
         map.addSource("dots", {type: "geojson", data: geojson(wanted.shown)});
+        // The same projects again, gathered into groups where they're near each other, for the wide zooms.
+        map.addSource("groups", {
+          type: "geojson", data: geojson(wanted.shown), cluster: true, clusterMaxZoom: APART - 1, clusterRadius: 46,
+          clusterProperties: {homes: ["+", ["get", "homes"]]},
+        });
         map.addLayer({
-          id: "dots", type: "circle", source: "dots", layout: {"circle-sort-key": ["get", "order"]},
+          id: "dots", type: "circle", source: "dots", minzoom: APART, layout: {"circle-sort-key": ["get", "order"]},
           // A ring in the status's color around a faint fill of the same; the one under the pointer, or under it
           // in the list, brighter and thicker.
           paint: {"circle-color": ["get", "color"],
@@ -965,6 +976,32 @@ MAP_JS = """
                    "symbol-sort-key": ["-", 0, ["get", "homes"]]},
           paint: {"text-color": "#c9c9c9", "text-halo-color": "#242426", "text-halo-width": 1.4},
         });
+        // A group: a ring in the map's own gray, as wide as the homes in it, saying how many they come to.
+        map.addLayer({
+          id: "groups", type: "circle", source: "groups", maxzoom: APART, filter: ["has", "point_count"],
+          paint: {"circle-color": "#101011", "circle-opacity": .82,
+                  "circle-radius": ["interpolate", ["linear"], ["get", "homes"], 0, 13, 500, 18, 3000, 26],
+                  "circle-stroke-color": "#9a9a9a", "circle-stroke-width": 1.5},
+        });
+        map.addLayer({
+          id: "group-homes", type: "symbol", source: "groups", maxzoom: APART, filter: ["has", "point_count"],
+          layout: {
+            "text-field": ["case", [">=", ["get", "homes"], 1000],
+                           ["concat", ["number-format", ["/", ["get", "homes"], 1000], {"max-fraction-digits": 1}], "k"],
+                           ["to-string", ["get", "homes"]]],
+            "text-font": ["Noto Sans Regular"], "text-size": 11, "text-allow-overlap": true,
+          },
+          paint: {"text-color": "#e2e2e2"},
+        });
+        // A group opens: the map goes in until its projects come apart.
+        map.on("click", "groups", event => {
+          const group = event.features[0];
+          map.getSource("groups").getClusterExpansionZoom(group.properties.cluster_id).then(zoom => {
+            map.easeTo({center: group.geometry.coordinates, zoom: Math.max(zoom, APART)});
+          }).catch(() => map.easeTo({center: group.geometry.coordinates, zoom: APART}));
+        });
+        map.on("mouseenter", "groups", () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "groups", () => { map.getCanvas().style.cursor = ""; });
         if (wanted.fit && wanted.fit.length) fitTo(wanted.fit);
         map.on("click", "dots", event => note(document.getElementById(event.features[0].properties.row)));
         // The dot under the pointer and its row, lit together, and the same the other way about.
@@ -1001,22 +1038,15 @@ SCRIPT = """
     const search = document.querySelector(".search");
     /*MAP*/
     const bySize = [...rows].sort((a, b) => b.dataset.units - a.dataset.units);
-    // Every project shows at the zooms a reader starts at, so a quiet-looking town is quiet; only further out,
-    // where the whole region is in view and the dots would be a carpet, are the smaller ones left out. At each
-    // zoom, the fewest homes a project needs to be drawn; a search and the pages of a few projects show all.
-    const LEAST = [[11, 0], [10, 40]], FARTHEST = 120;
+    // Every project shows at every zoom: at the zooms a reader starts at as its own dot, and further out, where
+    // the whole region is in view and the dots would be a carpet, gathered into groups saying how many homes.
+    // Recent updates, Large projects and Have your say fit their few projects in view instead of opening wide.
     const fitting = dotMap.container.hasAttribute("data-fit");
-    let searching = false, pinned = null;  // pinned: a project Show on map went to, drawn whatever its size.
-    const least = () => {
-      if (fitting || searching) return 0;
-      const zoom = dotMap.zoom();
-      return (LEAST.find(([at]) => zoom >= at) || [0, FARTHEST])[1];
-    };
+    let searching = false, pinned = null;  // Neither changes what's drawn now; the map holds them all.
     const draw = () => {
-      const fewest = least();
       // The biggest first, so the smaller are drawn over them and a small project beside a big one can be clicked.
-      dotMap.draw(bySize.filter(row => !row.hidden && (+row.dataset.units >= fewest || row === pinned)));
-      dotMap.hint(fewest ? `Showing ${fewest}+ homes · zoom in for more` : "Bigger dots, more homes");
+      dotMap.draw(bySize.filter(row => !row.hidden || row === pinned));
+      dotMap.hint(dotMap.grouping() ? "Projects grouped · zoom in to separate them" : "Bigger dots, more homes");
     };
     dotMap.onZoom(draw);
     const show = () => {
