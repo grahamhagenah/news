@@ -507,8 +507,8 @@ CSS = """
      short lists under small, faint headings, the towns in two columns. */
   footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
   .foot-about { max-width: 38rem; margin: 0; color: #999; font-size: .9rem; line-height: 1.6; }
-  .site-links { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 18rem) minmax(0, 10rem); gap: 1.75rem 2.5rem;
-                margin: 1.25rem 0 2rem; }
+  .site-links { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 18rem) minmax(0, 10rem) minmax(0, 11rem);
+                gap: 1.75rem 2.5rem; margin: 1.25rem 0 2rem; }
   .site-links h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
   .site-links ul { display: grid; gap: .45rem; }
   /* The towns down one column, then the next, in the order they're listed on the home page. */
@@ -544,7 +544,16 @@ CSS = """
   .how b { color: #e2e2e2; font-weight: 600; }
   .how a, .follow a { color: #cfcfcf; }
   .how a:hover, .follow a:hover { color: #fff; }
-  .follow, .how-follow { margin: 1.5rem 0 0; color: #999; font-size: .85rem; }
+  .follow, .how-follow { margin: 1.75rem 0 .5rem; color: #999; font-size: .85rem; }
+  /* The one thing to do on this page, said as a button, with the feed beside it. */
+  .how-do { display: flex; flex-wrap: wrap; gap: .7rem .6rem; margin: 2rem 0 1.4rem; }
+  .how-do .do { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.1rem; border: 1px solid #333;
+                border-radius: 999px; color: #ddd; font-size: .9rem; text-decoration: none; }
+  .how-do .do:hover, .how-do .do:focus-visible { border-color: #888; color: #fff; outline: none; }
+  .how-do .primary { border-color: #eee; background: #eee; color: #000; font-weight: 600; }
+  .how-do .primary:hover, .how-do .primary:focus-visible { background: #fff; color: #000; }
+  .how-do .primary svg { width: 1em; height: 1em; }
+  .how-follow { margin-top: 0; }
   .panel-say .say-how { margin: .15rem 0 .1rem; color: #999; font-size: .8rem; line-height: 1.5; }
   /* A page's heading: the header says the same in its own way, so this is for search engines and screen readers. */
   .page-heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
@@ -762,6 +771,13 @@ SAY_MARK = ('<svg class="spark-mark" viewBox="0 0 24 24" aria-hidden="true"><g f
             '<path d="M10 8v11a1 1 0 0 1 -1 1h-1a1 1 0 0 1 -1 -1v-5"/>'
             '<path d="M12 8h0l4.524 -3.77a.9 .9 0 0 1 1.476 .692v12.156a.9 .9 0 0 1 -1.476 .692l-4.524 -3.77h-8a1 1 0 0 1 '
             '-1 -1v-4a1 1 0 0 1 1 -1h8"/></g></svg>')
+
+# On the button that subscribes to the deadlines: Tabler Icons' "calendar-plus", drawn as its siblings are.
+CALENDAR_MARK = ('<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" '
+                 'stroke-linecap="round" stroke-linejoin="round">'
+                 '<path d="M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v6"/>'
+                 '<path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M16 19h6"/>'
+                 '<path d="M19 16v6"/></g></svg>')
 
 # Recently updated, over the home page's map: the newest few, turning over one at a time so a visit shows
 # several, as Pushpin's Just announced does; each opens its project's panel here. It starts anywhere among them,
@@ -1394,9 +1410,11 @@ def how_to_be_heard():
         '<li><b>The towns around them:</b> most publish neither deadlines nor agendas anywhere we can read, so '
         'their projects show no dates here. Their planning department or town clerk will say when the board next '
         'meets.</li></ul>'
-        '<p class="how-follow">Rather than coming back to check: '
-        '<a href="webcal://buildhousing.org/say.ics">add every deadline and meeting to your calendar</a>, which '
-        'keeps itself up to date, or follow <a href="/updates.xml">what’s changed by RSS</a>.</p></section>')
+        '<p class="how-do"><a class="do primary" href="webcal://buildhousing.org/say.ics">'
+        f'{CALENDAR_MARK}Add these dates to your calendar</a>'
+        '<a class="do" href="/updates.xml">Follow what’s changed by RSS</a></p>'
+        '<p class="how-follow">The calendar keeps itself up to date, so a deadline that moves moves with it.'
+        '</p></section>')
 
 
 def about(projects, towns):
