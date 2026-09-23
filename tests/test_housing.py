@@ -1,6 +1,7 @@
 """Tests for housing/build.py, against saved samples of the cities' data (tests/fixtures/housing): a few real
 projects from each, so they run offline."""
 
+import json
 import sys
 import unittest
 import unittest.mock
@@ -289,6 +290,31 @@ class HaveYourSay(unittest.TestCase):
             (date(2026, 9, 22), "Planning Board meeting", ["PB390"]),
             (date(2026, 9, 22), "Planning Board hearing", ["PB410"]),  # Its "H earing", as the city writes it.
         ])  # Not the item with no case number, nor July's meeting, which has passed.
+
+    def test_cambridge_redevelopment_authority(self):
+        # Its site's own JSON: two meetings to come, one written in capitals, and one that has passed.
+        feed = json.dumps({"upcoming": [
+            {"title": "2400 Mass Ave Kickoff Meeting - in person", "startDate": 1791324000530,
+             "fullUrl": "/meetings/2400-mass-ave-kickoff-meeting",
+             "location": {"addressLine1": "70 Rindge Avenue"}},
+            {"title": "CRA BOARD MEETING", "startDate": 1791410400000, "fullUrl": "/meetings/board",
+             "location": {"addressLine1": ""}},
+            {"title": "Old News", "startDate": 1700000000000, "fullUrl": "/meetings/old", "location": {}},
+        ]})
+        found = build.cra_meetings(feed, self.TODAY)
+        self.assertEqual([(item["what"], item["about"]) for item in found], [
+            # Its title names the project, not the school it's held at; its board's own meeting names none.
+            ("2400 Mass Ave Kickoff Meeting - in person", ("2400", "massachusetts")),
+            ("CRA Board Meeting", None),
+        ])
+        self.assertEqual(found[0]["link"], "https://www.cambridgeredevelopment.org/meetings/2400-mass-ave-kickoff-meeting")
+        self.assertEqual(found[0]["when"].date(), date(2026, 10, 6))
+
+    def test_an_address_is_matched_however_it_is_written(self):
+        self.assertEqual(build.address_key("2400 Mass Ave"), build.address_key("2400 Massachusetts Avenue"))
+        self.assertEqual(build.address_key("Brunch at 2400 Mass Ave"), ("2400", "massachusetts"))
+        self.assertEqual(build.address_key("57 JFK Street"), ("57", "jfk"))
+        self.assertIsNone(build.address_key("Cambridge, Massachusetts"))
 
     def test_a_meeting_with_no_time_says_only_its_day(self):
         item = {"when": date(2026, 9, 22), "what": "Planning Board hearing", "link": "x", "kind": "meeting"}

@@ -1689,6 +1689,47 @@ def comment_period(page):
 CAMBRIDGE_BOARD = "https://www.cambridgema.gov/CDD/zoninganddevelopment/planningboard/planningboardmeetings"
 BOARD_CASE = re.compile(r"\(\s*(PB[\s-]?\d+)\s*\)", re.I)
 
+# The Cambridge Redevelopment Authority's own meetings, about its own projects (2400 Massachusetts Avenue and
+# the rest). Its site gives the same page as JSON, with the meetings still to come in "upcoming".
+CRA = "https://www.cambridgeredevelopment.org"
+CRA_MEETINGS = CRA + "/meetings"
+# How the two sources write a street between them: "2400 Mass Ave" is the city's "2400 Massachusetts Avenue".
+STREET_WORDS = {"mass": "massachusetts", "ave": "avenue", "av": "avenue", "st": "street", "rd": "road",
+                "dr": "drive", "ln": "lane", "pl": "place", "sq": "square", "ct": "court", "blvd": "boulevard",
+                "pkwy": "parkway", "hwy": "highway", "ter": "terrace", "cir": "circle"}
+
+
+def address_key(text):
+    """The number and street an address names, for matching one source's wording against another's: "2400 Mass
+    Ave" and "2400 Massachusetts Avenue" both come to ("2400", "massachusetts"). None where it names none."""
+    words = re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).split()
+    for at, word in enumerate(words[:-1]):
+        if word.isdigit() and len(word) <= 5:
+            street = words[at + 1]
+            return word, STREET_WORDS.get(street, street)
+    return None
+
+
+def cra_meetings(feed, today):
+    """The Redevelopment Authority's meetings from today on, as {when, what, link, about}: about is the address
+    it's for, taken from its title, or failing that from where it's held."""
+    found = []
+    for item in json.loads(feed).get("upcoming", []):
+        try:
+            starts = datetime.fromtimestamp(item["startDate"] / 1000, BOSTON)
+        except (KeyError, TypeError, ValueError, OSError):
+            continue
+        if starts.date() < today:
+            continue
+        title = re.sub(r"\s+", " ", (item.get("title") or "").strip())
+        # Some are written in capitals ("CRA BOARD MEETING"), which would shout on the page.
+        if title and title == title.upper():
+            title = re.sub(r"\bCra\b", "CRA", title.title())
+        where = (item.get("location") or {}).get("addressLine1", "")
+        found.append({"when": starts, "what": title or "CRA meeting", "link": CRA + (item.get("fullUrl") or ""),
+                      "about": address_key(title) or address_key(where)})
+    return sorted(found, key=lambda item: item["when"])
+
 
 def board_meetings(page, today):
     """The Planning Board's meetings from today on, as {when, what, cases}: one for each item with a case number,
@@ -1772,6 +1813,12 @@ def add_say(projects, today):
     except Exception as error:
         print(f"✗ Cambridge's Planning Board: {error}", file=sys.stderr)
         board = []
+    try:
+        cra = cra_meetings(shared.fetch(CRA_MEETINGS + "?format=json", USER_AGENT, attempts=2, timeout=30)[1]
+                           .decode("utf-8", "replace"), today)
+    except Exception as error:
+        print(f"✗ Cambridge Redevelopment Authority: {error}", file=sys.stderr)
+        cra = []
     by_case = {p["case"]: p for p in projects if p.get("case")}
     by_path = {project_path(p["link"]): p for p in projects if p["id"].startswith("boston-")}
     for project in projects:
@@ -1791,6 +1838,18 @@ def add_say(projects, today):
             if project:
                 project["say"].append({"when": meeting["when"], "what": meeting["what"], "kind": "meeting",
                                        "link": CAMBRIDGE_BOARD})
+    # The Redevelopment Authority's meetings, each on the project at the address it names; one that names none
+    # we track (its board's own meetings) has no project to sit under, and is left out.
+    by_address = {}
+    for project in projects:
+        key = address_key(project["name"]) if project["town"] == "Cambridge" else None
+        if key:
+            by_address.setdefault(key, project)
+    for meeting in cra:
+        project = by_address.get(meeting["about"])
+        if project:
+            project["say"].append({"when": meeting["when"], "what": meeting["what"], "kind": "meeting",
+                                   "link": meeting["link"]})
     for project in projects:
         project["say"].sort(key=say_day)
     open_ = sum(1 for p in projects for item in p["say"] if item["kind"] == "comment")
