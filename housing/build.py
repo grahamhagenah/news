@@ -28,6 +28,11 @@ REPO_URL = "https://github.com/grahamhagenah/news"  # Where a correction's issue
 NAME = "Build Housing"
 # The city the site covers, which the header names after it as it names a page ("Build Housing / Boston").
 PLACE = "Boston"
+# The site's mark, before its name in the header and in its icons: Tabler Icons' "building-community" (MIT).
+MARK = ('<svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M8 9l5 5v7h-5v-4m0 4h-5v-7l5 -5m1 1v-6a1 1 0 0 1 1 -1h10a1 1 0 0 1 1 1v17h-8"/>'
+        '<path d="M13 7l0 .01"/><path d="M17 7l0 .01"/><path d="M17 11l0 .01"/><path d="M17 15l0 .01"/></g></svg>')
 
 TAGLINE = "A tracker for new housing projects around Boston, from proposal to move-in."
 # The last build's record, kept beside the site: each project's status, and where to find its picture.
@@ -540,6 +545,9 @@ CSS = """
   /* On as many lines as it takes, rather than cut short: the home page's fits on one. */
   .tagline { margin: 0; color: #888; font-size: .9rem; }
   .sites .city { color: #777; }
+  /* The site's mark, before its name. */
+  .sites a { display: inline-flex; align-items: center; }
+  .sites .mark { width: 1.05em; height: 1.05em; margin-right: .42em; }
   @media (max-width: 34rem) {
     .tagline { font-size: .8rem; }
   }
@@ -1525,7 +1533,8 @@ def render(projects, built_at, failed, page=None, town=None):
         "news", title, body + script, css=CSS,
         head=head(path, title, description) + as_data(page, town, projects, today, title, description),
         symbols=ICON_SYMBOLS,
-        updated=built_at, links=[(NAME, "/", not page)], here=name, indexable=True,
+        updated=built_at, links=[(NAME, "/", not page)], marked={NAME: MARK + html.escape(NAME)}, here=name,
+        indexable=True,
     )
 
 
