@@ -1572,12 +1572,11 @@ def render(projects, built_at, failed, page=None, town=None):
         banner, fresh = fresh_banner([(p, c) for p, c in changes if p.get("say")], today, more="/recent/")
     else:
         banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "/recent/")
-    # And under it, the soonest chance to have a say, but on Have your say itself, which is all of them.
-    if page != "say":
-        # A town that publishes no comment periods or meetings says so, rather than leaving the line out.
-        nothing = (f"{town} doesn’t publish comment periods or meetings" if page == "town"
-                   and town not in ("Boston", "Cambridge") else None)
-        banner += say_line(projects, today, more="/have-your-say/", none=nothing)
+    # And under it, on every page alike, the soonest chance to have a say among the projects that page lists.
+    # A town that publishes no comment periods or meetings says so, rather than leaving the line out.
+    nothing = (f"{town} doesn’t publish comment periods or meetings" if page == "town"
+               and town not in ("Boston", "Cambridge") else None)
+    banner += say_line(projects, today, more="" if page == "say" else "/have-your-say/", none=nothing)
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
             f'{footer(path, towns, about(everything, towns))}{PANEL}'
             f'<script>const FRESH = {fresh}, REPO = {json.dumps(REPO_URL)};</script>')
