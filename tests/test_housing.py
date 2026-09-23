@@ -317,6 +317,41 @@ class HaveYourSay(unittest.TestCase):
         self.assertIn("Comments close Sep 30</span>", home)
 
 
+class Sending(unittest.TestCase):
+    """housing/upstream.py --send: what goes to MassBuilds, and as what."""
+
+    RECORDS = {
+        "1": {"name": "Whole", "municipal": "Somerville", "status": "in_construction", "stalled": False,
+              "latitude": 42.4, "longitude": -71.1, "year_compl": 2025, "hu": 59, "commsf": 0, "descr": "Homes."},
+        "2": {"name": "Thin", "municipal": "Medford", "status": "planning", "stalled": False,
+              "latitude": 42.4, "longitude": -71.1, "year_compl": None, "hu": 40, "commsf": 0, "descr": "Homes."},
+    }
+
+    def ours(self, text):
+        return upstream.sendings(build.read_edits(text), fetch_record=self.RECORDS.__getitem__)
+
+    def test_a_whole_record_takes_an_edit(self):
+        one, = self.ours("massbuilds-1\nstatus: complete\ndate: 2026-08-01")
+        self.assertEqual((one["kind"], one["changed"]), ("edit", {"status": "completed", "year_compl": 2026}))
+
+    def test_a_thin_record_takes_a_flag_saying_what_we_have(self):
+        one, = self.ours("massbuilds-2\nstatus: stalled\nnote: Financing fell through.")
+        self.assertEqual(one["kind"], "flag")
+        self.assertIn("Financing fell through.", one["reason"])
+        self.assertIn("stalled: True", one["reason"])
+
+    def test_what_is_posted(self):
+        sent = []
+        one, = self.ours("massbuilds-1\nstatus: complete")
+        with unittest.mock.patch.object(upstream, "ask", lambda url, *rest, **more: (sent.append((url, rest[0])), (201, {}))[1]):
+            upstream.post(one, "tok", "me@example.com")
+        url, body = sent[0]
+        self.assertTrue(url.endswith("/edits.jsonapi"))
+        self.assertEqual(body["data"]["type"], "edits")
+        self.assertEqual(body["data"]["relationships"]["development"]["data"]["id"], "1")
+        self.assertEqual(body["data"]["attributes"]["proposed_changes"], {"status": "completed"})
+
+
 class Notes(unittest.TestCase):
     """housing/notes.py: a note from an issue, applied to edits.txt."""
 
