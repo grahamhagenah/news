@@ -874,13 +874,41 @@ MAP_JS = """
     let map = null, opening = null, lit = null;
     const wanted = {shown: [], fit: null};  // What was asked for before the map was up.
     const zoomHandlers = [];
+    // A city files a tower and the affordable homes that go with it as two projects at one address, and gives
+    // them the same point; stacked exactly, one dot hides under the other. Projects sharing a point are set a
+    // few metres apart around it, far enough to tell apart and click once the map is in close, and too little
+    // to move any of them off their street.
+    const TOGETHER = 18;  // Metres between the dots of projects filed at one address.
+    const placed = new Map();  // Where each project's dot goes, once that's been worked out.
+    const place = shown => {
+      const sharing = new Map();
+      for (const row of shown) {
+        const where = `${row.dataset.lat},${row.dataset.lon}`;
+        if (!sharing.has(where)) sharing.set(where, []);
+        sharing.get(where).push(row);
+      }
+      placed.clear();
+      for (const together of sharing.values()) {
+        for (const [at, row] of together.entries()) {
+          const lat = +row.dataset.lat, lon = +row.dataset.lon;
+          if (together.length === 1) { placed.set(row.id, [lon, lat]); continue; }
+          const way = at / together.length * 2 * Math.PI;
+          placed.set(row.id, [lon + Math.cos(way) * TOGETHER / (111320 * Math.cos(lat * Math.PI / 180)),
+                              lat + Math.sin(way) * TOGETHER / 111320]);
+        }
+      }
+    };
+    const at = row => placed.get(row.id) || [+row.dataset.lon, +row.dataset.lat];
     // The smaller over the bigger: a higher sort key is drawn on top.
-    const geojson = shown => ({type: "FeatureCollection", features: shown.map(row => ({
-      type: "Feature", geometry: {type: "Point", coordinates: [+row.dataset.lon, +row.dataset.lat]},
-      id: numbers.get(row.id),
-      properties: {row: row.id, name: row.querySelector(".title").textContent, homes: +row.dataset.units,
-                   color: colors[row.dataset.status], radius: radius(row), order: -row.dataset.units},
-    }))});
+    const geojson = shown => {
+      place(shown);
+      return {type: "FeatureCollection", features: shown.map(row => ({
+        type: "Feature", geometry: {type: "Point", coordinates: at(row)},
+        id: numbers.get(row.id),
+        properties: {row: row.id, name: row.querySelector(".title").textContent, homes: +row.dataset.units,
+                     color: colors[row.dataset.status], radius: radius(row), order: -row.dataset.units},
+      }))};
+    };
     // A dot's note: its name, which opens its panel, and its homes and status.
     const note = row => {
       const status = row.dataset.status, box = document.createElement("div");
@@ -888,11 +916,11 @@ MAP_JS = """
         + `<span class="muted">${(+row.dataset.units).toLocaleString()} homes · ${labels[status].toLowerCase()}</span>`;
       box.querySelector("a").addEventListener("click", event => { event.preventDefault(); openProject(row, true); });
       return new maplibregl.Popup({offset: radius(row) + 4, maxWidth: "280px"})
-        .setLngLat([+row.dataset.lon, +row.dataset.lat]).setDOMContent(box).addTo(map);
+        .setLngLat(at(row)).setDOMContent(box).addTo(map);
     };
     const fitTo = shown => {
       const bounds = new maplibregl.LngLatBounds();
-      for (const row of shown) bounds.extend([+row.dataset.lon, +row.dataset.lat]);
+      for (const row of shown) bounds.extend(at(row));
       map.fitBounds(bounds, {padding: 30, maxZoom: 13, animate: false});
     };
     const dotMap = {
@@ -910,7 +938,7 @@ MAP_JS = """
       // Asked to go somewhere before it's up (Show on map), the map is fetched there and then.
       goTo: row => start().then(() => {
         map.once("moveend", () => note(row));
-        map.flyTo({center: [+row.dataset.lon, +row.dataset.lat], zoom: 15});
+        map.flyTo({center: at(row), zoom: 15});
       }),
       light: (id, on) => {
         if (id === null || id === undefined) return;
