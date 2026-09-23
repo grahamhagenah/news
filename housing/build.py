@@ -539,7 +539,6 @@ CSS = """
   .page-heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
                   clip-path: inset(50%); white-space: nowrap; }
   /* What a town's page says about its town, under the line that says what it is. */
-  .page-note { max-width: 38rem; margin: -.5rem 0 1.25rem; color: #999; font-size: .9rem; line-height: 1.6; }
   /* What the site is, under its name. */
   .intro { margin: -1.25rem 0 1.25rem; }
   /* On as many lines as it takes, rather than cut short: the home page's fits on one. */
@@ -1473,22 +1472,26 @@ def counted(projects, status):
 
 
 def town_note(town, projects, today):
-    """A few lines about a town, under its heading: how much is under way and at what stage, the largest of it,
-    and where the numbers come from."""
+    """A town's page in a line, which stands as its tagline: how much is under way and at what stage, the largest
+    of it, what's been finished, and where the numbers come from. Empty for a town with nothing at all."""
     active = [p for p in projects if p["status"] != "complete"]
+    done = [p for p in projects if p["status"] == "complete"]
+    if not active and not done:
+        return ""
+    from_ = FROM[town] if town in FROM else "MAPC’s MassBuilds"
+    latest = max((p["dated"] for p in projects if p["dated"]), default=None)
+    source = f'From {from_}{f", updated {when(latest, today)}" if latest else ""}.'
+    finished = (f', and {len(done):,} finished since {COMPLETE_SINCE}' if done else "")
+    if not active:
+        return (f'{html.escape(town)} has nothing under way; {len(done):,} '
+                f'{"project has" if len(done) == 1 else "projects have"} been finished since {COMPLETE_SINCE}. {source}')
     stages = ", ".join(f"{counted(active, key)} {label.lower()}" for key, (label, _) in STATUSES.items()
                        if key != "complete" and counted(active, key))
-    biggest = sorted(active, key=lambda p: p["units"], reverse=True)[:3]
-    names = ", ".join(f'{html.escape(p["name"])} ({p["units"]:,} homes)' for p in biggest)
-    done = [p for p in projects if p["status"] == "complete"]
-    from_ = (FROM[town] if town in FROM else "MAPC’s MassBuilds")
-    latest = max((p["dated"] for p in projects if p["dated"]), default=None)
-    return (
-        f'<p class="page-note">{html.escape(town)} has {len(active):,} housing projects under way, '
-        f'{sum(p["units"] for p in active):,} homes in all: {stages}. The largest are {names}. '
-        f'{len(done):,} more have been finished since {COMPLETE_SINCE}. The list comes from {from_}'
-        f'{f", last updated {when(latest, today)}" if latest else ""}, and is rebuilt every few hours.</p>'
-    ) if active or done else ""
+    biggest = max(active, key=lambda project: project["units"])
+    return (f'{html.escape(town)} has {len(active):,} housing '
+            f'{"project" if len(active) == 1 else "projects"} under way, {sum(p["units"] for p in active):,} homes '
+            f'in all: {stages}, the largest {html.escape(biggest["name"])} ({biggest["units"]:,} homes)'
+            f'{finished}. {source}')
 
 
 def render(projects, built_at, failed, page=None, town=None):
@@ -1557,12 +1560,11 @@ def render(projects, built_at, failed, page=None, town=None):
     active = [p for p in projects if p["status"] != "complete"]
     town_said = (f"New housing in {town}: {len(active):,} projects in progress, "
                  f"{sum(p['units'] for p in active):,} homes, from proposal to move-in.")
-    said = (f'{html.escape(town_said)} <a href="/">All towns →</a>' if page == "town"
-            else f'{PAGES[page][2]} <a href="/">All projects →</a>' if page else html.escape(TAGLINE))
-    # The page's heading, which the header says in its own way, and on a town's page a few lines about it.
+    # A town says it all in its one line, the way to the rest of them at the end of it.
+    said = (f'{town_note(town, projects, today) or html.escape(town_said)} <a href="/">All towns →</a>'
+            if page == "town" else f'{PAGES[page][2]} <a href="/">All projects →</a>' if page else html.escape(TAGLINE))
     intro = (f'<h1 class="page-heading">{html.escape(page_heading(page, town))}</h1>'
-             f'<div class="intro"><p class="tagline">{said}</p></div>'
-             + (town_note(town, projects, today) if page == "town" else ""))
+             f'<div class="intro"><p class="tagline">{said}</p></div>')
     # Over every page's map: on Large projects, only its own projects' changes, so each opens here.
     if page == "large":
         banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="/recent/")
