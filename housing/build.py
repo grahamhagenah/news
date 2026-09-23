@@ -864,7 +864,9 @@ MAP_JS = """
     const hintBox = Object.assign(document.createElement("div"), {className: "map-hint"});
     mapBox.append(hintBox);
     const START = innerWidth < 544 ? 11 : 12;  // A phone's narrower map, one step further out.
-    const APART = 10;  // From here in, every project is its own dot; further out, they're grouped.
+    const APART = 12;  // From here in, every project is its own dot; further out, they're grouped.
+    // A map given a few projects to fit (a town's, or a page of them) shows each of them, however close together.
+    const FITTED = mapBox.hasAttribute("data-fit");
     const escape = text => text.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
     const radius = row => Math.max(2.2, Math.min(7, Math.sqrt(Math.max(0, +row.dataset.units) || 0) / 3.3));
     // A number for each project, so a row and its dot can find each other and light up together.
@@ -899,13 +901,10 @@ MAP_JS = """
       onZoom: then => zoomHandlers.push(then),
       draw: shown => {
         wanted.shown = shown;
-        if (map && map.getSource("dots")) {
-          map.getSource("dots").setData(geojson(shown));
-          map.getSource("groups").setData(geojson(shown));
-        }
+        if (map && map.getSource("dots")) map.getSource("dots").setData(geojson(shown));
       },
-      // Whether it's drawing groups rather than each project: below the view it opens at.
-      grouping: () => !!map && map.getZoom() < APART,
+      // Whether it's drawing groups rather than each project: further out than the view it opens at.
+      grouping: () => !!map && !FITTED && map.getZoom() < APART,
       hint: text => { hintBox.textContent = text; },
       fit: shown => { wanted.fit = shown; if (map && map.loaded()) fitTo(shown); },
       // Asked to go somewhere before it's up (Show on map), the map is fetched there and then.
@@ -950,14 +949,16 @@ MAP_JS = """
         // The credits folded to their ⓘ, which the map's terms ask be on it; MapLibre opens them at first on a wide map.
         const credits = mapBox.querySelector(".maplibregl-ctrl-attrib");
         if (credits) { credits.classList.remove("maplibregl-compact-show"); credits.removeAttribute("open"); }
-        map.addSource("dots", {type: "geojson", data: geojson(wanted.shown)});
-        // The same projects again, gathered into groups where they're near each other, for the wide zooms.
-        map.addSource("groups", {
-          type: "geojson", data: geojson(wanted.shown), cluster: true, clusterMaxZoom: APART - 1, clusterRadius: 46,
+        // Further out than APART, projects near each other are gathered into one group; from there in, and on a
+        // fitted map, each keeps its own dot. A project on its own stays a dot at every zoom either way.
+        map.addSource("dots", {
+          type: "geojson", data: geojson(wanted.shown),
+          cluster: !FITTED, clusterMaxZoom: APART - 1, clusterRadius: 60,
           clusterProperties: {homes: ["+", ["get", "homes"]]},
         });
         map.addLayer({
-          id: "dots", type: "circle", source: "dots", minzoom: APART, layout: {"circle-sort-key": ["get", "order"]},
+          id: "dots", type: "circle", source: "dots", filter: ["!", ["has", "point_count"]],
+          layout: {"circle-sort-key": ["get", "order"]},
           // A ring in the status's color around a faint fill of the same; the one under the pointer, or under it
           // in the list, brighter and thicker.
           paint: {"circle-color": ["get", "color"],
@@ -970,7 +971,8 @@ MAP_JS = """
         // the largest, so the names never crowd the map.
         map.addLayer({
           id: "dot-names", type: "symbol", source: "dots", minzoom: 12.5,
-          filter: [">=", ["get", "homes"], ["step", ["zoom"], 300, 13.5, 150, 14.5, 50, 15.5, 0]],
+          filter: ["all", ["!", ["has", "point_count"]],
+                   [">=", ["get", "homes"], ["step", ["zoom"], 300, 13.5, 150, 14.5, 50, 15.5, 0]]],
           layout: {"text-field": ["get", "name"], "text-font": ["Noto Sans Regular"], "text-size": 11,
                    "text-offset": [0, 1.1], "text-anchor": "top", "text-max-width": 9, "text-optional": true,
                    "symbol-sort-key": ["-", 0, ["get", "homes"]]},
@@ -978,13 +980,13 @@ MAP_JS = """
         });
         // A group: a ring in the map's own gray, as wide as the homes in it, saying how many they come to.
         map.addLayer({
-          id: "groups", type: "circle", source: "groups", maxzoom: APART, filter: ["has", "point_count"],
+          id: "groups", type: "circle", source: "dots", filter: ["has", "point_count"],
           paint: {"circle-color": "#101011", "circle-opacity": .82,
                   "circle-radius": ["interpolate", ["linear"], ["get", "homes"], 0, 13, 500, 18, 3000, 26],
                   "circle-stroke-color": "#9a9a9a", "circle-stroke-width": 1.5},
         });
         map.addLayer({
-          id: "group-homes", type: "symbol", source: "groups", maxzoom: APART, filter: ["has", "point_count"],
+          id: "group-homes", type: "symbol", source: "dots", filter: ["has", "point_count"],
           layout: {
             "text-field": ["case", [">=", ["get", "homes"], 1000],
                            ["concat", ["number-format", ["/", ["get", "homes"], 1000], {"max-fraction-digits": 1}], "k"],
@@ -996,13 +998,15 @@ MAP_JS = """
         // A group opens: the map goes in until its projects come apart.
         map.on("click", "groups", event => {
           const group = event.features[0];
-          map.getSource("groups").getClusterExpansionZoom(group.properties.cluster_id).then(zoom => {
+          map.getSource("dots").getClusterExpansionZoom(group.properties.cluster_id).then(zoom => {
             map.easeTo({center: group.geometry.coordinates, zoom: Math.max(zoom, APART)});
           }).catch(() => map.easeTo({center: group.geometry.coordinates, zoom: APART}));
         });
         map.on("mouseenter", "groups", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "groups", () => { map.getCanvas().style.cursor = ""; });
         if (wanted.fit && wanted.fit.length) fitTo(wanted.fit);
+        // The page asked what the map was drawing before there was a map: now there is, it's asked again.
+        for (const then of zoomHandlers) then();
         map.on("click", "dots", event => note(document.getElementById(event.features[0].properties.row)));
         // The dot under the pointer and its row, lit together, and the same the other way about.
         map.on("mousemove", "dots", event => {
