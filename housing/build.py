@@ -542,12 +542,12 @@ CSS = """
   .how p, .how ul { margin: 0 0 .7rem; }
   .how ul { display: grid; gap: .45rem; padding-left: 1.1rem; list-style: disc; }
   .how b { color: #e2e2e2; font-weight: 600; }
-  .how a, .follow a { color: #cfcfcf; }
-  .how a:hover, .follow a:hover { color: #fff; }
-  .follow, .how-follow { margin: 1.75rem 0 .5rem; color: #999; font-size: .85rem; }
+  .how a, p.follow a { color: #cfcfcf; }
+  .how a:hover, p.follow a:hover { color: #fff; }
+  p.follow, .how-follow { margin: 1.75rem 0 .5rem; color: #999; font-size: .85rem; }
   /* The one thing to do on this page, said as a button, with the feed beside it. */
   .how-do { display: flex; flex-wrap: wrap; gap: .7rem .6rem; margin: 2rem 0 1.4rem; }
-  .how-do .do { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.1rem; border: 1px solid #333;
+  .how-do .do { display: inline-flex; align-items: center; gap: .45rem; padding: .75rem 1.2rem; border: 1px solid #333;
                 border-radius: 999px; color: #ddd; font-size: .9rem; text-decoration: none; }
   .how-do .do:hover, .how-do .do:focus-visible { border-color: #888; color: #fff; outline: none; }
   .how-do .primary { border-color: #eee; background: #eee; color: #000; font-weight: 600; }
