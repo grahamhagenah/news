@@ -5,6 +5,7 @@ import json
 import sys
 import unittest
 import unittest.mock
+from xml.etree import ElementTree
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -341,6 +342,49 @@ class HaveYourSay(unittest.TestCase):
         home = build.render([later, sooner, quiet], built, [])
         self.assertIn("Have your say</span>", home)
         self.assertIn("Comments close Sep 30</span>", home)
+
+
+class Feeds(unittest.TestCase):
+    BUILT = datetime(2026, 9, 23, 16, 0, tzinfo=timezone.utc)
+
+    def calendar(self):
+        meeting = {"when": datetime(2026, 9, 28, 18, 0, tzinfo=build.BOSTON), "what": "IAG Meeting",
+                   "kind": "meeting", "link": "https://example.org/m", "how": "Open to anyone; say, don’t shout."}
+        deadline = {"when": date(2026, 9, 30), "what": "Comment period ends", "kind": "comment",
+                    "link": "https://example.org/c"}
+        return build.calendar([project(say=[meeting, deadline])], self.BUILT)
+
+    def test_a_calendar_of_deadlines_and_meetings(self):
+        ics = self.calendar()
+        self.assertTrue(ics.startswith("BEGIN:VCALENDAR\r\n") and ics.endswith("END:VCALENDAR\r\n"))
+        self.assertEqual(ics.count("BEGIN:VEVENT"), 2)
+        # A meeting is the two hours from when it starts, in UTC; a deadline is the whole day it falls on.
+        self.assertIn("DTSTART:20260928T220000Z", ics)
+        self.assertIn("DTEND:20260929T000000Z", ics)
+        self.assertIn("DTSTART;VALUE=DATE:20260930", ics)
+        self.assertIn("DTEND;VALUE=DATE:20261001", ics)
+        self.assertIn("SUMMARY:1 Main Street: IAG Meeting", ics)
+        self.assertIn("SUMMARY:Comments close: 1 Main Street", ics)
+        # The same event keeps its id from build to build, so a calendar moves it rather than adding a second.
+        self.assertIn("UID:boston-1-meeting-20260928@buildhousing.org", ics)
+        self.assertIn("URL:https://buildhousing.org/p/boston-1/", ics)
+
+    def test_a_calendar_writes_lines_a_calendar_can_read(self):
+        for line in self.calendar().split("\r\n"):
+            self.assertLessEqual(len(line.encode()), 75, line)
+        # Its punctuation held back, and where a comment goes said with the event.
+        self.assertIn("40 homes\\, approved\\, Roxbury.", self.calendar().replace("\r\n ", ""))
+        self.assertIn("say\\, don’t shout.", self.calendar().replace("\r\n ", ""))
+
+    def test_a_feed_of_what_has_changed(self):
+        changes = [(project(), (date(2026, 8, 13), "Board approved"))]
+        feed = build.updates_feed(changes, self.BUILT)
+        root = ElementTree.fromstring(feed)
+        item = root.find("channel/item")
+        self.assertEqual(item.findtext("title"), "1 Main Street: Board approved")
+        self.assertEqual(item.findtext("link"), "https://buildhousing.org/p/boston-1/")
+        self.assertEqual(item.findtext("guid"), "boston-1-board-approved-2026-08-13")
+        self.assertIn("40 homes", item.findtext("description"))
 
 
 class Sending(unittest.TestCase):

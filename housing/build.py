@@ -13,7 +13,7 @@ import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
-from email.utils import parsedate_to_datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -448,7 +448,8 @@ def panel_data(project, today):
         "updated": when(updated(project), today),
         # What last happened to it, where that was lately: the same the Recent updates page says of it.
         "change": [f"{changed[1]} · {long_date(changed[0])}"] if (changed := change(project, today)) else [],
-        "say": [[say_text(item, today), item["link"], item["kind"]] for item in project.get("say", [])],
+        "say": [[say_text(item, today), item["link"], item["kind"], item.get("how", "")]
+                for item in project.get("say", [])],
     }
 
 
@@ -535,6 +536,16 @@ CSS = """
   .panel-say h3, .panel-change h3 { margin: 0 0 .4rem; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   .panel-say ul { display: grid; gap: .3rem; }
   .panel-say a { color: #eee; font-size: .88rem; }
+  /* How to be heard, under Have your say, and the lines that offer a calendar or a feed. */
+  .how { max-width: 42rem; margin: 2.25rem 0 0; color: #b4b4b4; font-size: .9rem; line-height: 1.65; }
+  .how h2 { margin: 0 0 .5rem; color: #eee; font-size: 1rem; }
+  .how p, .how ul { margin: 0 0 .7rem; }
+  .how ul { display: grid; gap: .45rem; padding-left: 1.1rem; list-style: disc; }
+  .how b { color: #e2e2e2; font-weight: 600; }
+  .how a, .follow a { color: #cfcfcf; }
+  .how a:hover, .follow a:hover { color: #fff; }
+  .follow, .how-follow { margin: 1.5rem 0 0; color: #999; font-size: .85rem; }
+  .panel-say .say-how { margin: .15rem 0 .1rem; color: #999; font-size: .8rem; line-height: 1.5; }
   /* A page's heading: the header says the same in its own way, so this is for search engines and screen readers. */
   .page-heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
                   clip-path: inset(50%); white-space: nowrap; }
@@ -1160,9 +1171,16 @@ SCRIPT = """
       part("change").hidden = !p.change.length;
       part("change").querySelector("p").textContent = p.change[0] || "";
       part("say").hidden = !p.say.length;
-      part("say").querySelector("ul").replaceChildren(...p.say.map(([text, link, kind]) => make("li", {},
-        make("a", {href: link, target: "_blank", rel: "noopener",
-                   textContent: text + (kind === "comment" ? " · Comment ↗" : " ↗")}))));
+      // Each one says where a comment goes, under it: a date on its own leaves a reader nowhere to go.
+      const told = new Set();  // The same words under each of a project's three meetings would only be noise.
+      part("say").querySelector("ul").replaceChildren(...p.say.map(([text, link, kind, how]) => {
+        const first = how && !told.has(how);
+        if (how) told.add(how);
+        return make("li", {},
+          make("a", {href: link, target: "_blank", rel: "noopener",
+                     textContent: text + (kind === "comment" ? " · Comment ↗" : " ↗")}),
+          ...(first ? [make("p", {className: "say-how", textContent: how})] : []));
+      }));
       part("facts").replaceChildren(...p.facts.flatMap(([label, value]) => [make("dt", {textContent: label}), make("dd", {textContent: value})]));
       part("about").replaceChildren(...p.description.split(/\\n+/).map(text => text.trim()).filter(Boolean)
         .map(text => make("p", {textContent: text})));
@@ -1357,6 +1375,30 @@ def say_line(projects, today, more, none=None):
     return f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>{one}{see_all}</p>'
 
 
+def how_to_be_heard():
+    """Under Have your say: what a comment does, what makes one count, and where each city takes them. Dates on
+    their own tell a reader when to act, not how."""
+    return (
+        '<section class="how"><h2>How to be heard</h2>'
+        '<p>A project under review is decided by a board, and what neighbours write in is part of the record it '
+        'decides on. A comment counts for more when it says who you are and where you live, names the project and '
+        'its address, and says plainly what you want done and why — a few honest sentences of your own beat a form '
+        'letter.</p>'
+        '<ul><li><b>Boston:</b> comment on the form at the foot of the project’s page on bostonplans.org, before '
+        'the period closes. The page names the city planner handling it, who takes comments by email too, and '
+        'meetings listed here are open to anyone.</li>'
+        f'<li><b>Cambridge:</b> email <a href="mailto:{CAMBRIDGE_COMMENT}">{CAMBRIDGE_COMMENT}</a> with the '
+        'project’s address and case number, by 5 pm the day before the meeting, or register on the '
+        f'<a href="{CAMBRIDGE_BOARD}">Planning Board’s page</a> to speak at the hearing itself. The board may not '
+        'take public comment on an item that isn’t listed as a hearing.</li>'
+        '<li><b>The towns around them:</b> most publish neither deadlines nor agendas anywhere we can read, so '
+        'their projects show no dates here. Their planning department or town clerk will say when the board next '
+        'meets.</li></ul>'
+        '<p class="how-follow">Rather than coming back to check: '
+        '<a href="webcal://buildhousing.org/say.ics">add every deadline and meeting to your calendar</a>, which '
+        'keeps itself up to date, or follow <a href="/updates.xml">what’s changed by RSS</a>.</p></section>')
+
+
 def about(projects, towns):
     """What the site is, in full, for the foot of each page: what it follows, how much, from where, and how it
     keeps up, with the numbers as of this build."""
@@ -1381,9 +1423,13 @@ def footer(here, towns, said):
         ("Towns", "towns", [(town, f"{slug(town)}/") for town in towns]),
         ("Sources", "sources", [("Boston Planning", "https://www.bostonplans.org/projects/development-projects"),
                                 ("Cambridge log", CAMBRIDGE_PAGE), ("MassBuilds", "https://www.massbuilds.com/")]),
+        # A calendar app is given the address to subscribe to, not one to download the once: webcal:// asks it to
+        # keep the deadlines and meetings up to date by itself.
+        ("Follow", "follow", [("Deadlines by calendar", "webcal://buildhousing.org/say.ics"),
+                              ("Updates by RSS", "updates.xml")]),
     ]
     def link(label, href):
-        outside = href.startswith("http")
+        outside = href.startswith(("http", "webcal"))
         current = marked if not outside and href == here else ""
         return f'<li><a href="{href if outside else "/" + href}"{current}>{html.escape(label)}</a></li>'
     lists = "".join(
@@ -1458,6 +1504,8 @@ def head(path, title, description, picture=None, mapped=True):
                                   '<meta property="og:image:height" content="630">')
             + f'<meta property="og:image:alt" content="{html.escape(NAME)}">'
             '<meta name="twitter:card" content="summary_large_image">'
+            + f'<link rel="alternate" type="application/rss+xml" title="{html.escape(NAME)}: recent updates" '
+              f'href="{SITE_URL}updates.xml">'
             + icons_head() + (MAP_HEAD if mapped else ""))
 
 
@@ -1580,7 +1628,13 @@ def render(projects, built_at, failed, page=None, town=None):
     nothing = (f"{town} doesn’t publish comment periods or meetings" if page == "town"
                and town not in ("Boston", "Cambridge") else None)
     banner += say_line(projects, today, more="" if page == "say" else "/have-your-say/", none=nothing)
-    body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}'
+    # Under Have your say, how to say it; under a town's list, that town's own calendar.
+    after = (how_to_be_heard() if page == "say" else
+             f'<p class="follow"><a href="webcal://buildhousing.org/{slug(town)}/say.ics">Add {html.escape(town)}’s '
+             f'deadlines and meetings to your calendar →</a></p>' if page == "town" else
+             '<p class="follow"><a href="/updates.xml">Follow these updates by RSS →</a></p>' if page == "recent"
+             else "")
+    body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}{after}'
             f'{footer(path, towns, about(everything, towns))}{PANEL}'
             f'<script>const FRESH = {fresh}, REPO = {json.dumps(REPO_URL)};</script>')
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
@@ -1650,6 +1704,81 @@ def sitemap(projects, towns, built_at):
     return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>\n'
 
 
+def ics_text(value):
+    """A value as a calendar file writes it, with what it reads as punctuation held back."""
+    return (str(value).replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
+            .replace("\r\n", "\\n").replace("\n", "\\n"))
+
+
+def folded(line):
+    """A line kept to the 75 octets a calendar file allows, the rest carried on a line beginning with a space."""
+    raw, pieces, first = line.encode(), [], True
+    while raw:
+        room = 75 if first else 74
+        cut = min(room, len(raw))
+        while 0 < cut < len(raw) and raw[cut] & 0xC0 == 0x80:  # Never split a character down the middle.
+            cut -= 1
+        pieces.append(("" if first else " ") + raw[:cut].decode())
+        raw, first = raw[cut:], False
+    return "\r\n".join(pieces)
+
+
+def calendar(projects, built_at, town=None):
+    """Every comment deadline and meeting to come, as a calendar to subscribe to: a deadline is the day it falls
+    on, a meeting the two hours from when it starts. Each keeps the same id from build to build, so a calendar
+    already subscribed to moves an event rather than adding a second one."""
+    stamp = built_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    where = f" in {town}" if town else ""
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//{NAME}//buildhousing.org//EN", "CALSCALE:GREGORIAN",
+             "METHOD:PUBLISH", f"X-WR-CALNAME:{ics_text(f'{NAME}: have your say{where}')}",
+             f"X-WR-CALDESC:{ics_text(f'Comment deadlines and public meetings on new housing{where}, from {SITE_URL}')}",
+             "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
+    for project in projects:
+        for item in project.get("say", []):
+            day = say_day(item)
+            moment = item["when"]
+            if isinstance(moment, datetime):
+                times = [f"DTSTART:{moment.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}",
+                         f"DTEND:{(moment + timedelta(hours=2)).astimezone(timezone.utc):%Y%m%dT%H%M%SZ}"]
+            else:  # A deadline, and a meeting whose source gives no time, take the whole day.
+                times = [f"DTSTART;VALUE=DATE:{day:%Y%m%d}", f"DTEND;VALUE=DATE:{day + timedelta(days=1):%Y%m%d}"]
+            summary = (f"Comments close: {project['name']}" if item["kind"] == "comment"
+                       else f"{project['name']}: {item['what']}")
+            about = (f"{project['units']:,} homes, {STATUSES[project['status']][0].lower()}, "
+                     f"{project['neighborhood'] or project['town']}.")
+            told = f"{about} {item.get('how') or ''}".strip()
+            lines += ["BEGIN:VEVENT", f"UID:{project['id']}-{item['kind']}-{day:%Y%m%d}@buildhousing.org",
+                      f"DTSTAMP:{stamp}"] + times + [
+                      f"SUMMARY:{ics_text(summary)}",
+                      f"DESCRIPTION:{ics_text(told + chr(10) + SITE_URL + 'p/' + project['id'] + '/')}",
+                      f"URL:{SITE_URL}p/{project['id']}/", "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(folded(line) for line in lines) + "\r\n"
+
+
+def updates_feed(changes, built_at):
+    """What's changed lately, as a feed to follow: one item for each project that's moved along, newest first."""
+    items = []
+    for project, (day, what) in changes[:50]:
+        where = f"{project['neighborhood']}, {project['town']}" if project["neighborhood"] else project["town"]
+        told = (f"{what} · {project['units']:,} homes · {where}")
+        title = f"{project['name']}: {what}"
+        items.append(
+            f"<item><title>{html.escape(title)}</title>"
+            f"<link>{SITE_URL}p/{project['id']}/</link>"
+            f"<guid isPermaLink=\"false\">{project['id']}-{what.lower().replace(' ', '-')}-{day.isoformat()}</guid>"
+            f"<pubDate>{format_datetime(datetime.combine(day, datetime.min.time(), BOSTON))}</pubDate>"
+            f"<description>{html.escape(told)}</description></item>")
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>'
+            f"<title>{html.escape(f'{NAME}: recent updates')}</title>"
+            f"<link>{SITE_URL}recent/</link>"
+            f"<description>{html.escape(f'New housing around {PLACE} as it is filed, approved, built and finished.')}</description>"
+            f'<language>en-us</language><lastBuildDate>{format_datetime(built_at)}</lastBuildDate>'
+            f'<atom:link href="{SITE_URL}updates.xml" rel="self" type="application/rss+xml"/>'
+            f"{''.join(items)}</channel></rss>\n")
+
+
 # The rendering at the head of a Boston project's page on bostonplans.org, which the city's data doesn't carry.
 BOSTON_IMAGE = re.compile(r"""bpdaInteriorHeaderImg">\s*<img src=["'](/getattachment/[^"']+)["']""")
 
@@ -1694,6 +1823,10 @@ BOARD_CASE = re.compile(r"\(\s*(PB[\s-]?\d+)\s*\)", re.I)
 
 # The Cambridge Redevelopment Authority's own meetings, about its own projects (2400 Massachusetts Avenue and
 # the rest). Its site gives the same page as JSON, with the meetings still to come in "upcoming".
+# Where a comment actually goes, which the dates alone don't say. Boston takes them on the project's own page,
+# on the form at the foot of it; Cambridge's Planning Board by email, with the case number, the day before.
+BOSTON_COMMENT = "#comment_Form"
+CAMBRIDGE_COMMENT = "planningboardcomment@cambridgema.gov"
 CRA = "https://www.cambridgeredevelopment.org"
 CRA_MEETINGS = CRA + "/meetings"
 # How the two sources write a street between them: "2400 Mass Ave" is the city's "2400 Massachusetts Avenue".
@@ -1828,19 +1961,29 @@ def add_say(projects, today):
         project["say"] = []
         ends = closes.get(project["id"])
         if ends and ends >= today:
-            project["say"].append({"when": ends, "what": "Comment period ends", "link": project["link"], "kind": "comment"})
+            project["say"].append({"when": ends, "what": "Comment period ends", "kind": "comment",
+                                   "link": project["link"] + BOSTON_COMMENT,
+                                   "how": "Comment on the form at the foot of the city’s project page, "
+                                          "or by email to the planner it names, before the day is out."})
     for meeting in calendar:
         for path in meeting["paths"]:
             project = by_path.get(path)
             if project:
                 project["say"].append({"when": meeting["starts"], "link": meeting["link"], "kind": "meeting",
-                                       "what": meeting_kind(meeting["title"], project["name"])})
+                                       "what": meeting_kind(meeting["title"], project["name"]),
+                                       "how": "Open to anyone; the city’s calendar entry says where it is and how "
+                                              "to join, and comments can go to the project page as well."})
     for meeting in board:
         for case in meeting["cases"]:
             project = by_case.get(case)
             if project:
+                told = (f"Email {CAMBRIDGE_COMMENT} with case {project['case']} by 5 pm the day before, or register "
+                        "on the Planning Board’s page to speak at the meeting.")
                 project["say"].append({"when": meeting["when"], "what": meeting["what"], "kind": "meeting",
-                                       "link": CAMBRIDGE_BOARD})
+                                       "link": CAMBRIDGE_BOARD,
+                                       "how": told if meeting["what"].endswith("hearing") else
+                                       f"Email {CAMBRIDGE_COMMENT} with case {project['case']}. The board may not "
+                                       "take public comment on an item that isn’t a hearing."})
     # The Redevelopment Authority's meetings, each on the project at the address it names; one that names none
     # we track (its board's own meetings) has no project to sit under, and is left out.
     by_address = {}
@@ -1852,7 +1995,8 @@ def add_say(projects, today):
         project = by_address.get(meeting["about"])
         if project:
             project["say"].append({"when": meeting["when"], "what": meeting["what"], "kind": "meeting",
-                                   "link": meeting["link"]})
+                                   "link": meeting["link"],
+                                   "how": "The Redevelopment Authority’s own meeting; its page says how to join."})
     for project in projects:
         project["say"].sort(key=say_day)
     open_ = sum(1 for p in projects for item in p["say"] if item["kind"] == "comment")
@@ -1950,14 +2094,21 @@ def main():
     # Every project's panel, for any page to ask for as one is opened.
     (OUT_DIR / "panels.json").write_text(json.dumps(
         {p["id"]: panel_data(p, built_at.date()) for p in projects}, ensure_ascii=False, default=str))
+    # To follow without coming back: the deadlines and meetings as a calendar to subscribe to, one for the
+    # whole region and one for each town, and what's changed as a feed.
+    (OUT_DIR / "say.ics").write_text(calendar(projects, built_at))
+    for town in towns:
+        (OUT_DIR / slug(town) / "say.ics").write_text(
+            calendar([p for p in projects if p["town"] == town], built_at, town))
+    (OUT_DIR / "updates.xml").write_text(updates_feed(recently_changed(projects, built_at.date()), built_at))
     (OUT_DIR / "sitemap.xml").write_text(sitemap(projects, towns, built_at))
     (OUT_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n")
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
     (OUT_DIR / "projects.json").write_text(json.dumps(saved, ensure_ascii=False, default=str))
     recent = recently_changed(projects, built_at.date())
     print(f"Wrote dist/{OUT_DIR.name}/index.html, {', '.join(path for path, _, _ in PAGES.values())}, {len(towns)} towns' "
-          f"pages, {len(projects)} share pages (p/), panels.json, sitemap.xml and projects.json: {len(projects)} projects, {len(recent)} changed "
-          f"in the last {RECENT_DAYS} days")
+          f"pages, {len(projects)} share pages (p/), panels.json, say.ics, updates.xml, sitemap.xml and projects.json: "
+          f"{len(projects)} projects, {len(recent)} changed in the last {RECENT_DAYS} days")
 
 
 if __name__ == "__main__":
