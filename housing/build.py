@@ -1290,7 +1290,8 @@ SCRIPT = """
 def source_note(town, rows, today):
     """Where a town's list comes from, and for a MassBuilds town, when anything in it was last updated, since
     some towns' entries go a year or more without."""
-    page = f' <a class="to-town" href="/{slug(town)}/">{html.escape(town)}’s page →</a>'
+    # Said as the page it opens says itself, so the link tells a reader — and a search engine — where it goes.
+    page = f' <a class="to-town" href="/{slug(town)}/">New housing in {html.escape(town)} →</a>'
     if town in FROM:
         return f'<p class="from">From {FROM[town]}.{page}</p>'
     if town not in INNER_RING:
