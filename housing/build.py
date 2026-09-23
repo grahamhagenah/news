@@ -506,10 +506,11 @@ CSS = """
   .steps i { width: 9px; height: 4px; border-radius: 1px; background: #2a2a2a; }
   /* The footer, as Pushpin's: set off by a faint line, what the site is, then its pages, towns and sources in
      short lists under small, faint headings, the towns in two columns. */
-  footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
+  footer { margin-top: 4.5rem; padding-top: 2.75rem; border-top: 1px solid rgba(255, 255, 255, .09); }
   .foot-about { max-width: 38rem; margin: 0; color: #999; font-size: .9rem; line-height: 1.6; }
+  .foot-about b { color: #ccc; font-weight: 600; }
   .site-links { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 18rem) minmax(0, 10rem) minmax(0, 11rem);
-                gap: 1.75rem 2.5rem; margin: 1.25rem 0 2rem; }
+                gap: 1.75rem 2.5rem; margin: 2.25rem 0 2rem; }
   .site-links h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
   .site-links ul { display: grid; gap: .45rem; }
   /* The towns down one column, then the next, in the order they're listed on the home page. */
@@ -1430,16 +1431,15 @@ def how_to_be_heard():
 
 
 def about(projects, towns):
-    """What the site is, in full, for the foot of each page: what it follows, how much, from where, and how it
-    keeps up, with the numbers as of this build."""
+    """What the site is, in a line, for the foot of each page, with the numbers as of this build. Its own name is
+    the one piece of markup in it, so a reader sees it for the name it is."""
     active = [p for p in projects if p["status"] != "complete"]
     return (
-        f"{NAME} follows new housing in Boston and the {len(towns) - 1} towns around it, from a project’s first "
-        f"filing until people move in: {len(projects):,} projects and {sum(p['units'] for p in projects):,} homes, "
-        f"{len(active):,} of those projects ({sum(p['units'] for p in active):,} homes) still in progress. It gathers "
-        "them from Boston’s Planning Department, Cambridge’s development log and MAPC’s MassBuilds every few hours "
-        "and notes each time a project moves along, so what’s just been filed, approved or broken ground rises to "
-        "the top of its town’s list."
+        f"<b>{html.escape(NAME)}</b> follows new housing in Boston and the {len(towns) - 1} towns around it, from "
+        f"first filing to move-in: {len(projects):,} projects, {sum(p['units'] for p in projects):,} homes, "
+        f"{len(active):,} still in progress. It reads Boston’s Planning Department, Cambridge’s development log and "
+        "MAPC’s MassBuilds every few hours, and lifts a project to the top of its town’s list each time it moves "
+        "along."
     )
 
 
@@ -1467,7 +1467,7 @@ def footer(here, towns, said):
         for heading, kind, links in groups
     )
     return (
-        f'<footer><p class="foot-about">{html.escape(said)}</p>'
+        f'<footer><p class="foot-about">{said}</p>'
         f'<nav class="site-links" aria-label="{html.escape(NAME)}">{lists}</nav>'
         '<p>From <a href="https://data.boston.gov/dataset/article80-development-projects">Boston’s Article 80 '
         'projects</a> (anything over about 20,000 square feet or 15 homes), <a href="' + CAMBRIDGE_PAGE +
