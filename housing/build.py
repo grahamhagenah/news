@@ -469,6 +469,7 @@ CSS = """
          background: #242426; }
   /* Full screen: the map the whole of it, without the corners and edge it has in the page. */
   #map:fullscreen { height: 100%; margin: 0; border: 0; border-radius: 0; }
+  #map.maplibregl-pseudo-fullscreen { height: 100dvh !important; margin: 0; border: 0; border-radius: 0; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
   /* Room to see: taller on a tall window, and in line with everything else on the page, whatever its width. */
   @media (min-height: 50rem) and (min-width: 46rem) { #map { height: 27rem; } }
@@ -593,6 +594,7 @@ CSS = """
   /* The key to the dots' colours, which the page has no room for and full screen has: only there. */
   #map .map-key { position: absolute; top: 0; right: 0; z-index: 2; display: none; }
   #map:fullscreen .map-key { display: grid; }
+  #map.maplibregl-pseudo-fullscreen .map-key { display: grid; }
   #map .maplibregl-popup-content { padding: .7rem .9rem; border: 1px solid #333; border-radius: 6px; background: #111; color: #ddd;
                               font-size: .85rem; line-height: 1.4; box-shadow: none; }
   #map .maplibregl-popup-content a { color: #fff; }
@@ -1000,12 +1002,13 @@ MAP_JS = """
       });
       map.touchZoomRotate.disableRotation();
       map.addControl(new maplibregl.NavigationControl({showCompass: false}), "top-left");
-      map.addControl(new maplibregl.FullscreenControl(), "top-left");
+      const wide = new maplibregl.FullscreenControl();
+      map.addControl(wide, "top-left");
       // Full screen has no page to scroll past, so there the trackpad and wheel zoom the map; in the page they
-      // don't, where they'd take the scroll the reader meant for the page itself.
-      document.addEventListener("fullscreenchange", () => {
-        if (document.fullscreenElement === mapBox) map.scrollZoom.enable(); else map.scrollZoom.disable();
-      });
+      // don't, where they'd take the scroll the reader meant for the page itself. The control tells us either
+      // way, full screen or the stand-in a phone gets.
+      wide.on("fullscreenstart", () => map.scrollZoom.enable());
+      wide.on("fullscreenend", () => map.scrollZoom.disable());
       for (const then of zoomHandlers) map.on("zoomend", then);
 """ + STYLE_JS + """      map.on("load", () => {
         loading.remove();
