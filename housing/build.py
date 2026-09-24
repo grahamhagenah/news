@@ -645,8 +645,6 @@ CSS = """
   .map-hint:empty { display: none; }
   .map-key { gap: .3rem; margin: .6rem .6rem 0 0; padding: .55rem .7rem; border: 1px solid #2a2a2a; border-radius: 5px;
              background: rgba(0, 0, 0, .72); color: #bbb; font-size: .75rem; pointer-events: none; }
-  .map-key b { display: block; margin-bottom: .1rem; color: #777; font-size: .68rem; font-weight: 500;
-               letter-spacing: .07em; text-transform: uppercase; }
   .map-key > span { display: flex; align-items: center; gap: .45rem; }
   /* A ring, as the map draws them. */
   .map-key i { flex: none; width: 9px; height: 9px; border: 1.5px solid currentColor; border-radius: 50%; }
@@ -897,7 +895,7 @@ MAP_JS = """
     const hintBox = Object.assign(document.createElement("div"), {className: "map-hint"});
     // What the dots' colours mean, shown only in full screen, where there's room the page hasn't got.
     const keyBox = Object.assign(document.createElement("div"), {className: "map-key"});
-    keyBox.innerHTML = "<b>What the colours mean</b>" + Object.entries(labels).map(([status, label]) =>
+    keyBox.innerHTML = Object.entries(labels).map(([status, label]) =>
       `<span style="color:${colors[status]}"><i></i><span style="color:#bbb">${label}</span></span>`).join("");
     mapBox.append(hintBox, keyBox);
     const START = innerWidth < 544 ? 11 : 12;  // A phone's narrower map, one step further out.
