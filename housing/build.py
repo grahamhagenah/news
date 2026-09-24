@@ -85,6 +85,11 @@ ICON_DRAWINGS = {
     "stalled": '<circle cx="8" cy="8" r="6.25"/><path d="M6.5 5.75v4.5M9.5 5.75v4.5"/>',
     "all": '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>'
            '<rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>',
+    # Have your say: a comment period is something to write into, a meeting a day to turn up on.
+    "comment": '<path d="M13.75 8.25c0 2.62-2.58 4.75-5.75 4.75a7 7 0 0 1-1.63-.19l-3.37 1.44 1-2.66'
+               'a4.4 4.4 0 0 1-1.75-3.34c0-2.62 2.58-4.75 5.75-4.75s5.75 2.13 5.75 4.75z"/>',
+    "meeting": '<rect x="2.25" y="3.5" width="11.5" height="10.25" rx="1.5"/>'
+               '<path d="M2.25 6.75h11.5M5.5 1.75v3M10.5 1.75v3"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 
@@ -485,6 +490,8 @@ CSS = """
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   /* One line, cut short with "…" if it must: as it turns over, a longer one never pushes the page down. */
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
+  .fresh-one .icon { margin-right: .5em; vertical-align: -1px; }
+  .fresh.say .icon { color: #8a8a8a; }
   .fresh-one b { color: #fff; font-weight: 500; }
   .fresh-none { color: #666; }
   .fresh-more { color: #888; }
@@ -1340,7 +1347,8 @@ def fresh_banner(recent, today, more="/recent/"):
     fresh = recent[:BANNER_LINES]
     if fresh:
         lines = "".join(
-            f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
+            f'<a class="fresh-one" href="?project={html.escape(project["id"])}">{status_icon(project["status"])}'
+            f'<b>{html.escape(project["name"])}</b> · '
             f'{html.escape(changed[1])} · {html.escape(when(changed[0], today))}</a>' for project, changed in fresh)
     else:
         lines = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
@@ -1373,7 +1381,8 @@ def say_line(projects, today, more, none=None):
     see_all = f'<a class="fresh-more" href="{more}">See all →</a>' if more else ""
     if coming:
         lines = "".join(
-            f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
+            f'<a class="fresh-one" href="?project={html.escape(project["id"])}">'
+            f'{shared.icon(project["say"][0]["kind"])}<b>{html.escape(project["name"])}</b> · '
             f'{html.escape(say_text(project["say"][0], today, short=True))}</a>'
             for _, project in coming[:BANNER_LINES])
     else:
