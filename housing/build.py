@@ -1528,7 +1528,7 @@ def as_data(page, town, projects, today, title, description):
     return f'<script type="application/ld+json">{data}</script>'
 
 
-def head(path, title, description, picture=None, mapped=True):
+def head(path, title, description, picture=None, mapped=True, feed="updates.xml", feed_name="recent updates"):
     """What a page tells search engines and link previews: what it's about, and its one address."""
     url = SITE_URL + path
     # The picture a link to the site shows (housing/static/share.png, drawn by make_icons.py): the house and the
@@ -1544,8 +1544,8 @@ def head(path, title, description, picture=None, mapped=True):
                                   '<meta property="og:image:height" content="630">')
             + f'<meta property="og:image:alt" content="{html.escape(NAME)}">'
             '<meta name="twitter:card" content="summary_large_image">'
-            + f'<link rel="alternate" type="application/rss+xml" title="{html.escape(NAME)}: recent updates" '
-              f'href="{SITE_URL}updates.xml">'
+            + f'<link rel="alternate" type="application/rss+xml" title="{html.escape(f"{NAME}: {feed_name}")}" '
+              f'href="{SITE_URL}{feed}">'
             + icons_head() + (MAP_HEAD if mapped else ""))
 
 
@@ -1669,8 +1669,10 @@ def render(projects, built_at, failed, page=None, town=None):
         banner += say_line(projects, today, more="/have-your-say/", none=nothing)
     # Under Have your say, how to say it; under a town's list, that town's own calendar.
     after = (how_to_be_heard() if page == "say" else
-             f'<section class="how"><h3>{html.escape(town)}’s deadlines and meetings, in your calendar</h3>'
-             + subscribe(f"{slug(town)}/say.ics", f"{html.escape(town)}’s dates") + '</section>' if page == "town"
+             f'<section class="how"><h3>Follow {html.escape(town)}</h3>'
+             + subscribe(f"{slug(town)}/say.ics", f"{html.escape(town)}’s dates")
+             + f'<p class="follow"><a href="/{slug(town)}/updates.xml">Or follow what changes in '
+             f'{html.escape(town)} by RSS →</a></p></section>' if page == "town"
              else '<p class="follow"><a href="/updates.xml">Follow these updates by RSS →</a></p>'
              if page == "recent" else "")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}{after}'
@@ -1688,7 +1690,10 @@ def render(projects, built_at, failed, page=None, town=None):
                    "and in a list for each town, with their status, size and details.")
     return shared.page(
         "news", title, body + script, css=CSS,
-        head=head(path, title, description) + as_data(page, town, projects, today, title, description),
+        head=head(path, title, description,
+                  feed=f"{slug(town)}/updates.xml" if page == "town" else "updates.xml",
+                  feed_name=f"{town} updates" if page == "town" else "recent updates")
+             + as_data(page, town, projects, today, title, description),
         symbols=ICON_SYMBOLS,
         updated=built_at, links=[(NAME, "/", not page)], marked={NAME: MARK + html.escape(NAME)}, here=name,
         indexable=True,
@@ -1795,8 +1800,11 @@ def calendar(projects, built_at, town=None):
     return "\r\n".join(folded(line) for line in lines) + "\r\n"
 
 
-def updates_feed(changes, built_at):
-    """What's changed lately, as a feed to follow: one item for each project that's moved along, newest first."""
+def updates_feed(changes, built_at, town=None):
+    """What's changed lately, as a feed to follow: one item for each project that's moved along, newest first.
+    With a town, only that town's, at its own address, so a reader can follow one place rather than all of
+    them."""
+    path = f"{slug(town)}/updates.xml" if town else "updates.xml"
     items = []
     for project, (day, what) in changes[:50]:
         where = f"{project['neighborhood']}, {project['town']}" if project["neighborhood"] else project["town"]
@@ -1808,13 +1816,15 @@ def updates_feed(changes, built_at):
             f"<guid isPermaLink=\"false\">{project['id']}-{what.lower().replace(' ', '-')}-{day.isoformat()}</guid>"
             f"<pubDate>{format_datetime(datetime.combine(day, datetime.min.time(), BOSTON))}</pubDate>"
             f"<description>{html.escape(told)}</description></item>")
+    said = (f"New housing in {town} as it is filed, approved, built and finished." if town else
+            f"New housing around {PLACE} as it is filed, approved, built and finished.")
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>'
-            f"<title>{html.escape(f'{NAME}: recent updates')}</title>"
-            f"<link>{SITE_URL}recent/</link>"
-            f"<description>{html.escape(f'New housing around {PLACE} as it is filed, approved, built and finished.')}</description>"
+            f"<title>{html.escape(f'{NAME}: {town} updates' if town else f'{NAME}: recent updates')}</title>"
+            f"<link>{SITE_URL}{slug(town) + '/' if town else 'recent/'}</link>"
+            f"<description>{html.escape(said)}</description>"
             f'<language>en-us</language><lastBuildDate>{format_datetime(built_at)}</lastBuildDate>'
-            f'<atom:link href="{SITE_URL}updates.xml" rel="self" type="application/rss+xml"/>'
+            f'<atom:link href="{SITE_URL}{path}" rel="self" type="application/rss+xml"/>'
             f"{''.join(items)}</channel></rss>\n")
 
 
@@ -2139,7 +2149,11 @@ def main():
     for town in towns:
         (OUT_DIR / slug(town) / "say.ics").write_text(
             calendar([p for p in projects if p["town"] == town], built_at, town))
-    (OUT_DIR / "updates.xml").write_text(updates_feed(recently_changed(projects, built_at.date()), built_at))
+    changed = recently_changed(projects, built_at.date())
+    (OUT_DIR / "updates.xml").write_text(updates_feed(changed, built_at))
+    for town in towns:
+        (OUT_DIR / slug(town) / "updates.xml").write_text(
+            updates_feed([(p, c) for p, c in changed if p["town"] == town], built_at, town))
     (OUT_DIR / "sitemap.xml").write_text(sitemap(projects, towns, built_at))
     (OUT_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n")
     saved = {"built": built_at.isoformat(), "projects": record, "sources": raw, "images": images}
