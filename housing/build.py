@@ -57,7 +57,8 @@ STAGES = ["proposed", "approved", "under construction", "complete"]
 # How far back Recent updates goes, and how many the home page's banner turns over. The cities refresh their
 # lists every few weeks or months, so a month can go by with nothing new in them.
 RECENT_DAYS = 90
-FRESH_SHOWN = 8
+BANNER_LINES = 3  # How many a banner shows at once, of either kind.
+FRESH_SHOWN = 9   # And how many Recently updated turns over, three at a time.
 
 # Finished projects are kept for a few years, as what's recently been built; before that they're history.
 COMPLETE_SINCE = 2020
@@ -478,8 +479,9 @@ CSS = """
     .controls .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
   }
   /* Recently updated, a line over the map, as Pushpin's Just announced: one of the newest, and the way to the rest. */
-  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 1.25rem; padding: .5rem 0; font-size: .85rem;
+  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 1.25rem; padding: .6rem 0; font-size: .85rem;
            border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
+  .fresh-list { display: grid; gap: .35rem; min-width: 0; flex: 1; }
   .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   /* One line, cut short with "…" if it must: as it turns over, a longer one never pushes the page down. */
@@ -800,31 +802,36 @@ CALENDAR_MARK = ('<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" str
 FRESH_SCRIPT = """
 <script>
   {
-    // Recently updated's own project, not Have your say's, which is the other line in that band.
-    const banner = document.querySelector(".fresh:not(.say) .fresh-one[href]");
-    if (banner) {
-      const show = pick => {
-        banner.href = "?project=" + encodeURIComponent(pick.id);
-        banner.replaceChildren(Object.assign(document.createElement("b"), {textContent: pick.name}), ` · ${pick.what} · ${pick.when}`);
+    // Recently updated's own lines, not Have your say's, which is the other band; Have your say stays put,
+    // since the soonest three are the three that matter.
+    const band = document.querySelector(".fresh:not(.say)");
+    const lines = band ? [...band.querySelectorAll(".fresh-one[href]")] : [];
+    if (lines.length) {
+      const show = (line, pick) => {
+        line.href = "?project=" + encodeURIComponent(pick.id);
+        line.replaceChildren(Object.assign(document.createElement("b"), {textContent: pick.name}), ` · ${pick.what} · ${pick.when}`);
       };
-      let at = Math.floor(Math.random() * FRESH.length);
-      show(FRESH[at]);
-      banner.addEventListener("click", event => {
-        const row = document.getElementById(new URLSearchParams(banner.getAttribute("href")).get("project"));
+      // The three shown are a page of the newest few; a page begins anywhere among them, so a visit sees more.
+      const page = from => lines.forEach((line, at) => show(line, FRESH[(from + at) % FRESH.length]));
+      const pages = Math.ceil(FRESH.length / lines.length);
+      let at = Math.floor(Math.random() * pages) * lines.length;
+      page(at);
+      for (const line of lines) line.addEventListener("click", event => {
+        const row = document.getElementById(new URLSearchParams(line.getAttribute("href")).get("project"));
         if (!row || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         row.click();
       });
-      if (FRESH.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (FRESH.length > lines.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
         let held = false;
         for (const [name, on] of [["pointerenter", true], ["pointerleave", false], ["focusin", true], ["focusout", false]]) {
-          banner.closest(".fresh").addEventListener(name, () => { held = on; });
+          band.addEventListener(name, () => { held = on; });
         }
         setInterval(() => {
           if (held || document.hidden) return;
-          banner.animate([{opacity: 1}, {opacity: 0, offset: .45}, {opacity: 1}], {duration: 1400, easing: "ease-in-out"});
-          setTimeout(() => show(FRESH[at = (at + 1) % FRESH.length]), 620);
-        }, 7000);
+          band.animate([{opacity: 1}, {opacity: 0, offset: .45}, {opacity: 1}], {duration: 1400, easing: "ease-in-out"});
+          setTimeout(() => page(at = (at + lines.length) % FRESH.length), 620);
+        }, 9000);
       }
     }
   }
@@ -1362,19 +1369,20 @@ def recently_changed(projects, today):
 
 
 def fresh_banner(recent, today, more="/recent/"):
-    """The home page's Recently updated line: one of the newest few, which its script turns over, and the way to
-    the rest. It stays when nothing's changed lately, saying so."""
+    """The home page's Recently updated lines: three of the newest few, which its script turns over three at a
+    time, and the way to the rest. They stay when nothing's changed lately, saying so."""
     fresh = [{"id": project["id"], "name": project["name"], "what": changed[1], "when": when(changed[0], today)}
              for project, changed in recent[:FRESH_SHOWN]]
     if fresh:
-        first = fresh[0]
-        one = (f'<a class="fresh-one" href="?project={html.escape(first["id"])}"><b>{html.escape(first["name"])}</b> · '
-               f'{html.escape(first["what"])} · {html.escape(first["when"])}</a>')
+        lines = "".join(
+            f'<a class="fresh-one" href="?project={html.escape(one["id"])}"><b>{html.escape(one["name"])}</b> · '
+            f'{html.escape(one["what"])} · {html.escape(one["when"])}</a>' for one in fresh[:BANNER_LINES])
     else:
-        one = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
+        lines = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
     # The way to the rest (Recent updates), except on Recent updates, which is the rest.
     see_all = f'<a class="fresh-more" href="{more}">See all →</a>' if more else ""
-    banner = f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>{one}{see_all}</p>'
+    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>'
+              f'<span class="fresh-list">{lines}</span>{see_all}</p>')
     return banner, json.dumps(fresh, ensure_ascii=False).replace("</", "<\\/")
 
 
@@ -1395,17 +1403,19 @@ def say_line(projects, today, more, none=None):
     """Have your say, a line under Recently updated: the soonest comment deadline or meeting, which stays put (the
     soonest is the one that matters), and the way to the rest. With nothing coming up it says none, if a page has
     words for that (a town's: only Boston and Cambridge publish any), and is left out otherwise."""
-    soonest = min(((say_day(p["say"][0]), p) for p in projects if p.get("say")), key=lambda pair: pair[0], default=None)
-    if not soonest and not none:
+    coming = sorted(((say_day(p["say"][0]), p) for p in projects if p.get("say")), key=lambda pair: pair[0])
+    if not coming and not none:
         return ""
     see_all = f'<a class="fresh-more" href="{more}">See all →</a>' if more else ""
-    if soonest:
-        project = soonest[1]
-        one = (f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
-               f'{html.escape(say_text(project["say"][0], today, short=True))}</a>')
+    if coming:
+        lines = "".join(
+            f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
+            f'{html.escape(say_text(project["say"][0], today, short=True))}</a>'
+            for _, project in coming[:BANNER_LINES])
     else:
-        one = f'<span class="fresh-one fresh-none">{html.escape(none)}</span>'
-    return f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>{one}{see_all}</p>'
+        lines = f'<span class="fresh-one fresh-none">{html.escape(none)}</span>'
+    return (f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>'
+            f'<span class="fresh-list">{lines}</span>{see_all}</p>')
 
 
 def subscribe(path="say.ics", label="these dates"):
