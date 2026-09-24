@@ -664,7 +664,8 @@ CSS = """
   main > details > summary .town { flex: 1; }
   main > details > summary .count { color: #666; font-size: .8rem; font-weight: normal; }
   main > details > ul { padding-bottom: 1rem; }
-  .from { margin: -.3rem 0 .6rem; color: #666; font-size: .8rem; }
+  main > details > summary:has(+ .from) { padding-bottom: .5rem; }
+  .from { margin: 0 0 .6rem; color: #666; font-size: .8rem; }
   .from a { color: #999; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   /* A project's name keeps its room, up to most of the row; what follows it is cut short first. */
   .row .headline .title { flex-shrink: 0; max-width: 70%; }
