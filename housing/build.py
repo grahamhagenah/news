@@ -338,7 +338,7 @@ def apply_edits(projects, edits):
             project["hidden"] = True
         if status:
             project["status"] = status
-        for key in ("note", "link", "description", "image"):
+        for key in ("note", "link", "description", "image", "credit"):
             if fields.get(key):
                 project[key] = fields[key]
         if when:
@@ -450,6 +450,7 @@ def panel_data(project, today):
         "units": project["units"], "status": project["status"], "facts": project.get("facts", []),
         "description": project["description"], "note": project.get("note", ""), "link": project["link"],
         "origin": project.get("origin", ""), "site": project.get("site", ""), "image": project.get("image", ""),
+        "credit": project.get("credit", ""),
         "updated": when(updated(project), today),
         # What last happened to it, where that was lately: the same the Recent updates page says of it.
         "change": [f"{changed[1]} · {long_date(changed[0])}"] if (changed := change(project, today)) else [],
@@ -701,6 +702,10 @@ CSS = """
   .panel-image { position: relative; aspect-ratio: 16 / 10; margin: -1.4rem -1.5rem 1.1rem; overflow: hidden; background: #151515; }
   .panel-image img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease-out; }
   .panel-image.loaded img { opacity: 1; }
+  .panel-credit { position: absolute; right: 0; bottom: 0; left: 0; padding: 1.6rem .85rem .5rem; color: #cfcfcf;
+                  font-size: .72rem; text-align: right; text-shadow: 0 1px 2px #000;
+                  background: linear-gradient(to top, rgba(0, 0, 0, .55), transparent); pointer-events: none; }
+  .panel-credit[hidden] { display: none; }
   .panel-image:not(.loaded) { background: linear-gradient(100deg, #151515 40%, #1d1d1d 50%, #151515 60%) 0 0 / 250% 100%;
                               animation: shimmer 1.6s linear infinite; }
   @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
@@ -755,7 +760,7 @@ def mark(path):
 PANEL = f"""<dialog class="project" aria-labelledby="panel-title">
 <div class="panel-tools"><button class="panel-back" type="button" aria-label="Previous project">{mark("M15 6l-6 6l6 6")}</button><button class="panel-on" type="button" aria-label="Next project">{mark("M9 6l6 6l-6 6")}</button><button class="panel-close" type="button" aria-label="Close">{mark("M6 6l12 12M18 6l-12 12")}</button></div>
 <div class="panel-body">
-<div class="panel-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"></div>
+<div class="panel-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"><p class="panel-credit"></p></div>
 <p class="panel-where"></p>
 <h2 class="panel-title" id="panel-title"></h2>
 <div class="panel-pills"></div>
@@ -1214,6 +1219,9 @@ SCRIPT = """
       image.hidden = !p.image;
       view.classList.toggle("shows-picture", !!p.image);
       if (p.image) img.src = p.image; else img.removeAttribute("src");
+      const credit = image.querySelector(".panel-credit");
+      credit.textContent = p.credit || "";
+      credit.hidden = !p.credit;
       // The same picture again, already loaded, fires no load event of its own.
       if (p.image && img.complete && img.naturalWidth) image.classList.add("loaded");
       part("source").hidden = !p.link;
