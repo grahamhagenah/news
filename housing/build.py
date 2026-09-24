@@ -1637,23 +1637,18 @@ def render(projects, built_at, failed, page=None, town=None):
     intro = (f'<h1 class="page-heading">{html.escape(page_heading(page, town))}</h1>'
              f'<div class="intro"><p class="tagline">{said}</p></div>')
     # Over every page's map: on Large projects, only its own projects' changes, so each opens here.
-    # Both banners over every page's map, except Recent updates, which is the newest few at length: the lines
-    # would be the first rows under them said twice. On Large projects and Have your say, only the changes among
-    # that page's own projects, so a line opens where it stands.
-    if page == "recent":
+    # Both banners over every page's map, except the two pages that are a banner at length: Recent updates and
+    # Have your say, where the lines would be the first rows under them said twice. On Large projects, only the
+    # changes among its own projects, so a line opens where it stands.
+    if page in ("recent", "say"):
         banner = ""
     else:
-        if page == "large":
-            banner = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today)
-        elif page == "say":
-            banner = fresh_banner([(p, c) for p, c in changes if p.get("say")], today)
-        else:
-            banner = fresh_banner(changes, today)
+        banner = fresh_banner([(p, c) for p, c in changes if page != "large" or p["units"] >= LARGE_HOMES], today)
         # Under it, the soonest chances to have a say among the projects that page lists. A town that publishes
         # no comment periods or meetings says so, rather than leaving the line out.
         nothing = (f"{town} doesn’t publish comment periods or meetings" if page == "town"
                    and town not in ("Boston", "Cambridge") else None)
-        banner += say_line(projects, today, more="" if page == "say" else "/have-your-say/", none=nothing)
+        banner += say_line(projects, today, more="/have-your-say/", none=nothing)
     # Under Have your say, how to say it; under a town's list, that town's own calendar.
     after = (how_to_be_heard() if page == "say" else
              f'<section class="how"><h3>{html.escape(town)}’s deadlines and meetings, in your calendar</h3>'
