@@ -57,8 +57,7 @@ STAGES = ["proposed", "approved", "under construction", "complete"]
 # How far back Recent updates goes, and how many the home page's banner turns over. The cities refresh their
 # lists every few weeks or months, so a month can go by with nothing new in them.
 RECENT_DAYS = 90
-BANNER_LINES = 3  # How many a banner shows at once, of either kind.
-FRESH_SHOWN = 9   # And how many Recently updated turns over, three at a time.
+BANNER_LINES = 3  # How many each banner shows, of either kind.
 
 # Finished projects are kept for a few years, as what's recently been built; before that they're history.
 COMPLETE_SINCE = 2020
@@ -479,23 +478,19 @@ CSS = """
     .controls .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
   }
   /* Recently updated, a line over the map, as Pushpin's Just announced: one of the newest, and the way to the rest. */
-  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 1.25rem; padding: .6rem 0; font-size: .85rem;
-           border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
-  .fresh-list { display: grid; gap: .35rem; min-width: 0; flex: 1; }
-  .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
+  .fresh { display: grid; grid-template-columns: 1fr auto; gap: .45rem .6rem; margin: 0 0 1.25rem; padding: .7rem 0;
+           font-size: .85rem; border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
+  .fresh-list { display: grid; gap: .35rem; min-width: 0; grid-column: 1 / -1; }
+  .fresh-tag { color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   /* One line, cut short with "…" if it must: as it turns over, a longer one never pushes the page down. */
   .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
   .fresh-one b { color: #fff; font-weight: 500; }
   .fresh-none { color: #666; }
-  .fresh-more { flex: none; margin-left: auto; color: #888; }
+  .fresh-more { color: #888; }
   .fresh-more:hover, .fresh-one:hover { color: #fff; text-decoration: none; }
   .fresh-one:hover b { text-decoration: underline; }
-  @media (max-width: 34rem) {
-    .fresh { display: grid; grid-template-columns: 1fr auto; gap: .1rem .6rem; }
-    .fresh-tag { grid-column: 1 / -1; }
-    .fresh-more { margin-left: 0; }
-  }
+
   /* The header: the site's name and the page's each kept whole, the page's going to a line of its own when both
      won't fit beside the time it was updated, which stays level with the first. */
   header { align-items: baseline; }
@@ -795,45 +790,16 @@ CALENDAR_MARK = ('<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" str
                  '<path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M16 19h6"/>'
                  '<path d="M19 16v6"/></g></svg>')
 
-# Recently updated, over the home page's map: the newest few, turning over one at a time so a visit shows
-# several, as Pushpin's Just announced does; each opens its project's panel here. It starts anywhere among them,
-# holds while it's under the pointer or has the keyboard or the page is in the background, and stays put for
-# anyone who's asked for less motion.
+# The banners' lines open their project's panel here, rather than the page loading again at its address.
 FRESH_SCRIPT = """
 <script>
-  {
-    // Recently updated's own lines, not Have your say's, which is the other band; Have your say stays put,
-    // since the soonest three are the three that matter.
-    const band = document.querySelector(".fresh:not(.say)");
-    const lines = band ? [...band.querySelectorAll(".fresh-one[href]")] : [];
-    if (lines.length) {
-      const show = (line, pick) => {
-        line.href = "?project=" + encodeURIComponent(pick.id);
-        line.replaceChildren(Object.assign(document.createElement("b"), {textContent: pick.name}), ` · ${pick.what} · ${pick.when}`);
-      };
-      // The three shown are a page of the newest few; a page begins anywhere among them, so a visit sees more.
-      const page = from => lines.forEach((line, at) => show(line, FRESH[(from + at) % FRESH.length]));
-      const pages = Math.ceil(FRESH.length / lines.length);
-      let at = Math.floor(Math.random() * pages) * lines.length;
-      page(at);
-      for (const line of lines) line.addEventListener("click", event => {
-        const row = document.getElementById(new URLSearchParams(line.getAttribute("href")).get("project"));
-        if (!row || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        row.click();
-      });
-      if (FRESH.length > lines.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        let held = false;
-        for (const [name, on] of [["pointerenter", true], ["pointerleave", false], ["focusin", true], ["focusout", false]]) {
-          band.addEventListener(name, () => { held = on; });
-        }
-        setInterval(() => {
-          if (held || document.hidden) return;
-          band.animate([{opacity: 1}, {opacity: 0, offset: .45}, {opacity: 1}], {duration: 1400, easing: "ease-in-out"});
-          setTimeout(() => page(at = (at + lines.length) % FRESH.length), 620);
-        }, 9000);
-      }
-    }
+  for (const line of document.querySelectorAll(".fresh-one[href]")) {
+    line.addEventListener("click", event => {
+      const row = document.getElementById(new URLSearchParams(line.getAttribute("href")).get("project"));
+      if (!row || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      row.click();
+    });
   }
 </script>"""
 
@@ -1369,21 +1335,19 @@ def recently_changed(projects, today):
 
 
 def fresh_banner(recent, today, more="/recent/"):
-    """The home page's Recently updated lines: three of the newest few, which its script turns over three at a
-    time, and the way to the rest. They stay when nothing's changed lately, saying so."""
-    fresh = [{"id": project["id"], "name": project["name"], "what": changed[1], "when": when(changed[0], today)}
-             for project, changed in recent[:FRESH_SHOWN]]
+    """The home page's Recently updated lines: the newest few, under the heading, and the way to the rest. They
+    stay when nothing's changed lately, saying so."""
+    fresh = recent[:BANNER_LINES]
     if fresh:
         lines = "".join(
-            f'<a class="fresh-one" href="?project={html.escape(one["id"])}"><b>{html.escape(one["name"])}</b> · '
-            f'{html.escape(one["what"])} · {html.escape(one["when"])}</a>' for one in fresh[:BANNER_LINES])
+            f'<a class="fresh-one" href="?project={html.escape(project["id"])}"><b>{html.escape(project["name"])}</b> · '
+            f'{html.escape(changed[1])} · {html.escape(when(changed[0], today))}</a>' for project, changed in fresh)
     else:
         lines = f'<span class="fresh-one fresh-none">Nothing’s changed in the last {RECENT_DAYS} days</span>'
     # The way to the rest (Recent updates), except on Recent updates, which is the rest.
     see_all = f'<a class="fresh-more" href="{more}">See all →</a>' if more else ""
-    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>'
-              f'<span class="fresh-list">{lines}</span>{see_all}</p>')
-    return banner, json.dumps(fresh, ensure_ascii=False).replace("</", "<\\/")
+    return (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Recently updated</span>{see_all}'
+            f'<span class="fresh-list">{lines}</span></p>')
 
 
 def slug(town):
@@ -1414,8 +1378,8 @@ def say_line(projects, today, more, none=None):
             for _, project in coming[:BANNER_LINES])
     else:
         lines = f'<span class="fresh-one fresh-none">{html.escape(none)}</span>'
-    return (f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>'
-            f'<span class="fresh-list">{lines}</span>{see_all}</p>')
+    return (f'<p class="fresh say"><span class="fresh-tag">{SAY_MARK}Have your say</span>{see_all}'
+            f'<span class="fresh-list">{lines}</span></p>')
 
 
 def subscribe(path="say.ics", label="these dates"):
@@ -1665,13 +1629,13 @@ def render(projects, built_at, failed, page=None, town=None):
              f'<div class="intro"><p class="tagline">{said}</p></div>')
     # Over every page's map: on Large projects, only its own projects' changes, so each opens here.
     if page == "large":
-        banner, fresh = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="/recent/")
+        banner = fresh_banner([(p, c) for p, c in changes if p["units"] >= LARGE_HOMES], today, more="/recent/")
     elif page == "town":
-        banner, fresh = fresh_banner(changes, today, more="/recent/")
+        banner = fresh_banner(changes, today, more="/recent/")
     elif page == "say":
-        banner, fresh = fresh_banner([(p, c) for p, c in changes if p.get("say")], today, more="/recent/")
+        banner = fresh_banner([(p, c) for p, c in changes if p.get("say")], today, more="/recent/")
     else:
-        banner, fresh = fresh_banner(changes, today, more="" if page == "recent" else "/recent/")
+        banner = fresh_banner(changes, today, more="" if page == "recent" else "/recent/")
     # And under it, on every page alike, the soonest chance to have a say among the projects that page lists.
     # A town that publishes no comment periods or meetings says so, rather than leaving the line out.
     nothing = (f"{town} doesn’t publish comment periods or meetings" if page == "town"
@@ -1685,7 +1649,7 @@ def render(projects, built_at, failed, page=None, town=None):
              if page == "recent" else "")
     body = (f'{intro}{banner}<div id="map"{" data-fit" if page else ""}></div>{filter_row}{missing}{sections}{after}'
             f'{footer(path, towns, about(everything, towns))}{PANEL}'
-            f'<script>const FRESH = {fresh}, REPO = {json.dumps(REPO_URL)};</script>')
+            f'<script>const REPO = {json.dumps(REPO_URL)};</script>')
     script = (SCRIPT % (json.dumps({key: color for key, (_, color) in STATUSES.items()}),
                         json.dumps({key: label for key, (label, _) in STATUSES.items()}))).replace(
         "    /*MAP*/\n", MAP_JS) + FRESH_SCRIPT
