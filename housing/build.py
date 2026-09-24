@@ -465,7 +465,8 @@ def panel_data(project, today):
 
 
 CSS = """
-  #map { height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px; background: #242426; }
+  #map { position: relative; height: 22rem; margin: 0 0 1.25rem; border: 1px solid #222; border-radius: 6px;
+         background: #242426; }
   /* Full screen: the map the whole of it, without the corners and edge it has in the page. */
   #map:fullscreen { height: 100%; margin: 0; border: 0; border-radius: 0; }
   @media (max-width: 34rem) { #map { height: 16rem; } }
@@ -483,8 +484,9 @@ CSS = """
     .controls .search { flex: none; width: 100%; font-size: 1rem; }  /* Stacked, its flex size would be its height. */
   }
   /* Recently updated, a line over the map, as Pushpin's Just announced: one of the newest, and the way to the rest. */
-  .fresh { display: grid; grid-template-columns: 1fr auto; gap: .45rem .6rem; margin: 0 0 1.25rem; padding: .7rem 0;
-           font-size: .85rem; border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
+  .fresh { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: .45rem .6rem;
+           margin: 0 0 1.25rem; padding: .7rem 0; font-size: .85rem;
+           border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
   .fresh-list { display: grid; gap: .35rem; min-width: 0; grid-column: 1 / -1; }
   .fresh-tag { color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
@@ -587,7 +589,10 @@ CSS = """
   /* The map's controls, notes and credits, quiet and dark like the page. Each is written from #map, so they
      hold whether MapLibre's own stylesheet has arrived yet or not (it's fetched with the map, after these). */
   #map .maplibregl-map { font: inherit; }
-  #map .maplibregl-map .map-hint { position: absolute; left: 0; bottom: 0; z-index: 2; }
+  #map .map-hint { position: absolute; left: 0; bottom: 0; z-index: 2; }
+  /* The key to the dots' colours, which the page has no room for and full screen has: only there. */
+  #map .map-key { position: absolute; top: 0; right: 0; z-index: 2; display: none; }
+  #map:fullscreen .map-key { display: grid; }
   #map .maplibregl-popup-content { padding: .7rem .9rem; border: 1px solid #333; border-radius: 6px; background: #111; color: #ddd;
                               font-size: .85rem; line-height: 1.4; box-shadow: none; }
   #map .maplibregl-popup-content a { color: #fff; }
@@ -638,6 +643,13 @@ CSS = """
   .map-hint { margin: 0 0 .45rem .55rem !important; padding: .1rem .45rem; border-radius: 3px; background: rgba(0, 0, 0, .65);
               color: #888; font-size: .72rem; pointer-events: none; }
   .map-hint:empty { display: none; }
+  .map-key { gap: .3rem; margin: .6rem .6rem 0 0; padding: .55rem .7rem; border: 1px solid #2a2a2a; border-radius: 5px;
+             background: rgba(0, 0, 0, .72); color: #bbb; font-size: .75rem; pointer-events: none; }
+  .map-key b { display: block; margin-bottom: .1rem; color: #777; font-size: .68rem; font-weight: 500;
+               letter-spacing: .07em; text-transform: uppercase; }
+  .map-key > span { display: flex; align-items: center; gap: .45rem; }
+  /* A ring, as the map draws them. */
+  .map-key i { flex: none; width: 9px; height: 9px; border: 1.5px solid currentColor; border-radius: 50%; }
   .panel-pill .icon { width: 12px; height: 12px; }
   main > details { border-top: 1px solid #1c1c1c; }
   /* On a phone the search sits right above the first list, its own line and the list's reading as a pair. */
@@ -883,7 +895,11 @@ MAP_JS = """
     const MAP_SRC = "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.24.0/maplibre-gl.js";
     const mapBox = document.getElementById("map");
     const hintBox = Object.assign(document.createElement("div"), {className: "map-hint"});
-    mapBox.append(hintBox);
+    // What the dots' colours mean, shown only in full screen, where there's room the page hasn't got.
+    const keyBox = Object.assign(document.createElement("div"), {className: "map-key"});
+    keyBox.innerHTML = "<b>What the colours mean</b>" + Object.entries(labels).map(([status, label]) =>
+      `<span style="color:${colors[status]}"><i></i><span style="color:#bbb">${label}</span></span>`).join("");
+    mapBox.append(hintBox, keyBox);
     const START = innerWidth < 544 ? 11 : 12;  // A phone's narrower map, one step further out.
     const APART = 12;  // From here in, every project is its own dot; further out, they're grouped.
     // A map given a few projects to fit (a town's, or a page of them) shows each of them, however close together.
