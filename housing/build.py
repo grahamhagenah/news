@@ -282,6 +282,10 @@ SOURCES = [("Boston", BOSTON_URL, boston), ("Cambridge", CAMBRIDGE_URL, cambridg
     (town, MASSBUILDS_URL.format(town), massbuilds) for town in INNER_RING
 ]
 FROM = {"Boston": "Boston’s Planning Department", "Cambridge": "Cambridge’s development log"}
+# What each city's list takes in, which is also what it leaves out: a reader looking for a small building on
+# their own street should be told why it isn't here, beside the list that hasn't got it.
+LISTS = {"Boston": "projects of about 15 homes or 20,000 square feet and up",
+         "Cambridge": "projects of 10 homes or 50,000 square feet and up"}
 
 
 def read_edits(text):
@@ -500,6 +504,8 @@ CSS = """
   .sites .here::before { content: "/"; margin-right: .5em; color: #444; font-weight: 400; }
   @media (max-width: 34rem) { header:has(.here:not([hidden])) .header-note { display: none; } }
   .sites a:not([aria-current]) .city { color: inherit; }
+  /* The home page: the site's name is the page, so the city named after it is said quietly, not as a heading. */
+  .sites a[aria-current="page"] + .here { color: #8a8a8a; font-weight: 500; }
   .tagline a { color: #bbb; }
   /* Large projects' bar of four steps, before its town: how far along the project is. */
   .steps { display: inline-flex; flex: none; gap: 2px; margin-right: .6rem; }
@@ -1330,7 +1336,7 @@ def source_note(town, rows, today):
     # Said as the page it opens says itself, so the link tells a reader — and a search engine — where it goes.
     page = f' <a class="to-town" href="/{slug(town)}/">New housing in {html.escape(town)} →</a>'
     if town in FROM:
-        return f'<p class="from">From {FROM[town]}.{page}</p>'
+        return f'<p class="from">From {FROM[town]}, which lists {LISTS[town]}.{page}</p>'
     if town not in INNER_RING:
         return ""
     latest = max((p["dated"] for p in rows if p["id"].startswith("massbuilds-") and p["dated"]), default=None)
@@ -1468,12 +1474,7 @@ def footer(here, towns, said):
     )
     return (
         f'<footer><p class="foot-about">{said}</p>'
-        f'<nav class="site-links" aria-label="{html.escape(NAME)}">{lists}</nav>'
-        '<p>From <a href="https://data.boston.gov/dataset/article80-development-projects">Boston’s Article 80 '
-        'projects</a> (anything over about 20,000 square feet or 15 homes), <a href="' + CAMBRIDGE_PAGE +
-        '">Cambridge’s development log</a> (50,000 square feet or 10 homes) and, for the towns around them, MAPC’s '
-        '<a href="https://www.massbuilds.com/">MassBuilds</a>, with notes of our own. A project’s date is the latest '
-        'of its filing, its approval, its last update and the day it was seen to move on.</p></footer>'
+        f'<nav class="site-links" aria-label="{html.escape(NAME)}">{lists}</nav></footer>'
     )
 
 
