@@ -52,6 +52,9 @@ ROUTES = [
     ("icaboston.org/calendar", "ica.html"),
     ("icaboston.org/events/colin-stetson", "ica_event.html"),
     ("internet-ticketing.com/websales/sales/LEXLEX/start", "tapos.html"),
+    ("somervilletheatre.com/wp-json/wp/v2/wp_theatre_prod", "somerville_productions.json"),
+    ("somervilletheatre.com/events/", "somerville_events.html"),
+    ("internet-ticketing.com/websales/sales/CSBSOM/start", "somerville_sales.html"),
     ("rickshawstop.com", "seetickets.html"),
     ("yoshis.com", "yoshis.html"),
     ("sfmoma.org/events", "sfmoma.html"),
@@ -366,6 +369,29 @@ class Readers(unittest.TestCase):
         # A film with no certificate says "Rating N/A" where one would go; that isn't part of its name.
         self.assertIn("National Theatre Live The Misanthrope", [item["title"] for item in found])
 
+    def test_somerville_takes_its_films_names_from_the_theatres_own_site(self):
+        found = self.read("somerville", "https://www.somervilletheatre.com/#CSBSOM", "film", sorts_its_own=True)
+        films = {item["title"]: item for item in found if item["category"] == "film"}
+        # The ticketing calls it "The Devils"; the theatre's site, which the listing links to, says whose.
+        self.assertIn("Ken Russell’s The Devils", films)
+        devils = films["Ken Russell’s The Devils"]
+        self.assertEqual(devils["link"], "https://www.somervilletheatre.com/production/ken-russells-the-devils/")
+        self.assertTrue(devils["image"].startswith("https://www.somervilletheatre.com/"))
+        self.assertTrue(devils["about"])
+        # "House" is the site's "House (Hausu)", the nearest of its names holding it, not "House on Haunted Hill".
+        self.assertIn("House (Hausu) in 35mm", films)
+        self.assertNotIn("House", films)
+
+    def test_somerville_adds_its_live_shows_and_leaves_out_what_is_already_a_showtime(self):
+        found = self.read("somerville", "https://www.somervilletheatre.com/#CSBSOM", "film", sorts_its_own=True)
+        music = [item for item in found if item["category"] == "music"]
+        self.assertIn("Oteil Burbridge with LaMP – Wish Benefit Tour", [item["title"] for item in music])
+        self.assertTrue(all("/production/" in item["link"] for item in music))
+        # A film with an orchestra is on the events page and in the showtimes; it's listed once, as a film.
+        phantom = [item for item in found if "Phantom of the Opera" in item["title"]]
+        self.assertEqual([item["category"] for item in phantom], ["film"], phantom)
+        self.assertEqual(len(phantom), 1)
+
     def test_tribe_skips_what_isnt_a_show(self):
         found = self.read("tribe", "https://lizardloungeclub.com/wp-json/tribe/events/v1/events")
         titles = [item["title"] for item in found]
@@ -551,7 +577,7 @@ class Cities(unittest.TestCase):
         self.assertIn('<a href="/">All cities</a>', page)
         self.assertIn('<span class="city">Western Mass</span>', page)
         about = build.render_about([images], datetime(2026, 9, 15, tzinfo=timezone.utc))
-        self.assertNotIn("Somerville Theatre", about, "not Boston's question about its theaters")
+        self.assertNotIn("Capitol Theatre", about, "not Boston's question about a theater of its own")
         self.assertIn("I grew up in Western Mass", about)
         self.assertNotIn("I live in Somerville", about)
         self.assertIn("venues across the Pioneer Valley and the Berkshires", about)
@@ -1293,7 +1319,7 @@ class Page(unittest.TestCase):
         self.assertIn("How to use it", about)
         # The questions, each opening to its answer, and told to search engines as an FAQ.
         self.assertEqual(about.count("<details><summary>"), len(build.FAQS))
-        self.assertIn("<summary>Why isn’t the Somerville Theatre on here?</summary>", about)
+        self.assertIn("<summary>Why isn’t the Capitol Theatre on here?</summary>", about)
         data = json.loads(about.split('<script type="application/ld+json">')[1].split("</script>")[0])
         self.assertEqual(data["@type"], "FAQPage")
         self.assertEqual([q["name"] for q in data["mainEntity"]], [q for q, _ in build.FAQS])

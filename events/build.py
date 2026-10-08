@@ -164,9 +164,10 @@ def skipping():
 _fetched, _fetching = {}, threading.Lock()
 
 
-def fetch(url, attempts=3, timeout=20):
+def fetch(url, attempts=3, timeout=20, user_agent=None):
     """The page or data at url, as text. Each address is downloaded once a build, however many times it's
-    read (an ICA event's page, for each of its dates)."""
+    read (an ICA event's page, for each of its dates). user_agent names us differently to a site that turns
+    the usual one away (the Somerville Theatre's)."""
     address = url
     with _fetching:
         pending, first = _fetched.get(address), address not in _fetched
@@ -174,7 +175,7 @@ def fetch(url, attempts=3, timeout=20):
             pending = _fetched[address] = Future()
     if first:
         try:
-            pending.set_result(shared.fetch(address, USER_AGENT, attempts, timeout)[1].decode("utf-8", "replace"))
+            pending.set_result(shared.fetch(address, user_agent or USER_AGENT, attempts, timeout)[1].decode("utf-8", "replace"))
         except Exception as error:
             pending.set_exception(error)
     return pending.result()
@@ -1713,7 +1714,7 @@ def read_harvard_art(source):
 TAPOS_BOX = re.compile(r'<div class="[^"]*start-performance-box.*?(?=<div class="[^"]*start-performance-box|\Z)', re.S)
 TAPOS_DAY = re.compile(r'<div class="col-md-4 row">\s*([A-Z][a-z]+ [A-Z][a-z]+ \d{1,2})(?:st|nd|rd|th)\s*</div>')
 # A film with no certificate to show says so where the certificate would go.
-TAPOS_UNRATED = re.compile(r"\s*[-–]\s*Rating N/?A\s*$", re.I)
+TAPOS_UNRATED = re.compile(r"\s*[-–]\s*Rating\s+[\w/-]+\s*$", re.I)
 TAPOS_TIME = re.compile(r'<span class="showtime-button-time">\s*(\d{1,2}):(\d{2})\s*([ap])m\s*</span>', re.I)
 
 
@@ -2086,6 +2087,105 @@ def read_ybca(source):
     return events
 
 
+# The Somerville Theatre's own site, which names us plainly (its firewall turns away the agent the rest of the
+# build uses), and the ticketing it books through, where its showtimes are.
+SOMERVILLE_AGENT = "PushpinBot/1.0 (+https://pushpin.city)"
+SOMERVILLE_SALES = "https://www.internet-ticketing.com/websales/sales/{}/start"
+# A film's name without what it's shown on or the year it's from, for matching the two: "The Love Witch in
+# 35mm" and "The Love Witch", "Silents Please: Frankenstein (1931)" and "Frankenstein".
+SOMERVILLE_FORMAT = re.compile(r"\b(?:in\s+)?(?:35|70)\s*mm\b|\(\d{4}\)", re.I)
+
+
+def somerville_key(title):
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", SOMERVILLE_FORMAT.sub(" ", html.unescape(title or "")))).strip().casefold()
+
+
+def somerville_productions(url):
+    """What the theatre's site says about each thing it's putting on, by name: its own page, its description,
+    its poster, and whether the site files it under "movie" (its films) or as a live show."""
+    films = {}
+    for page in range(1, 4):
+        asked = urlencode({"per_page": 100, "page": page,
+                                        "_fields": "link,title,class_list,excerpt,yoast_head_json"})
+        productions = json.loads(fetch(f"{url}wp-json/wp/v2/wp_theatre_prod?{asked}", user_agent=SOMERVILLE_AGENT))
+        for production in productions:
+            title = text(production["title"]["rendered"])
+            image = (production.get("yoast_head_json", {}).get("og_image") or [{}])[0].get("url", "")
+            films.setdefault(somerville_key(title), {"title": title, "link": production["link"],
+                                                     "about": about(production.get("excerpt", {}).get("rendered", "")),
+                                                     "image": image,
+                                                     "film": "category-movie" in (production.get("class_list") or [])})
+        if len(productions) < 100:
+            break
+    return films
+
+
+# Each event on the theatre's own events page: its name, the day and time it starts, and the production it's of.
+SOMERVILLE_EVENT = re.compile(r'<div class="wp_theatre_event">(.*?)(?=<div class="wp_theatre_event">|<footer|\Z)', re.S)
+SOMERVILLE_PART = '<div class="[^"]*wp_theatre_event_{}[^"]*">(.*?)</div>'
+
+
+def somerville_part(block, name):
+    found = re.search(SOMERVILLE_PART.format(name), block, re.S)
+    return text(found.group(1)) if found else ""
+
+
+def somerville_film(films, title):
+    """The site's film a showtime is for: the one of that name, or the nearest name holding it — "The Devils"
+    is "Ken Russell's The Devils", and "House" the site's "House (Hausu)" rather than its "House on Haunted
+    Hill". Nothing when two names are equally near, which is better than naming the wrong film."""
+    key = somerville_key(title)
+    if key in films:
+        return films[key]
+    holding = [name for name in films if re.search(rf"(?<!\w){re.escape(key)}(?!\w)", name)]
+    if not holding:
+        return None
+    nearest = min(len(name) for name in holding)
+    closest = [name for name in holding if len(name) == nearest]
+    return films[closest[0]] if len(closest) == 1 else None
+
+
+def read_somerville(source):
+    """Everything the Somerville Theatre is putting on, from the theatre itself (it gave permission, October
+    2026). Its films' showtimes come from the ticketing it books through, the same sales its own pages send
+    readers to, since its site holds a film's times only on the film's own page, which would be a fetch per
+    film every build. Its concerts and other events come from its events page. Both carry the name, description
+    and poster its site gives each, and link to its page for it; the site files each under films or live shows."""
+    url, _, code = source["url"].partition("#")
+    productions = somerville_productions(url if url.endswith("/") else url + "/")
+    listings = read_tapos(dict(source, url=SOMERVILLE_SALES.format(code or "CSBSOM")))
+    for listing in listings:
+        somerville_describe(listing, somerville_film(productions, listing["title"]))
+
+    # The events page carries what isn't a film showtime: concerts, comedy, a run of a holiday show. A film
+    # with an orchestra is on both, so anything already in the showtimes is left out.
+    showing = {(listing["link"], listing["date"], tuple(listing["times"])) for listing in listings}
+    for block in SOMERVILLE_EVENT.findall(fetch(urljoin(url, "/events/"), user_agent=SOMERVILLE_AGENT)):
+        title = somerville_part(block, "title")
+        day = somerville_part(block, "startdate")
+        start = somerville_part(block, "starttime")
+        page = re.search(r'href="([^"]*/production/[^"]+)"', block)
+        if not title or not day:
+            continue
+        production = productions.get(somerville_key(title)) or somerville_film(productions, title)
+        listing = event(dict(source, category="film" if (production or {}).get("film") else "music"), title,
+                        datetime.strptime(day, "%B %d, %Y").date(),
+                        datetime.strptime(start, "%I:%M %p").time() if start else None,
+                        link=page.group(1) if page else url)
+        somerville_describe(listing, production)
+        if (listing["link"], listing["date"], tuple(listing["times"])) not in showing:
+            listings.append(listing)
+    return listings
+
+
+def somerville_describe(listing, production):
+    """A listing under the name, description, poster and page the theatre's site gives it."""
+    if production:
+        listing.update(title=production["title"], link=production["link"],
+                       about=production["about"] or listing["about"],
+                       image=production["image"] or listing["image"])
+
+
 READERS = {
     "aeg": read_aeg,
     "axs": read_axs,
@@ -2122,6 +2222,7 @@ READERS = {
     "exploratorium": read_exploratorium,
     "ybca": read_ybca,
     "tapos": read_tapos,
+    "somerville": read_somerville,
     "mit": read_mit,
     "bibliocommons": read_bibliocommons,
     "mfa": read_mfa,
@@ -2667,10 +2768,9 @@ FAQS = [
     ("Who makes this?",
      "I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I live in Somerville and love supporting my local theaters and concert venues, and I "
      "wanted an easier way to track what’s coming up than relying on Google or visiting each venue’s website."),
-    ("Why isn’t the Somerville Theatre on here?",
-     "Its concerts are, but not its films. The theater’s website has no public calendar feed and doesn’t allow "
-     "automated web crawling, so its screenings can’t be gathered. I’m trying to get in touch with its managers "
-     "to find a way around this. The same goes for the Capitol Theatre in Arlington."),
+    ("Why isn’t the Capitol Theatre on here?",
+     "Its website doesn’t allow automated web crawling, so its screenings can’t be gathered. I’m trying to get "
+     "in touch with its managers to find a way around this, as the Somerville Theatre kindly did."),
     ("Why isn’t my favorite venue here?",
      "It may not publish its calendar in a way that can be read automatically, or I may not have found it yet. "
      "<a href=\"/contact/\">Tell me about it</a> and I’ll take a look."),
@@ -2769,9 +2869,9 @@ def city_texts(slug, name, place, around, *, state="Massachusetts", zone="Americ
                      f"aggregated from select venues.",
                      f"Art and talks around {around}, aggregated from select venues.")},
         # Its own questions, or Boston's, with its own answer to who makes it and without the one about
-        # Boston's theaters.
+        # a theater of Boston's.
         faqs or [(question, who if question == "Who makes this?" else answer)
-                 for question, answer in FAQS if "Somerville Theatre" not in question],
+                 for question, answer in FAQS if "Capitol Theatre" not in question],
         state, zone)
 
 
