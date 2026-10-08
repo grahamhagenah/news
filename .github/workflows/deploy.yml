@@ -44,6 +44,10 @@ jobs:
           # A YouTube Data API key, for a YouTube channel whose feed won't load. Without it, such a channel
           # shows its videos from the last build, as any other failing feed does.
           YOUTUBE_KEY: ${{ secrets.YOUTUBE_KEY }}
+          # Where this newsfeed is published, since it's a domain of ours rather than GitHub Pages' own
+          # address, and the sister site its header names. A copy of the newsfeed sets neither.
+          SITE_URL: https://news.grahamhagenah.com/
+          EVENTS_URL: https://pushpin.city/boston/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist/news

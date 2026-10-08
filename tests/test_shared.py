@@ -1,6 +1,7 @@
 """Tests for shared/: the page both sites are built on, and the alerts. Run from the repo's top folder with:
 python3 -m unittest"""
 
+import importlib
 import json
 import os
 import re
@@ -112,9 +113,13 @@ class Scripts(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("node isn't installed")
-        from events import build as events_build
-        from news import build as news_build
-        scripts = {"events": events_build.INDEX_JS, "news": news_build.INDEX_JS}
+        # Whichever pages this copy has: the newsfeed on its own (news/template.py) has no events page.
+        scripts = {}
+        for page in ("events", "news"):
+            try:
+                scripts[page] = importlib.import_module(f"{page}.build").INDEX_JS
+            except ModuleNotFoundError:
+                continue
         for name in ("AGES", "PREVIEWS", "SEARCH_KEYS", "TO_TOP"):
             scripts[name] = "".join(re.findall(r"<script>(.*?)</script>", getattr(site, name), re.S))
         for name, script in scripts.items():

@@ -24,14 +24,21 @@ from shared import site as shared
 ROOT = Path(__file__).parent
 FEEDS_FILE = ROOT / "feeds.txt"
 OUT_DIR = ROOT.parent / "dist" / "news"
-REPO_URL = "https://github.com/grahamhagenah/news"
+# Whose newsfeed this is, so a copy of it in someone else's repo points at theirs: the repo GitHub is building
+# (GITHUB_REPOSITORY), where it's published (SITE_URL, for a custom domain; otherwise GitHub Pages' own address
+# for the repo), and a sister site to name in the header beside it (EVENTS_URL). A copy needs none of them set.
+REPO = os.environ.get("GITHUB_REPOSITORY") or "grahamhagenah/news"
+OWNER, _, NAME = REPO.partition("/")
+REPO_URL = f"https://github.com/{REPO}"
+SITE_URL = (os.environ.get("SITE_URL") or f"https://{OWNER}.github.io/{NAME}/").rstrip("/") + "/"
+SISTER_SITE = os.environ.get("EVENTS_URL", "").strip()
 POSTS_PER_FEED = 15  # Per site; override with limit=N in feeds.txt.
 PAGE_SIZE = 30  # Posts per page of the list.
 DAYS_TO_KEEP = 3  # Older posts are dropped; override with days=N in feeds.txt.
 PREVIEW_CHARS = 600  # Roughly how much text the hover preview shows.
 # Each build publishes its feeds' posts beside the page; a feed that fails next time falls back to its copy
 # there, if it's no older than this.
-FEEDS_URL = "https://news.grahamhagenah.com/feeds.json"
+FEEDS_URL = SITE_URL + "feeds.json"
 FALLBACK_LIMIT = timedelta(days=2)
 # What sites see when the build fetches them. Keep it: some sites' bot filters (Marginal Revolution,
 # InsideEVs) block a user agent containing "newsfeed" but allow this one.
@@ -1192,7 +1199,9 @@ CSS = """
 
 
 def page(title, body, updated=None):
-    return shared.page("news", title, body, css=CSS, head=HEAD, symbols=ICON_SYMBOLS, updated=updated)
+    # The header names the sister site beside this one, where there is one; alone, the newsfeed is the header.
+    links = None if SISTER_SITE else [("Newsfeed", "./", True)]
+    return shared.page("news", title, body, css=CSS, head=HEAD, symbols=ICON_SYMBOLS, updated=updated, links=links)
 
 
 def saved(post):

@@ -5,6 +5,7 @@ Each site's build.py adds its own readers, rows and styles on top."""
 
 import html
 import json
+import os
 import re
 import sys
 import time
@@ -15,7 +16,7 @@ from datetime import datetime
 # The two pages, in the order the header names them.
 SITES = {
     "news": ("Newsfeed", "https://news.grahamhagenah.com/"),
-    "events": ("Events", "https://pushpin.city/boston/"),
+    "events": ("Events", os.environ.get("EVENTS_URL", "").strip() or "https://pushpin.city/boston/"),
 }
 
 
