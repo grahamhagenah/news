@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import unittest
+import urllib.error
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -55,6 +56,9 @@ ROUTES = [
     ("somervilletheatre.com/wp-json/wp/v2/wp_theatre_prod", "somerville_productions.json"),
     ("somervilletheatre.com/events/", "somerville_events.html"),
     ("internet-ticketing.com/websales/sales/CSBSOM/start", "somerville_sales.html"),
+    ("capitoltheatreusa.com/wp-json/wp/v2/wp_theatre_prod", "capitol_productions.json"),
+    ("capitoltheatreusa.com/events/", "404"),  # The Capitol shows only films, and has no events page.
+    ("internet-ticketing.com/websales/sales/CSBARL/start", "capitol_sales.html"),
     ("rickshawstop.com", "seetickets.html"),
     ("yoshis.com", "yoshis.html"),
     ("sfmoma.org/events", "sfmoma.html"),
@@ -90,6 +94,8 @@ ROUTES = [
 def sample(url, **kwargs):
     for pattern, name in ROUTES:
         if pattern in url:
+            if name == "404":  # A page the site doesn't have.
+                raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
             return (FIXTURES / name).read_text()
     raise AssertionError(f"no sample for {url}")
 
@@ -369,8 +375,8 @@ class Readers(unittest.TestCase):
         # A film with no certificate says "Rating N/A" where one would go; that isn't part of its name.
         self.assertIn("National Theatre Live The Misanthrope", [item["title"] for item in found])
 
-    def test_somerville_takes_its_films_names_from_the_theatres_own_site(self):
-        found = self.read("somerville", "https://www.somervilletheatre.com/#CSBSOM", "film", sorts_its_own=True)
+    def test_wptheatre_takes_its_films_names_from_the_theatres_own_site(self):
+        found = self.read("wptheatre", "https://www.somervilletheatre.com/#CSBSOM", "film", sorts_its_own=True)
         films = {item["title"]: item for item in found if item["category"] == "film"}
         # The ticketing calls it "The Devils"; the theatre's site, which the listing links to, says whose.
         self.assertIn("Ken Russell’s The Devils", films)
@@ -382,8 +388,8 @@ class Readers(unittest.TestCase):
         self.assertIn("House (Hausu) in 35mm", films)
         self.assertNotIn("House", films)
 
-    def test_somerville_adds_its_live_shows_and_leaves_out_what_is_already_a_showtime(self):
-        found = self.read("somerville", "https://www.somervilletheatre.com/#CSBSOM", "film", sorts_its_own=True)
+    def test_wptheatre_adds_its_live_shows_and_leaves_out_what_is_already_a_showtime(self):
+        found = self.read("wptheatre", "https://www.somervilletheatre.com/#CSBSOM", "film", sorts_its_own=True)
         music = [item for item in found if item["category"] == "music"]
         self.assertIn("Oteil Burbridge with LaMP – Wish Benefit Tour", [item["title"] for item in music])
         self.assertTrue(all("/production/" in item["link"] for item in music))
@@ -391,6 +397,15 @@ class Readers(unittest.TestCase):
         phantom = [item for item in found if "Phantom of the Opera" in item["title"]]
         self.assertEqual([item["category"] for item in phantom], ["film"], phantom)
         self.assertEqual(len(phantom), 1)
+
+    def test_wptheatre_reads_a_theatre_with_only_films_and_no_events_page(self):
+        found = self.read("wptheatre", "https://www.capitoltheatreusa.com/#CSBARL", "film", "Capitol Theatre",
+                          sorts_its_own=True)
+        # The Capitol files its films under "movies" where the Somerville Theatre says "movie"; both are films.
+        self.assertEqual({item["category"] for item in found}, {"film"})
+        self.assertTrue(all("capitoltheatreusa.com/movie/" in item["link"] for item in found), found[0]["link"])
+        self.assertIn("Sense and Sensibility", [item["title"] for item in found])
+        self.assertTrue(all(item["image"] and item["about"] for item in found))
 
     def test_tribe_skips_what_isnt_a_show(self):
         found = self.read("tribe", "https://lizardloungeclub.com/wp-json/tribe/events/v1/events")
@@ -577,7 +592,7 @@ class Cities(unittest.TestCase):
         self.assertIn('<a href="/">All cities</a>', page)
         self.assertIn('<span class="city">Western Mass</span>', page)
         about = build.render_about([images], datetime(2026, 9, 15, tzinfo=timezone.utc))
-        self.assertNotIn("Capitol Theatre", about, "not Boston's question about a theater of its own")
+        self.assertIn("Who makes this?", about)
         self.assertIn("I grew up in Western Mass", about)
         self.assertNotIn("I live in Somerville", about)
         self.assertIn("venues across the Pioneer Valley and the Berkshires", about)
@@ -1319,7 +1334,7 @@ class Page(unittest.TestCase):
         self.assertIn("How to use it", about)
         # The questions, each opening to its answer, and told to search engines as an FAQ.
         self.assertEqual(about.count("<details><summary>"), len(build.FAQS))
-        self.assertIn("<summary>Why isn’t the Capitol Theatre on here?</summary>", about)
+        self.assertIn("<summary>Why isn’t my favorite venue here?</summary>", about)
         data = json.loads(about.split('<script type="application/ld+json">')[1].split("</script>")[0])
         self.assertEqual(data["@type"], "FAQPage")
         self.assertEqual([q["name"] for q in data["mainEntity"]], [q for q, _ in build.FAQS])

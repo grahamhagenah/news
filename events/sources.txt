@@ -28,11 +28,12 @@
 #   exploratorium  the Exploratorium's calendar: each card on every day it runs
 #   ybca       YBCA's calendar: the days on it, not the exhibitions that run for months
 #   tapos      a cinema booking through Jacro's TaPoS web sales, from its start page (the Lexington Venue)
-#   somerville everything the Somerville Theatre puts on (it gave permission, October 2026): its site's
-#              productions for each one's page, description and poster, its events page for concerts and the
-#              like, and for films the showtimes its ticketing lists, named after the # (CSBSOM). Its site
-#              holds a film's times only on the film's own page, which would be a fetch per film every build.
-#              Films and live shows are sorted by what the site files each under.
+#   wptheatre  everything a theatre on WordPress's Theater plugin puts on (the Somerville Theatre and the
+#              Capitol, which gave permission, October 2026): its site's productions for each one's page,
+#              description and poster, its events page for concerts and the like where it has one, and for
+#              films the showtimes its Jacro TaPoS ticketing lists, named after the # (CSBSOM, CSBARL). Its
+#              site holds a film's times only on the film's own page, which would be a fetch per film every
+#              build. Films and live shows are sorted by what the site files each under.
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings
 #   squarespace  a Squarespace site's events page, from the data it gives with ?format=json (The Lilypad)
@@ -78,8 +79,7 @@ coolidge   https://coolidge.org/showtimes   film   Coolidge Corner
 hfa        https://harvardfilmarchive.org/calendar   film   Harvard Film Archive
 veezi      https://www.westnewtoncinema.com/   film   West Newton Cinema
 tapos      https://www.internet-ticketing.com/websales/sales/LEXLEX/start   film   Lexington Venue
-somerville https://www.somervilletheatre.com/#CSBSOM   film   Somerville Theatre
-# The Capitol's screenings aren't here: its site turns away anything that says it's a bot, and it's been asked
-# (September 2026) for a feed or permission, as the Somerville Theatre was before it gave one.
+wptheatre  https://www.somervilletheatre.com/#CSBSOM   film   Somerville Theatre
+wptheatre  https://www.capitoltheatreusa.com/#CSBARL   film   Capitol Theatre
 landmark   X019B   film   Kendall Square
 alamo      https://drafthouse.com/s/mother/v2/schedule/market/boston   film   Alamo Drafthouse
