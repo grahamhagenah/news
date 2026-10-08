@@ -2110,7 +2110,12 @@ def wptheatre_productions(url):
     for page in range(1, 4):
         asked = urlencode({"per_page": 100, "page": page,
                                         "_fields": "link,title,class_list,excerpt,yoast_head_json"})
-        productions = json.loads(fetch(f"{url}wp-json/wp/v2/wp_theatre_prod?{asked}", user_agent=WPTHEATRE_AGENT))
+        answer = fetch(f"{url}wp-json/wp/v2/wp_theatre_prod?{asked}", user_agent=WPTHEATRE_AGENT)
+        try:
+            productions = json.loads(answer)
+        except json.JSONDecodeError:
+            # Not the data: a firewall's page, served as if it were. Say what came back, so the log shows it.
+            raise ValueError(f"its site answered with {text(answer)[:120]!r} instead of its productions")
         for production in productions:
             title = text(production["title"]["rendered"])
             image = (production.get("yoast_head_json", {}).get("og_image") or [{}])[0].get("url", "")
