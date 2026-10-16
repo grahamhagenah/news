@@ -1,0 +1,46 @@
+# A job is listed when its title has one of these in it, as a whole word, in any case. Two words in a row
+# count as a phrase ("front end"). This is what keeps the board to making things for the web rather than every
+# job a board carries.
+
+# Building for the web
+web
+website
+frontend
+front end
+front-end
+fullstack
+full stack
+full-stack
+javascript
+typescript
+react
+vue
+angular
+svelte
+node
+rails
+django
+php
+wordpress
+drupal
+shopify
+css
+html
+accessibility
+
+# The work itself
+developer
+engineer
+programmer
+software
+
+# Design
+design
+designer
+ux
+ui
+product design
+interaction
+visual
+research
+brand

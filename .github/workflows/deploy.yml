@@ -127,6 +127,29 @@ jobs:
           GIT_SSH_COMMAND="ssh -i ~/.ssh/housing -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
             git push -qf git@github.com:grahamhagenah/housing.git gh-pages
 
+      # The job board, pushed to the grahamhagenah/jobs repo's gh-pages branch, which publishes it. Its
+      # boards list the same openings all day, so it rebuilds every two hours, or at once after a push.
+      - run: python3 -m jobs.build
+        continue-on-error: true
+        env:
+          JOBS_EVERY_HOURS: ${{ github.event_name != 'push' && '2' || '' }}
+      - name: Publish the job board
+        if: hashFiles('dist/jobs/index.html') != ''
+        continue-on-error: true
+        env:
+          DEPLOY_KEY: ${{ secrets.JOBS_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then echo "No JOBS_DEPLOY_KEY yet; not publishing."; exit 0; fi
+          touch dist/jobs/.nojekyll
+          mkdir -p ~/.ssh && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/jobs && chmod 600 ~/.ssh/jobs
+          cd dist/jobs
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Job board, built from grahamhagenah/news@${GITHUB_SHA::7}"
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/jobs -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git push -qf git@github.com:grahamhagenah/jobs.git gh-pages
+
       # An issue for any source failing for hours (GitHub emails about it); never holds up either page. A page
       # not built this run is left out, so its issues stay as they are.
       - if: ${{ !cancelled() }}

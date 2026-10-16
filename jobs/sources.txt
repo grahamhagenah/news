@@ -1,0 +1,26 @@
+# One source per line: how to read it, its URL, the city its jobs are in, and the board's name.
+# How to read it:
+#   builtin    a Built In metro site (builtinboston.com), whose job pages its robots.txt allows: its
+#              engineering and design listings, newest first, from the cards on the page
+#   wwr        We Work Remotely's feed for a category
+#   remoteok   Remote OK's JSON of its latest jobs
+#   remotive   Remotive's JSON of its latest jobs
+# A city is one of the metros in CITIES (jobs/build.py), or "remote" for jobs with no place of work.
+# Only jobs whose titles match keywords.txt are kept, whatever the source.
+
+# Metro areas
+builtin    https://www.builtinboston.com/     boston     Built In Boston
+builtin    https://www.builtinnyc.com/        newyork    Built In NYC
+builtin    https://www.builtinsf.com/         bayarea    Built In SF
+builtin    https://www.builtinseattle.com/    seattle    Built In Seattle
+builtin    https://www.builtincolorado.com/   denver     Built In Colorado
+builtin    https://www.builtinchicago.org/    chicago    Built In Chicago
+builtin    https://www.builtinaustin.com/     austin     Built In Austin
+builtin    https://www.builtinla.com/         losangeles Built In LA
+
+# Remote
+wwr        https://weworkremotely.com/categories/remote-programming-jobs.rss   remote   We Work Remotely
+wwr        https://weworkremotely.com/categories/remote-design-jobs.rss        remote   We Work Remotely
+remoteok   https://remoteok.com/api                                            remote   Remote OK
+# Remotive answers the same latest jobs whatever category is asked for, so it's read once, unfiltered.
+remotive   https://remotive.com/api/remote-jobs                                 remote   Remotive
