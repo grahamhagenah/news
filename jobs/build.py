@@ -868,7 +868,8 @@ def render_row(listing, scored=None):
     if scored:
         points, why = scored
         note = (f'<p class="why"><span class="score">{points}</span>'
-                f'{html.escape(" · ".join(why))}</p>')
+                f'<span class="score-said">fit score</span>'
+                f'<span class="score-for">{html.escape(" · ".join(why))}</span></p>')
     return (
         f'<li class="row" data-city="{" ".join(listing.get("cities") or [listing["city"]])}" data-kind="{kind}" '
         f'data-from="{html.escape(listing["company"])}">{icon(kind)}'
@@ -887,7 +888,10 @@ def render_index(listings, failed, stale, built_at):
     lead = ""
     if best:
         lead = (
-            '<h1 class="featured-title">Worth a look</h1>\n<ul class="featured">\n'
+            '<h1 class="featured-title">Worth a look</h1>\n'
+            '<p class="featured-note">Scored for how closely each matches web, design, accessibility and '
+            'content work, and whether it\'s with a university or a non-profit. Hover a title for its '
+            'score and what earned it.</p>\n<ul class="featured">\n'
             + "\n".join(render_row(listing, scored=scored) for scored, listing in best)
             + '\n</ul>\n<p class="featured-none" hidden></p>\n'
         )
@@ -1002,6 +1006,7 @@ INDEX_JS = """
   const lead = document.querySelector(".featured");
   const leadRows = lead ? [...lead.children] : [];
   const leadTitle = document.querySelector(".featured-title");
+  const leadNote = document.querySelector(".featured-note");
   const leadNone = document.querySelector(".featured-none");
   const allTitle = document.querySelector(".all-title");
   const pageSize = Number(list.dataset.pageSize);
@@ -1044,6 +1049,7 @@ INDEX_JS = """
     leadRows.forEach(li => { li.hidden = !leadShown.includes(li); });
     if (lead) lead.hidden = leadShown.length === 0;
     if (leadTitle) leadTitle.hidden = leadShown.length === 0;
+    if (leadNote) leadNote.hidden = leadShown.length === 0;
     if (allTitle) allTitle.hidden = leadShown.length === 0;
     if (leadNone) {
       leadNone.textContent = "Nothing here fits especially well right now.";
@@ -1132,6 +1138,7 @@ CSS = """
      takes more words than the small print of an ordinary row, and the parts of a headline share one line —
      so it goes on a line of its own underneath, where it can't squeeze the title out of its own row. */
   .featured { margin-bottom: 1rem; }
+  .featured-note { margin: -.35rem 0 .9rem; max-width: 40rem; color: #666; font-size: .8rem; line-height: 1.5; }
   /* Only the up and down of it: a phone's row keeps a left margin for the mark beside its first line. */
   .featured .row { padding-top: .5rem; padding-bottom: .5rem; }
   /* How well a featured job fits, at the top of the box that opens under its headline, above what the
@@ -1141,6 +1148,9 @@ CSS = """
                   border-bottom: 1px solid #222; color: #999; }
   .preview .score { flex: none; padding: 0 .45em; border: 1px solid #444; border-radius: 999px;
                     color: #ddd; font-size: .9em; }
+  .preview .score-said { flex: none; color: #fff; }
+  .preview .score-for { color: #888; }
+  .preview .score-for::before { content: "for "; }
   /* Where a row is three columns, the mark sits with the title rather than in the middle of a row that may
      now run to three lines. On a phone the mark is placed against the first line already. */
   @media (min-width: 34.01rem) {
