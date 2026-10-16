@@ -1137,6 +1137,9 @@ CSS = """
     .facts { white-space: normal; }
     /* Where it is has already been said in the line, by "in Boston"; the column would say it twice. */
     .posts .row > .source, .featured .row > .source { display: none; }
+    /* A headline is a run of text here rather than a box, and a run of text broken over three lines is no
+       place to hang anything from: what opens under a tag hangs from the row instead. */
+    .featured .headline { position: static; }
   }
   /* The few jobs that lead the page: the same rows, set apart by the heading above them. Why a job is here
      takes more words than the small print of an ordinary row, and the parts of a headline share one line —
@@ -1151,8 +1154,12 @@ CSS = """
                    background: none; color: #777; font: inherit; font-size: .72em; line-height: 1.7;
                    cursor: pointer; }
   .featured .fit:hover, .featured .fit:focus-visible { color: #ddd; border-color: #666; outline: none; }
-  .featured .why { display: none; flex-basis: 100%; margin: .15rem 0 0; color: #8a8a8a; font-size: .8em;
-                   white-space: normal; }
+  /* What's behind the tag opens over the page rather than in it: a row that moved everything under it
+     down each time the pointer crossed a tag would be worse than not having the tag. */
+  .featured .why { display: none; position: absolute; z-index: 2; top: calc(100% - .4rem); left: 0;
+                   width: max-content; max-width: min(30rem, 100%); box-sizing: border-box; padding: .5rem .7rem;
+                   border: 1px solid #333; border-radius: 6px; background: #000; color: #bbb;
+                   font-size: .8em; line-height: 1.5; white-space: normal; pointer-events: none; }
   .featured .fit:hover + .why, .featured .fit:focus + .why, .featured .open .why { display: block; }
   /* Where a row is three columns, the mark sits with the title rather than in the middle of a row that may
      now run to three lines. On a phone the mark is placed against the first line already. */
