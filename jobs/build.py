@@ -17,7 +17,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from urllib.parse import urlencode, urljoin
+from urllib.parse import quote, urlencode, urljoin
 from zoneinfo import ZoneInfo
 
 from shared import site as shared
@@ -57,7 +57,37 @@ CITIES = {
     "austin": "Austin",
     "losangeles": "Los Angeles",
     "remote": "Remote",
+    # Boards that list jobs anywhere (a university in a college town, a non-profit in one city) put the ones
+    # outside every metro here, under their own place.
+    "elsewhere": "Elsewhere",
 }
+
+# The towns that belong to each metro, for a source whose city is "anywhere": its listing's own location
+# decides which metro the job is filed under. Town names only, since a state is far too big to be a metro —
+# a job in Amherst isn't a job in Boston — and a name that is a town in two metros (Westwood, Georgetown)
+# is left out or given its state.
+METROS = {
+    "boston": ("boston", "cambridge, ma", "somerville, ma", "brookline", "newton, ma", "waltham", "medford, ma",
+               "quincy, ma", "woburn", "needham", "dedham", "chestnut hill", "charlestown", "malden",
+               "watertown, ma", "wellesley", "framingham", "braintree", "chelsea, ma"),
+    "newyork": ("new york", "brooklyn", "queens, ny", "bronx", "manhattan", "staten island", "long island city",
+                "jersey city", "hoboken", "newark, nj", "yonkers", "white plains", "new rochelle"),
+    "bayarea": ("san francisco", "oakland", "berkeley", "san jose", "palo alto", "mountain view", "menlo park",
+                "santa clara", "sunnyvale", "redwood city", "san mateo", "fremont", "stanford", "emeryville",
+                "cupertino", "hayward", "walnut creek", "santa cruz"),
+    "seattle": ("seattle", "bellevue, wa", "redmond", "kirkland", "tacoma", "everett", "renton", "bothell"),
+    "denver": ("denver", "boulder", "aurora, co", "lakewood, co", "littleton", "englewood, co", "broomfield",
+               "golden, co", "fort collins"),
+    "chicago": ("chicago", "evanston", "naperville", "oak park", "skokie", "schaumburg", "elgin, il",
+                "des plaines"),
+    "austin": ("austin", "round rock", "cedar park", "pflugerville", "san marcos, tx"),
+    "losangeles": ("los angeles", "pasadena, ca", "santa monica", "long beach", "burbank", "glendale, ca",
+                   "culver city", "irvine", "northridge", "malibu", "claremont", "pomona", "torrance"),
+}
+# A place that says the job is done from wherever you are, rather than naming somewhere.
+REMOTE_PLACE = re.compile(r"(?<!\w)(remote|anywhere|work from home|telecommut\w*|virtual)", re.I)
+# A place that reads as one, for a row to show in place of a metro's name: "Atlanta, Georgia", "Madison, WI".
+PLACE_LIKE = re.compile(r"^[A-Z][\w .'’/-]+,\s*[A-Za-z][\w .]*$")
 
 
 def read_sources():
@@ -66,8 +96,8 @@ def read_sources():
     for line in SOURCES_FILE.read_text().splitlines():
         if line.strip() and not line.lstrip().startswith("#"):
             kind, url, city, *name = line.split()
-            if city not in CITIES:
-                sys.exit(f"sources.txt: {city} isn't one of the cities ({', '.join(CITIES)})")
+            if city not in CITIES and city != "anywhere":
+                sys.exit(f"sources.txt: {city} isn't one of the cities ({', '.join(CITIES)}, anywhere)")
             sources.append({"kind": kind, "url": url, "city": city, "name": " ".join(name)})
     return sources
 
@@ -115,6 +145,16 @@ def about(markup, limit=PREVIEW_CHARS):
     return kept
 
 
+def metro_of(place, arrangement=""):
+    """Which metro a place is in: the first of METROS it names, or remote when it names nowhere at all. A
+    place in none of them is "elsewhere", which a row shows under the place's own name."""
+    said = f"{place} {arrangement}"
+    for city, towns in METROS.items():
+        if any(re.search(rf"(?<!\w){re.escape(town)}(?!\w)", said, re.I) for town in towns):
+            return city
+    return "remote" if REMOTE_PLACE.search(said) else "elsewhere"
+
+
 def job(source, title, company, link, posted, place="", salary="", arrangement="", level="", about_=()):
     """One listing. posted is when the board says it went up; place is where it is in the source's own words
     ("Boston, MA", "Anywhere in the World"), which is finer than the city it's filed under."""
@@ -123,7 +163,8 @@ def job(source, title, company, link, posted, place="", salary="", arrangement="
         "company": company or source["name"],
         "link": link,
         "posted": posted,
-        "city": source["city"],
+        # A board that lists jobs anywhere gives each one its own city, from the place it names.
+        "city": source["city"] if source["city"] != "anywhere" else metro_of(place, arrangement),
         "place": place,
         "salary": salary,
         "arrangement": arrangement,
@@ -264,6 +305,97 @@ def read_remotive(source):
     return listings
 
 
+# Inside Higher Ed and the Chronicle run the same job board software, whose RSS answers a keyword search with
+# the 20 newest postings that match. One query is too narrow a window on a board carrying 20,000 of them, so
+# each board is asked a few, and keywords.txt still decides what's kept.
+MADGEX_QUERIES = ("web developer", "software engineer", "graphic designer", "user experience", "accessibility",
+                  "data analyst")
+# Its description is the pay (when it gives one), the employer, the posting itself, then the place, each on
+# its own line. The pay line is the one starting with a number: "53,142 - 88600:", "Up to GBP 75,000:".
+MADGEX_PAY = re.compile(r"^[^A-Za-z]*\d")
+
+
+def read_madgex(source):
+    """A higher-ed or non-profit board running Madgex: its RSS for each of MADGEX_QUERIES. A title reads
+    "Institution: Role", and the description's last line is where the job is."""
+    import xml.etree.ElementTree as ET
+
+    listings = []
+    for query in MADGEX_QUERIES:
+        feed = fetch(f"{urljoin(source['url'], 'jobsrss/')}?countrycode=US&keywords={quote(query)}")
+        for item in ET.fromstring(feed).iter("item"):
+            title = text(item.findtext("title"))
+            company, _, role = title.partition(": ")
+            if not role:
+                company, role = "", title
+            lines = [line.strip() for line in (item.findtext("description") or "").splitlines() if line.strip()]
+            pay = lines.pop(0).rstrip(":").strip() if lines and MADGEX_PAY.match(lines[0]) else ""
+            # The employer again, which the title has already said.
+            if lines and lines[0].rstrip(":").casefold() == company.casefold():
+                lines.pop(0)
+            posted = item.findtext("pubDate")
+            listings.append(job(
+                source, role, company,
+                # Without the feed's own tracking, which is as long again as the address itself.
+                (item.findtext("link") or "").strip().split("?")[0],
+                parsedate_to_datetime(posted).date() if posted else None,
+                place=lines[-1] if len(lines) > 1 else "", salary=pay,
+                about_=about(" ".join(lines[:-1] if len(lines) > 1 else lines)),
+            ))
+    return listings
+
+
+# Tech Jobs for Good writes each job as a card, newest first, 30 to a page.
+TECHJOBS_PAGES = ("jobs/", "jobs/?page=2")
+TECHJOBS_CARD = re.compile(r'(?=<div class="ui raised fluid card job-card")')
+TECHJOBS_LINK = re.compile(r'href="(/jobs/\d+/[^"]*)"')
+TECHJOBS_TITLE = re.compile(r'class="header job-title"\s*title="([^"]*)"')
+TECHJOBS_COMPANY = re.compile(r'class="meta company-name"\s*title="([^"]*)"')
+TECHJOBS_PLACE = re.compile(r'<span class="location"\s*title="([^"]*)"')
+TECHJOBS_PAY = re.compile(r'<span class="salary"\s*title="([^"]*)"')
+TECHJOBS_AGE = re.compile(r'class="date-posted">\s*Posted\s*([^<]*?)\s*</span>')
+TECHJOBS_ABOUT = re.compile(r'class="content job-snippet"[^>]*>(.*?)</div>', re.S)
+
+
+def first(pattern, card):
+    found = pattern.search(card)
+    return text(found.group(1)) if found else ""
+
+
+def techjobs_age(said, today):
+    """How old a card says its job is: "1 day ago", "3 weeks ago", "today"."""
+    found = re.match(r"(?:(\d+)\s+)?(minute|hour|day|week|month)s?\s+ago", said.strip(), re.I)
+    if not found:
+        return today if "today" in said.casefold() else None
+    days = {"minute": 0, "hour": 0, "day": 1, "week": 7, "month": 30}[found.group(2).lower()]
+    return today - timedelta(days=int(found.group(1) or 1) * days)
+
+
+def read_techjobs(source):
+    """Tech Jobs for Good's listings: non-profit and public-good work, a card for each job with the company,
+    where it is (several places, sometimes, and whether it's hybrid), what it pays and how old it is."""
+    today = datetime.now(EASTERN).date()
+    listings = []
+    for path in TECHJOBS_PAGES:
+        page = fetch(urljoin(source["url"], path))
+        for card in TECHJOBS_CARD.split(page)[1:]:
+            found, link = TECHJOBS_TITLE.search(card), TECHJOBS_LINK.search(card)
+            if not (found and link):
+                continue
+            place = first(TECHJOBS_PLACE, card)
+            about_ = TECHJOBS_ABOUT.search(card)
+            listings.append(job(
+                source, text(found.group(1)), first(TECHJOBS_COMPANY, card),
+                urljoin(source["url"], link.group(1).split("?")[0]),
+                techjobs_age(first(TECHJOBS_AGE, card), today),
+                place=place, salary=first(TECHJOBS_PAY, card),
+                arrangement=("Hybrid" if "hybrid" in place.casefold()
+                             else "Remote" if REMOTE_PLACE.search(place) else ""),
+                about_=about(about_.group(1) if about_ else ""),
+            ))
+    return listings
+
+
 def salary_range(low, high):
     """What a job pays, as the board gives it: "$90K–$120K", or nothing when it doesn't say."""
     def short(amount):
@@ -273,7 +405,8 @@ def salary_range(low, high):
     return f"{low}–{high}" if low and high and low != high else low or high
 
 
-READERS = {"builtin": read_builtin, "wwr": read_wwr, "remoteok": read_remoteok, "remotive": read_remotive}
+READERS = {"builtin": read_builtin, "wwr": read_wwr, "remoteok": read_remoteok, "remotive": read_remotive,
+           "madgex": read_madgex, "techjobs": read_techjobs}
 
 
 def load(source):
@@ -373,10 +506,26 @@ PRODUCT = re.compile(r"(?<!\w)(product (manager|owner|management|lead)|head of p
                      r"solutions architect|implementation|technical account|seo|digital producer)(?!\w)", re.I)
 
 
+def short_place(place):
+    """A place as a narrow column can show it: the first place it names, without the country or how it's
+    worked. "Madison, Wisconsin, United States" and "San Diego, CA (Hybrid)" both come back as the town."""
+    first = re.split(r"\s*/\s*", re.sub(r"\s*\([^)]*\)", "", place or "").strip())[0]
+    parts = [part.strip() for part in first.split(",") if part.strip()]
+    parts = [part for part in parts if part.casefold().replace(".", "") not in ("united states", "usa", "us")]
+    return ", ".join(parts[:2])
+
+
 def where_of(listing):
-    """Where a job is, as the row's last column says it: its city, or how many it's posted in."""
+    """Where a job is, as the row's last column says it: its city, how many it's posted in, or — for a job in
+    none of the metros — the place it names, which says more than "Elsewhere" does."""
     cities = listing.get("cities") or [listing["city"]]
-    return f"{len(cities)} cities" if len(cities) > 1 else CITIES[cities[0]]
+    if len(cities) > 1:
+        return f"{len(cities)} cities"
+    if cities[0] == "elsewhere":
+        place = short_place(listing["place"])
+        if PLACE_LIKE.match(place):
+            return place
+    return CITIES[cities[0]]
 
 
 def kind_of(listing):
@@ -460,10 +609,13 @@ def render_sources(sources, listings, built_at):
     """Where the jobs come from, and what each board gave this build."""
     rows = []
     for source in sources:
+        # A board that lists jobs anywhere is counted by its name alone, since its jobs are in many cities.
+        anywhere = source["city"] == "anywhere"
         count = sum(1 for listing in listings if listing["source"] == source["name"]
-                    and listing["city"] == source["city"])
+                    and (anywhere or listing["city"] == source["city"]))
+        where = "Anywhere" if anywhere else CITIES[source["city"]]
         rows.append(f'<li><a href="{html.escape(source["url"])}">{html.escape(source["name"])}</a>'
-                    f'<span class="note">{CITIES[source["city"]]} · {count} jobs</span></li>')
+                    f'<span class="note">{where} · {count} jobs</span></li>')
     body = f"""<h1>Where these come from</h1>
 <ul class="sources">
 {chr(10).join(rows)}

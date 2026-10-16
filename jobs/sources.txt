@@ -6,7 +6,11 @@
 #   wwr        We Work Remotely's feed for a category
 #   remoteok   Remote OK's JSON of its latest jobs
 #   remotive   Remotive's JSON of its latest jobs
-# A city is one of the metros in CITIES (jobs/build.py), or "remote" for jobs with no place of work.
+#   madgex     a board running Madgex (Inside Higher Ed, the Chronicle of Higher Education): its RSS for
+#              each of MADGEX_QUERIES, since its feed only answers a keyword search
+#   techjobs   Tech Jobs for Good's listing pages, for non-profit and public-good work
+# A city is one of the metros in CITIES (jobs/build.py), "remote" for jobs with no place of work, or
+# "anywhere" for a board whose jobs are all over the country, each listing's own place deciding its metro.
 # Only jobs whose titles match keywords.txt are kept, whatever the source.
 
 # Metro areas
@@ -25,3 +29,9 @@ wwr        https://weworkremotely.com/categories/remote-design-jobs.rss        r
 remoteok   https://remoteok.com/api                                            remote   Remote OK
 # Remotive answers the same latest jobs whatever category is asked for, so it's read once, unfiltered.
 remotive   https://remotive.com/api/remote-jobs                                 remote   Remotive
+
+# Higher ed and non-profits, which list jobs anywhere in the country: a job's own location decides which
+# metro it's filed under, and one outside all of them is filed as elsewhere, under the place it names.
+madgex     https://careers.insidehighered.com/   anywhere   Inside Higher Ed
+madgex     https://jobs.chronicle.com/           anywhere   The Chronicle of Higher Education
+techjobs   https://techjobsforgood.com/          anywhere   Tech Jobs for Good

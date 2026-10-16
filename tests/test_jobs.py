@@ -23,6 +23,8 @@ ROUTES = [
     ("weworkremotely.com", "wwr.xml"),
     ("remoteok.com/api", "remoteok.json"),
     ("remotive.com/api", "remotive.json"),
+    ("jobsrss", "madgex.xml"),
+    ("techjobsforgood.com", "techjobs.html"),
 ]
 
 
@@ -88,6 +90,33 @@ class Readers(unittest.TestCase):
         found = self.read("remotive", "https://remotive.com/api/remote-jobs", "remote")
         self.assertTrue(all(listing["arrangement"] == "Remote" for listing in found))
 
+    def test_madgex_splits_the_institution_from_the_role(self):
+        found = self.read("madgex", "https://careers.insidehighered.com/", "anywhere")
+        # Its titles are "Institution: Role", and the pay and tracking it adds stay out of both.
+        self.assertNotIn(":", found[0]["title"])
+        self.assertNotIn("?", found[0]["link"])
+        self.assertTrue(all(listing["place"] for listing in found), "the place its description ends with")
+        self.assertTrue(any(listing["about"] for listing in found), "what the posting says")
+        # Each job is filed by the place it names, not by the board.
+        self.assertTrue(all(listing["city"] in build.CITIES for listing in found))
+
+    def test_techjobs_reads_a_card(self):
+        found = self.read("techjobs", "https://techjobsforgood.com/", "anywhere")
+        job = found[0]
+        self.assertTrue(job["link"].startswith("https://techjobsforgood.com/jobs/"))
+        self.assertNotIn("?", job["link"])
+        self.assertTrue(job["place"])
+        self.assertIn(job["arrangement"], ("Remote", "Hybrid", ""))
+        self.assertTrue(any(listing["salary"] for listing in found), "a card says what it pays")
+
+    def test_techjobs_ages(self):
+        today = date(2026, 10, 16)
+        self.assertEqual(build.techjobs_age("1 day ago", today), date(2026, 10, 15))
+        self.assertEqual(build.techjobs_age("3 weeks ago", today), date(2026, 9, 25))
+        self.assertEqual(build.techjobs_age("2 hours ago", today), today)
+        self.assertEqual(build.techjobs_age("today", today), today)
+        self.assertIsNone(build.techjobs_age("", today))
+
     def test_salary_range(self):
         self.assertEqual(build.salary_range(90000, 120000), "$90K–$120K")
         self.assertEqual(build.salary_range(None, 120000), "$120K")
@@ -118,6 +147,42 @@ class Keywords(unittest.TestCase):
         for title in ("Registered Nurse", "Warehouse Associate", "Account Executive, Enterprise Sales",
                       "Staff Accountant", "Operations Manager", "Technical Recruiter", "Content Moderator"):
             self.assertFalse(self.wanted(title), title)
+
+
+class Metros(unittest.TestCase):
+    """A nationwide board's own locations, filed under the metro they're in."""
+
+    def test_a_town_in_a_metro_is_that_metro(self):
+        self.assertEqual(build.metro_of("Cambridge, MA"), "boston")
+        self.assertEqual(build.metro_of("Stanford, CA"), "bayarea")
+        self.assertEqual(build.metro_of("Chicago, IL"), "chicago")
+        self.assertEqual(build.metro_of("Brooklyn, NY"), "newyork")
+        # Several places, the first metro among them winning; and a metro named beside remote work.
+        self.assertEqual(build.metro_of("Medford, MA / Boston, MA / Remote (Select US States)"), "boston")
+        self.assertEqual(build.metro_of("Remote (US)/Oakland, CA"), "bayarea")
+
+    def test_nowhere_in_particular_is_remote(self):
+        self.assertEqual(build.metro_of("Remote (US)"), "remote")
+        self.assertEqual(build.metro_of("", "Remote"), "remote")
+        self.assertEqual(build.metro_of("Anywhere in the World"), "remote")
+
+    def test_everywhere_else_is_elsewhere(self):
+        for place in ("Atlanta, Georgia", "Madison, WI", "Oxford", "", "Amherst, MA"):
+            self.assertEqual(build.metro_of(place), "elsewhere", place)
+
+    def test_a_row_names_the_place_rather_than_elsewhere(self):
+        source = {"kind": "madgex", "url": "https://x/", "city": "anywhere", "name": "A Board"}
+        listing = build.job(source, "Web Developer", "Georgia Tech", "https://x/1", date(2026, 10, 10),
+                            place="Atlanta, Georgia")
+        self.assertEqual(listing["city"], "elsewhere")
+        self.assertEqual(build.where_of(listing), "Atlanta, Georgia")
+        # A place that isn't one falls back to the city's own name.
+        self.assertEqual(build.where_of(dict(listing, place="Main Campus")), "Elsewhere")
+        # The country, how it's worked and every place after the first are more than the column can hold.
+        self.assertEqual(build.where_of(dict(listing, place="Madison, Wisconsin, United States")),
+                         "Madison, Wisconsin")
+        self.assertEqual(build.where_of(dict(listing, place="San Diego, CA (Hybrid)")), "San Diego, CA")
+        self.assertEqual(build.where_of(dict(listing, place="Durham, NC/Washington, DC")), "Durham, NC")
 
 
 class Listing(unittest.TestCase):
