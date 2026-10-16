@@ -2,7 +2,8 @@
 """Build the job board: web and design jobs in a handful of metro areas, and remote ones, newest first. The
 filter is the kind of work; where it's worked is the city at the end of a row, which "Remote" is one of.
 
-Sources are in sources.txt, the titles worth listing in keywords.txt. Run it from the repo's top folder:
+Sources are in sources.txt, the titles worth listing in keywords.txt, and what the jobs at the top of
+the page are scored on in fit.txt. Run it from the repo's top folder:
 `python3 -m jobs.build` writes dist/jobs.
 """
 
@@ -26,6 +27,7 @@ from shared import site as shared
 ROOT = Path(__file__).parent
 SOURCES_FILE = ROOT / "sources.txt"
 KEYWORDS_FILE = ROOT / "keywords.txt"
+FIT_FILE = ROOT / "fit.txt"
 OUT_DIR = ROOT.parent / "dist" / "jobs"
 # Whose board this is, so a copy of it points at its own repo and page (as the newsfeed does).
 REPO = os.environ.get("GITHUB_REPOSITORY") or "grahamhagenah/news"
@@ -129,6 +131,37 @@ def read_keywords():
     lines = [line.strip() for line in KEYWORDS_FILE.read_text().splitlines()]
     words = [line for line in lines if line and not line.startswith("#")]
     return re.compile("|".join(rf"(?<!\w){re.escape(word)}(?!\w)" for word in words), re.I)
+
+
+def read_fit():
+    """fit.txt: what a job is scored on. Its sections are the patterns read in a title, the ones read in the
+    posting, the kinds of board that count as the sector this board is for, and the plain numbers. A rule
+    line is its points, the word a row shows, a colon, then the pattern — or, for a sector, the board kinds
+    that earn it."""
+    sections, section = {"title": [], "body": [], "sector": [], "numbers": []}, None
+    for line in FIT_FILE.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1]
+            if section not in sections:
+                sys.exit(f"fit.txt: {section} isn't one of its sections ({', '.join(sections)})")
+        elif section is None:
+            sys.exit(f"fit.txt: {line} comes before any [section]")
+        elif section == "numbers":
+            name, _, count = line.rpartition(" ")
+            sections["numbers"].append((name.strip(), int(count)))
+        else:
+            worth, _, rest = line.partition(" ")
+            label, _, pattern = rest.partition(":")
+            sections[section].append((int(worth), label.strip(), pattern.strip()))
+    for_, against = ([rule for rule in sections["title"] if (rule[0] > 0) == want] for want in (True, False))
+    sectors = {kind: (worth, label) for worth, label, kinds in sections["sector"] for kind in kinds.split()}
+    return (tuple((worth, label, pattern) for worth, label, pattern in for_),
+            tuple((-worth, label, pattern) for worth, label, pattern in against),
+            tuple((label, pattern) for _, label, pattern in sections["body"]),
+            sectors, dict(sections["numbers"]))
 
 
 _fetched, _fetching = {}, threading.Lock()
@@ -726,51 +759,16 @@ def short_place(place):
     return ", ".join(parts[:2])
 
 
-# What a job has to say for itself, measured against the work this board is kept for: building and designing
-# for the web, in places where that work is done for its own sake. The weights are a judgement, not a
-# measurement — they're here, in one table, so they can be argued with.
-FIT_FOR = (
-    (4, "web", r"web(site|master)?\b"),
-    (4, "accessibility", r"accessib|a11y|wcag|508"),
-    (3, "CMS", r"wordpress|drupal|\bcms\b|craft|sitecore|contentful|webflow|content manage"),
-    (3, "UX", r"\bux\b|\bui\b|user experience|interaction|usability"),
-    (2, "design", r"design(er)?\b"),
-    (2, "front end", r"front.?end|javascript|react|typescript|html|css|\bphp\b"),
-    (2, "content", r"content|digital|communications|multimedia|interactive|producer"),
-    (1, "SEO", r"\bseo\b|marketing site|analytics"),
-    (1, "step up", r"senior|lead\b|manager|director|head of"),
-)
-FIT_AGAINST = (
-    (6, "faculty or clinical", r"postdoc|faculty|professor|lecturer|adjunct|nurse|clinical|physician|technician"),
-    (4, "deep engineering", r"machine learning|\bml\b|backend|back.?end|platform|infrastructure|devops|"
-                            r"\bsre\b|kernel|embedded|compiler|distributed|data scientist"),
-    (3, "beyond this", r"staff |principal|distinguished|chief |\bvp\b|vice president"),
-    (2, "not a job yet", r"intern\b|internship|student|temporary|graduate assistant|part.?time"),
-)
-# Read in the posting itself rather than its title, where finding the word means something: every design
-# job's description says "design", but only some say Drupal. Worth a point each, and never more than
-# FIT_BODY_MOST between them, so what a posting mentions can't outweigh what it calls itself.
-FIT_IN_BODY = (
-    ("WordPress", r"wordpress"), ("Drupal", r"drupal"), ("CMS", r"\bcms\b|content management"),
-    ("WCAG", r"wcag|section 508|\ba11y\b|accessib"), ("React", r"\breact\b"), ("PHP", r"\bphp\b"),
-    ("JavaScript", r"javascript|typescript"), ("HTML/CSS", r"\bhtml\b|\bcss\b"), ("Figma", r"figma"),
-    ("SEO", r"\bseo\b"), ("Adobe", r"adobe|photoshop|illustrator|indesign"),
-)
-FIT_BODY_MOST = 4
-FIT_REASONS = 5  # At most this many reasons on a row.
-# Where the work is done for its own sake rather than to sell something else. Which board a job came from
-# says this: a university's own board and the higher-ed ones are universities, and a charity's own board,
-# the non-profit board and the federal one are the rest.
-FIT_SECTORS = {"madgex": (3, "higher ed"), "jibe": (3, "higher ed"), "silkroad": (3, "higher ed"),
-               "workday": (3, "higher ed"), "greenhouse": (2, "non-profit"), "techjobs": (2, "non-profit"),
-               "usajobs": (2, "public service")}
-FEATURED = 8  # How many jobs lead the page.
-FEATURED_LEAST = 8  # And how well they have to fit to be worth leading it.
-# The top of the page shouldn't be months old — but a university leaves a posting up until the job is
-# filled, which is why those boards are read back 120 days in the first place. So a job from one of them
-# leads the page for as long as it's plausibly open, and a metro board's only while it's new.
-FEATURED_DAYS = 30
-FEATURED_DAYS_SLOW = 90
+# What a job has to say for itself, measured against the work this board is kept for. The patterns, the
+# weights and the numbers below are all in fit.txt, where they can be read and argued with without touching
+# this file; read_fit turns that file into the tables the scoring works from.
+FIT_FOR, FIT_AGAINST, FIT_IN_BODY, FIT_SECTORS, FIT_NUMBERS = read_fit()
+FIT_BODY_MOST = FIT_NUMBERS["body most"]
+FIT_REASONS = FIT_NUMBERS["reasons"]  # At most this many reasons on a row.
+FEATURED = FIT_NUMBERS["featured"]  # How many jobs lead the page.
+FEATURED_LEAST = FIT_NUMBERS["featured least"]  # And how well they have to fit to be worth leading it.
+FEATURED_DAYS = FIT_NUMBERS["featured days"]
+FEATURED_DAYS_SLOW = FIT_NUMBERS["featured days slow"]
 
 
 def fit(listing):
@@ -949,6 +947,11 @@ JavaScript and the like — so a board's other openings stay off this page.</p>
 <h1>Add a board</h1>
 <p class="help">Boards are listed in <a href="{REPO_URL}/blob/main/jobs/sources.txt">sources.txt</a>, one per
 line: how to read it, its address, the city its jobs are in, and its name.</p>
+
+<h1>Worth a look</h1>
+<p class="help">The jobs leading the page are the ones that score highest against the work this board is
+kept for. What earns a point, and what loses one, is in
+<a href="{REPO_URL}/blob/main/jobs/fit.txt">fit.txt</a> — hover a score to see why a job got it.</p>
 
 <h1>Export</h1>
 <p>The jobs on the page are also <a href="jobs.json">JSON</a>.</p>

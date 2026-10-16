@@ -9,6 +9,7 @@ for it, save a fresh sample alongside the fix.
 import json
 import re
 import sys
+import tempfile
 import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -411,6 +412,62 @@ class Fit(unittest.TestCase):
         university = self.job("Senior Web Designer, UX", kind="madgex", posted=old_day)
         self.assertEqual(build.featured([metro], built_at), [])
         self.assertEqual(len(build.featured([university], built_at)), 1)
+
+
+class FitFile(unittest.TestCase):
+    """fit.txt, where the weights live so they can be changed without touching the code."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name)
+
+    def read(self, written):
+        path = self.folder / "fit.txt"
+        path.write_text(written)
+        with mock.patch.object(build, "FIT_FILE", path):
+            return build.read_fit()
+
+    def test_the_file_the_board_ships_with_is_what_the_scoring_uses(self):
+        for_, against, in_body, sectors, numbers = build.read_fit()
+        self.assertEqual((for_, against, in_body, sectors), (build.FIT_FOR, build.FIT_AGAINST,
+                                                             build.FIT_IN_BODY, build.FIT_SECTORS))
+        self.assertEqual(numbers["body most"], build.FIT_BODY_MOST)
+        self.assertEqual(numbers["featured"], build.FEATURED)
+
+    def test_a_rule_is_its_points_its_word_and_its_pattern(self):
+        for_, against, in_body, sectors, numbers = self.read("""# A comment, and a blank line.
+
+[title]
++4  web: web(site|master)?\\b
+-6  faculty: postdoc|professor
+
+[body]
++1  Drupal: drupal
+
+[sector]
++3  higher ed: madgex jibe
+
+[numbers]
+body most  4
+""")
+        self.assertEqual(for_, ((4, "web", r"web(site|master)?\b"),))
+        self.assertEqual(against, ((6, "faculty", "postdoc|professor"),))
+        self.assertEqual(in_body, (("Drupal", "drupal"),))
+        self.assertEqual(sectors, {"madgex": (3, "higher ed"), "jibe": (3, "higher ed")})
+        self.assertEqual(numbers, {"body most": 4})
+
+    def test_changing_a_weight_changes_the_score(self):
+        listing = {"title": "Web Designer", "about": [], "board": "builtin"}
+        heavier = self.read("[title]\n+9  web: web\n[numbers]\nbody most  4\nreasons  5\n")
+        with mock.patch.multiple(build, FIT_FOR=heavier[0], FIT_AGAINST=(), FIT_IN_BODY=(), FIT_SECTORS={}):
+            self.assertEqual(build.fit(listing), (9, ["web"]))
+
+    def test_a_section_it_doesnt_know_is_a_mistake_worth_stopping_for(self):
+        with self.assertRaises(SystemExit):
+            self.read("[whatever]\n+1  web: web\n")
+        with self.assertRaises(SystemExit):
+            self.read("+1  web: web\n")
 
 
 class Page(unittest.TestCase):
