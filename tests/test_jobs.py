@@ -106,9 +106,17 @@ class Keywords(unittest.TestCase):
                       "Web Producer", "Product Design Lead", "JavaScript Engineer II"):
             self.assertTrue(self.wanted(title), title)
 
+    def test_keeps_the_work_next_to_it(self):
+        # The wider keywords: titles none of the web words would have caught.
+        for title in ("Group Product Manager", "Data Analyst, Marketplace", "Technical Writer",
+                      "Developer Relations Lead", "Art Director", "QA Analyst", "Motion Graphics Artist",
+                      "Webflow Specialist", "Digital Accessibility Coordinator", "SEO Manager"):
+            self.assertTrue(self.wanted(title), title)
+
     def test_leaves_out_the_rest(self):
+        # Including the titles that the wider keywords would have pulled in had they been single broad words.
         for title in ("Registered Nurse", "Warehouse Associate", "Account Executive, Enterprise Sales",
-                      "Staff Accountant"):
+                      "Staff Accountant", "Operations Manager", "Technical Recruiter", "Content Moderator"):
             self.assertFalse(self.wanted(title), title)
 
 
@@ -146,6 +154,15 @@ class Listing(unittest.TestCase):
         # Anything remote is filed as remote, whatever the work is.
         self.assertEqual(build.kind_of(self.job("Product Designer", city="remote")), "remote")
 
+    def test_the_work_around_the_thing_is_its_own_kind(self):
+        for title in ("Group Product Manager", "Data Analyst", "Technical Writer", "Developer Advocate",
+                      "SEO Manager"):
+            self.assertEqual(build.kind_of(self.job(title)), "product", title)
+        # Design still wins over product, and testing is building it.
+        self.assertEqual(build.kind_of(self.job("Principal Product Designer")), "design")
+        self.assertEqual(build.kind_of(self.job("Art Director, Brand")), "design")
+        self.assertEqual(build.kind_of(self.job("QA Engineer")), "engineering")
+
 
 class Page(unittest.TestCase):
     def listings(self):
@@ -177,6 +194,16 @@ class Page(unittest.TestCase):
         self.assertEqual(re.findall(r'<option value="([^"]*)">', menu), ["", "boston", "newyork", "remote"])
         self.assertIn('data-show="design"', page)
         self.assertIn('<nav class="pager">', page)
+
+    def test_the_product_filter_shows_only_when_such_a_job_is_on_the_page(self):
+        page = build.render_index(self.listings(), [], [], datetime(2026, 10, 16, tzinfo=timezone.utc))
+        self.assertNotIn('<button data-show="product">', page)  # The CSS names every kind; the filter doesn't.
+        listings = self.listings() + [build.job(source("builtin", "https://x/", "boston"), "Group Product Manager",
+                                                "Acme", "https://x/job/2", date(2026, 10, 9))]
+        page = build.render_index(build.without_repeats(listings), [], [],
+                                  datetime(2026, 10, 16, tzinfo=timezone.utc))
+        self.assertIn('<button data-show="product">', page)
+        self.assertIn('data-kind="product"', page)
 
     def test_a_board_that_failed_says_so(self):
         page = build.render_index(self.listings(), ["Built In Boston"], [("Remote OK", date(2026, 10, 15))],

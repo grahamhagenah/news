@@ -136,7 +136,11 @@ def job(source, title, company, link, posted, place="", salary="", arrangement="
 # Built In writes each job as a card, and the list of them again as schema.org data whose descriptions are
 # the tidiest summary of each. Its script tag's type is HTML-escaped, so it isn't found by looking for
 # `type="application/ld+json"`.
-BUILTIN_PAGES = ("jobs/dev-engineering", "jobs/design-ux")
+# The categories worth reading: the two the board started with, plus the ones the wider keywords are
+# for. Marketing, operations, HR and customer success were tried and gave almost nothing the keywords
+# wanted, so they aren't fetched every build.
+BUILTIN_PAGES = ("jobs/dev-engineering", "jobs/design-ux", "jobs/product", "jobs/data-analytics",
+                 "jobs/content")
 BUILTIN_CARD = re.compile(r'(?=<div[^>]*data-id="job-card")')
 BUILTIN_TITLE = re.compile(r'<a href="(/job/[^"]+)"[^>]*data-id="job-card-title"[^>]*>(.*?)</a>', re.S)
 # A card links the company twice, around its logo and around its name; the name is the one with words in it.
@@ -177,8 +181,9 @@ def builtin_descriptions(page):
 
 
 def read_builtin(source):
-    """A Built In metro site's engineering and design listings: a card for each job, with the company, where
-    it is, what it pays and how it's worked (remote, hybrid, in the office)."""
+    """A Built In metro site's listings, from each of BUILTIN_PAGES: a card for each job, with the company,
+    where it is, what it pays and how it's worked (remote, hybrid, in the office). A job on two of its
+    category pages is read twice and merged later, as a job in two metros is."""
     today = datetime.now(EASTERN).date()
     listings = []
     for path in BUILTIN_PAGES:
@@ -280,7 +285,8 @@ def load(source):
 
 
 def wanted(listing, keywords):
-    """Only jobs whose titles say they're about making things for the web."""
+    """Only jobs whose titles say they're web work, or the work next to it: product, data, writing, testing,
+    developer relations, art direction. keywords.txt is the whole of that decision."""
     return bool(keywords.search(listing["title"]))
 
 
@@ -351,11 +357,20 @@ def render_time(day, css_class=""):
 ICON_DRAWINGS = {
     "engineering": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 6.5L4 8l2 1.5M10 6.5L12 8l-2 1.5"/>',
     "design": '<circle cx="8" cy="8" r="5.25"/><circle cx="8" cy="8" r="1.75" fill="currentColor" stroke="none"/>',
+    "product": '<path d="M8 2.25l5.25 2.75v6L8 13.75 2.75 11V5z"/><path d="M2.75 5L8 7.75 13.25 5M8 7.75v6"/>',
     "remote": '<path d="M8 2.75a5.25 5.25 0 0 1 0 10.5a5.25 5.25 0 0 1 0-10.5z"/><path d="M2.75 8h10.5M8 2.75c1.6 1.7 1.6 8.8 0 10.5c-1.6-1.7-1.6-8.8 0-10.5z"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
-# What a title is about, for the filter: design work, or building it.
-DESIGN = re.compile(r"(?<!\w)(design(er|s)?|ux|ui|user research|researcher|brand|visual|content strategist)(?!\w)", re.I)
+# What a title is about, for the filter. Design is the studio's work, drawing and research included; product
+# is the work around the thing rather than making it, which is most of what the wider keywords bring in;
+# everything else is building it.
+DESIGN = re.compile(r"(?<!\w)(design(er|s)?|ux|ui|user research|researcher|branding|visual|content strategist|"
+                    r"art director|creative director|creative technologist|illustrator|animator|animation|"
+                    r"motion graphics|3d|prototyper)(?!\w)", re.I)
+PRODUCT = re.compile(r"(?<!\w)(product (manager|owner|management|lead)|head of product|program manager|"
+                     r"data (analyst|scientist)|analytics|business intelligence|technical writer|documentation|"
+                     r"copywriter|editorial|content strategy|developer (relations|advocate)|devrel|evangelist|"
+                     r"solutions architect|implementation|technical account|seo|digital producer)(?!\w)", re.I)
 
 
 def where_of(listing):
@@ -365,7 +380,15 @@ def where_of(listing):
 
 
 def kind_of(listing):
-    return "remote" if listing["city"] == "remote" else "design" if DESIGN.search(listing["title"]) else "engineering"
+    """Which filter a job sits under. Anything remote is filed as remote, whatever the work is; otherwise the
+    title decides, design before product so a product designer isn't filed as product management."""
+    if listing["city"] == "remote":
+        return "remote"
+    if DESIGN.search(listing["title"]):
+        return "design"
+    if PRODUCT.search(listing["title"]):
+        return "product"
+    return "engineering"
 
 
 def icon(kind, decorative=False):
@@ -411,7 +434,7 @@ def render_index(listings, failed, stale, built_at):
              if any(city in (listing.get("cities") or [listing["city"]]) for listing in listings)]
     cities = "".join(f'<option value="{city}">{html.escape(CITIES[city])}</option>' for city in there)
     menu = (f'<select class="pick" aria-label="City"><option value="">All cities</option>{cities}</select>')
-    kinds = [("engineering", "Engineering"), ("design", "Design"), ("remote", "Remote")]
+    kinds = [("engineering", "Engineering"), ("design", "Design"), ("product", "Product"), ("remote", "Remote")]
     show_filter = (
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
         + "".join(f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>'
@@ -577,13 +600,15 @@ HEAD = """<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">"""
 
 CSS = """
-  /* The kinds' marks: green for building it, violet for designing it, coral for remote. */
-  :root { --engineering: #34d399; --design: #a78bfa; --remote: #fb7185; }
+  /* The kinds' marks: green for building it, violet for designing it, amber for the work around it, coral
+     for remote. */
+  :root { --engineering: #34d399; --design: #a78bfa; --product: #fbbf24; --remote: #fb7185; }
   h1 { margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
        letter-spacing: .08em; text-transform: uppercase; }
   h1:first-child, header + h1 { margin-top: 0; }
   .filter [data-show="engineering"] .icon { color: var(--engineering); }
   .filter [data-show="design"] .icon { color: var(--design); }
+  .filter [data-show="product"] .icon { color: var(--product); }
   .filter [data-show="remote"] .icon { color: var(--remote); }
   li { padding: .4rem 0; }
   /* Until the script picks the page, show the first one, so the whole list never flashes up. */
@@ -600,6 +625,7 @@ CSS = """
   .row > .icon { color: #555; }
   .unread > .icon { color: var(--engineering); }
   .row[data-kind="design"].unread > .icon { color: var(--design); }
+  .row[data-kind="product"].unread > .icon { color: var(--product); }
   .row[data-kind="remote"].unread > .icon { color: var(--remote); }
   @media (max-width: 34rem) {
     /* A phone's row reads as one line: the title, when it went up, where it is, and who it's with. */

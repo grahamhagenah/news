@@ -1,7 +1,8 @@
 # One source per line: how to read it, its URL, the city its jobs are in, and the board's name.
 # How to read it:
-#   builtin    a Built In metro site (builtinboston.com), whose job pages its robots.txt allows: its
-#              engineering and design listings, newest first, from the cards on the page
+#   builtin    a Built In metro site (builtinboston.com), whose job pages its robots.txt allows: the cards
+#              on each category page in BUILTIN_PAGES (jobs/build.py) — engineering, design, product,
+#              data and content
 #   wwr        We Work Remotely's feed for a category
 #   remoteok   Remote OK's JSON of its latest jobs
 #   remotive   Remotive's JSON of its latest jobs

@@ -1,6 +1,7 @@
 # A job is listed when its title has one of these in it, as a whole word, in any case. Two words in a row
-# count as a phrase ("front end"). This is what keeps the board to making things for the web rather than every
-# job a board carries.
+# count as a phrase ("front end"). This is the whole of what keeps the board to web work and the work next to
+# it, rather than every job a board carries. A word broad enough to match a title that isn't any of this
+# ("manager", "content", "data") floods the board, so the wider ones are kept as phrases.
 
 # Building for the web
 web
@@ -43,4 +44,97 @@ product design
 interaction
 visual
 research
-brand
+branding
+
+# Product and program work
+product manager
+product management
+product owner
+product lead
+head of product
+program manager
+
+# Data and analytics
+data analyst
+data scientist
+analytics
+business intelligence
+visualization
+
+# Writing and docs
+technical writer
+documentation
+copywriter
+editorial
+content strategy
+
+# Developer-facing work that isn't writing the code
+developer relations
+devrel
+developer advocate
+evangelist
+solutions architect
+implementation
+technical account
+
+# Testing
+qa
+quality assurance
+sdet
+test automation
+
+# Art direction and the rest of the studio
+art director
+creative director
+creative technologist
+illustrator
+motion
+prototyper
+
+# The web side of marketing
+seo
+webmaster
+digital producer
+
+# Accessibility, which titles name outright when it's the job
+a11y
+wcag
+section 508
+inclusive design
+assistive
+
+# The platforms sites are actually built on
+cms
+content management
+webflow
+contentful
+sitecore
+aem
+adobe experience manager
+craft cms
+umbraco
+hubspot
+squarespace
+nextjs
+next.js
+remix
+astro
+tailwind
+graphql
+
+# Interactive, motion and 3D work
+interactive
+multimedia
+3d
+webgl
+three.js
+unity
+animation
+animator
+motion graphics
+
+# Marketing sites, and the consulting end of the same work
+marketing technologist
+martech
+email developer
+technical consultant
