@@ -333,9 +333,15 @@ def read_remotive(source):
 
 # Inside Higher Ed and the Chronicle run the same job board software, whose RSS answers a keyword search with
 # the 20 newest postings that match. One query is too narrow a window on a board carrying 20,000 of them, so
-# each board is asked a few, and keywords.txt still decides what's kept.
-MADGEX_QUERIES = ("web developer", "software engineer", "graphic designer", "user experience", "accessibility",
-                  "data analyst")
+# each board is asked several, and keywords.txt still decides what's kept.
+#
+# These ten were chosen by asking both boards eighteen candidates and keeping the ones that found jobs the
+# others didn't: together they hold 89% of everything the eighteen found between them. "web developer" and
+# "user experience" were dropped from the set for that reason — near enough all of what they return comes
+# back under "web manager", "web content" and "ux designer" anyway.
+MADGEX_QUERIES = ("web manager", "graphic designer", "software engineer", "data analyst", "ux designer",
+                  "instructional designer", "digital accessibility", "accessibility", "front end developer",
+                  "web content")
 # Its description is the pay (when it gives one), the employer, the posting itself, then the place, each on
 # its own line. The pay line is the one starting with a number: "53,142 - 88600:", "Up to GBP 75,000:".
 MADGEX_PAY = re.compile(r"^[^A-Za-z]*\d")
@@ -613,7 +619,9 @@ def collect(sources, keywords, built_at):
             continue
         kept = [listing for listing in found
                 if wanted(listing, keywords) and (listing["posted"] is None or listing["posted"] >= cutoff)]
-        gathered.append((source, kept[:PER_SOURCE]))
+        # Newest first before the cap, so a board over it loses its oldest postings rather than whichever
+        # of its searches happened to run last.
+        gathered.append((source, newest_first(kept)[:PER_SOURCE]))
         print(f"✓ {source['name']}: {len(kept[:PER_SOURCE])} jobs of {len(found)} listed")
     return gathered, failed, errors
 

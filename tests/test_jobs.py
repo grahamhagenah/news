@@ -332,6 +332,22 @@ class Dates(unittest.TestCase):
         self.assertEqual(dated[0]["posted"], date(2026, 10, 2), "the day the board first saw it")
         self.assertEqual(dated[1]["posted"], date(2026, 10, 16), "new to the board today")
 
+    def test_a_board_over_the_cap_keeps_its_newest(self):
+        built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        days = [date(2026, 10, 1 + n % 15) for n in range(build.PER_SOURCE + 10)]
+
+        def reader(source):
+            return [build.job(source, f"Web Developer {n}", "A School", f"https://x/{n}", day)
+                    for n, day in enumerate(days)]
+
+        keywords = build.read_keywords()
+        with mock.patch.dict(build.READERS, {"madgex": reader}):
+            gathered, _, _ = build.collect([self.source("madgex")], keywords, built_at)
+        kept = gathered[0][1]
+        self.assertEqual(len(kept), build.PER_SOURCE)
+        self.assertEqual(kept[0]["posted"], max(days), "the newest it found, not the first it read")
+        self.assertTrue(all(kept[n]["posted"] >= kept[n + 1]["posted"] for n in range(len(kept) - 1)))
+
     def test_a_university_board_is_read_further_back(self):
         built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
         long_ago = date(2026, 7, 20)

@@ -47,6 +47,10 @@ techjobs   https://techjobsforgood.com/          anywhere   Tech Jobs for Good
 jibe       https://jobs.tufts.edu/                              anywhere   Tufts University
 silkroad   https://jobs.silkroad.com/BU/External                anywhere   Boston University
 workday    https://northeastern.wd1.myworkdayjobs.com/careers   anywhere   Northeastern University
+workday    https://brandeis.wd5.myworkdayjobs.com/Jobs          anywhere   Brandeis University
+# Berklee, Suffolk, Babson, Emerson and WPI are all on Workday too, and were each tried: between them they
+# held one web job, and three false matches. A college of a few thousand doesn't post this work often enough
+# to be worth four requests a build. The two aggregators above carry them when they do.
 # Wellesley was read for a while and dropped: its whole staff board is seven jobs, so it never held one.
 
 # Non-profits, each from its own Greenhouse board — the openings a 501(c)(3) publishes itself, which is
