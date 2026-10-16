@@ -201,6 +201,8 @@ def job(source, title, company, link, posted, place="", salary="", arrangement="
         "level": level,
         "about": [line for line in about_ if line.casefold() != title.casefold()],
         "source": source["name"],
+        # How its board is read, which is the nearest thing to what kind of employer it is.
+        "board": source["kind"],
     }
 
 
@@ -724,6 +726,91 @@ def short_place(place):
     return ", ".join(parts[:2])
 
 
+# What a job has to say for itself, measured against the work this board is kept for: building and designing
+# for the web, in places where that work is done for its own sake. The weights are a judgement, not a
+# measurement — they're here, in one table, so they can be argued with.
+FIT_FOR = (
+    (4, "web", r"web(site|master)?\b"),
+    (4, "accessibility", r"accessib|a11y|wcag|508"),
+    (3, "CMS", r"wordpress|drupal|\bcms\b|craft|sitecore|contentful|webflow|content manage"),
+    (3, "UX", r"\bux\b|\bui\b|user experience|interaction|usability"),
+    (2, "design", r"design(er)?\b"),
+    (2, "front end", r"front.?end|javascript|react|typescript|html|css|\bphp\b"),
+    (2, "content", r"content|digital|communications|multimedia|interactive|producer"),
+    (1, "SEO", r"\bseo\b|marketing site|analytics"),
+    (1, "step up", r"senior|lead\b|manager|director|head of"),
+)
+FIT_AGAINST = (
+    (6, "faculty or clinical", r"postdoc|faculty|professor|lecturer|adjunct|nurse|clinical|physician|technician"),
+    (4, "deep engineering", r"machine learning|\bml\b|backend|back.?end|platform|infrastructure|devops|"
+                            r"\bsre\b|kernel|embedded|compiler|distributed|data scientist"),
+    (3, "beyond this", r"staff |principal|distinguished|chief |\bvp\b|vice president"),
+    (2, "not a job yet", r"intern\b|internship|student|temporary|graduate assistant|part.?time"),
+)
+# Read in the posting itself rather than its title, where finding the word means something: every design
+# job's description says "design", but only some say Drupal. Worth a point each, and never more than
+# FIT_BODY_MOST between them, so what a posting mentions can't outweigh what it calls itself.
+FIT_IN_BODY = (
+    ("WordPress", r"wordpress"), ("Drupal", r"drupal"), ("CMS", r"\bcms\b|content management"),
+    ("WCAG", r"wcag|section 508|\ba11y\b|accessib"), ("React", r"\breact\b"), ("PHP", r"\bphp\b"),
+    ("JavaScript", r"javascript|typescript"), ("HTML/CSS", r"\bhtml\b|\bcss\b"), ("Figma", r"figma"),
+    ("SEO", r"\bseo\b"), ("Adobe", r"adobe|photoshop|illustrator|indesign"),
+)
+FIT_BODY_MOST = 4
+FIT_REASONS = 5  # At most this many reasons on a row.
+# Where the work is done for its own sake rather than to sell something else. Which board a job came from
+# says this: a university's own board and the higher-ed ones are universities, and a charity's own board,
+# the non-profit board and the federal one are the rest.
+FIT_SECTORS = {"madgex": (3, "higher ed"), "jibe": (3, "higher ed"), "silkroad": (3, "higher ed"),
+               "workday": (3, "higher ed"), "greenhouse": (2, "non-profit"), "techjobs": (2, "non-profit"),
+               "usajobs": (2, "public service")}
+FEATURED = 8  # How many jobs lead the page.
+FEATURED_LEAST = 8  # And how well they have to fit to be worth leading it.
+# The top of the page shouldn't be months old — but a university leaves a posting up until the job is
+# filled, which is why those boards are read back 120 days in the first place. So a job from one of them
+# leads the page for as long as it's plausibly open, and a metro board's only while it's new.
+FEATURED_DAYS = 30
+FEATURED_DAYS_SLOW = 90
+
+
+def fit(listing):
+    """How closely a job matches the work this board is for, and the few words saying why. It reads titles,
+    which say what a job is, and leans on the posting only for the words that are evidence on their own."""
+    points, why = 0, []
+    for worth, label, pattern in FIT_FOR:
+        if re.search(pattern, listing["title"], re.I):
+            points += worth
+            why.append(label)
+    for worth, label, pattern in FIT_AGAINST:
+        if re.search(pattern, listing["title"], re.I):
+            points -= worth
+            why.append(f"not {label}")
+    worth, label = FIT_SECTORS.get(listing.get("board", ""), (0, ""))
+    if worth:
+        points += worth
+        why.append(label)
+    said = " ".join(listing["about"] or ())
+    mentioned = [label for label, pattern in FIT_IN_BODY if re.search(pattern, said, re.I)]
+    points += min(len(mentioned), FIT_BODY_MOST)
+    why += mentioned[:FIT_BODY_MOST]
+    # A word earned in the title and again in the posting is one reason, not two, and five of them is as
+    # much as a row can say before it stops being read.
+    return points, list(dict.fromkeys(why))[:FIT_REASONS]
+
+
+def featured(listings, built_at):
+    """The jobs to lead the page with: the best fits among those still fresh, best first. A board whose
+    postings sit for months would otherwise keep the same job at the top until it was filled."""
+    def still_open(listing):
+        days = FEATURED_DAYS_SLOW if listing.get("board") in SLOW_KINDS else FEATURED_DAYS
+        return listing["posted"] and listing["posted"] >= built_at.date() - timedelta(days=days)
+
+    worth_it = [(fit(listing), listing) for listing in listings if still_open(listing)]
+    worth_it = [(scored, listing) for scored, listing in worth_it if scored[0] >= FEATURED_LEAST]
+    worth_it.sort(key=lambda pair: (-pair[0][0], -pair[1]["posted"].toordinal()))
+    return worth_it[:FEATURED]
+
+
 def where_of(listing):
     """Where a job is, as the row's last column says it: its city, how many it's posted in, or — for a job in
     none of the metros — the place it names, which says more than "Elsewhere" does."""
@@ -751,37 +838,50 @@ def icon(kind, decorative=False):
     return shared.icon(kind, None if decorative else kind.capitalize())
 
 
+def render_row(listing, instead=None):
+    """A job as a row: its kind's mark, the title, who it's with, how old it is, and where it is. instead
+    replaces the small print between them, which is how a featured row says why it's there."""
+    kind = kind_of(listing)
+    where = where_of(listing)
+    # The place only where it says more than the city at the end of the row does: "USA Only" for remote
+    # work, not "Seattle, WA" beside Seattle or "Anywhere" beside Remote. A row that ends in "Elsewhere"
+    # ends there because its place named no town — "Texas, United States" — and repeating that by the
+    # title says no more than the word does.
+    # Shortened, since a board that gives a place in full ("Boulder, Colorado, United States") is saying
+    # one thing the row wants and two it doesn't.
+    place = short_place(listing["place"]) or listing["place"]
+    if (not place or where == CITIES["elsewhere"] or place.endswith("cities") or place == "Anywhere"
+            or place.startswith(where.split()[0])):
+        place = ""
+    # What it pays and whether it's hybrid are kept in the data (jobs.json) but left off the row: a board
+    # states them inconsistently, and they crowd out the title.
+    facts = instead if instead is not None else [part for part in (place, listing["level"]) if part]
+    when = render_time(listing["posted"]) if listing["posted"] else ""
+    company = f'<span class="company">{html.escape(listing["company"])}</span>'
+    detail = f'<span class="facts">{html.escape(" · ".join(facts))}</span>' if facts else ""
+    # On a phone the row reads as one line, so where it is comes after the rest instead of a column.
+    via = f'<span class="via">in {html.escape(where)}</span>'
+    return (
+        f'<li class="row" data-city="{" ".join(listing.get("cities") or [listing["city"]])}" data-kind="{kind}" '
+        f'data-from="{html.escape(listing["company"])}">{icon(kind)}'
+        f'<div class="headline"><a class="title" href="{html.escape(listing["link"])}">{html.escape(listing["title"])}</a> '
+        + " ".join(part for part in (company, when, detail, via) if part)
+        + f'{shared.preview(listing["title"], listing["about"])}</div> '
+        f'<span class="source"><span>{html.escape(where)}</span></span></li>'
+    )
+
+
 def render_index(listings, failed, stale, built_at):
-    """The board: every job, newest first, with the city menu, the filter, the search and the pager over it."""
-    rows = []
-    for listing in listings:
-        kind = kind_of(listing)
-        where = where_of(listing)
-        # The place only where it says more than the city at the end of the row does: "USA Only" for remote
-        # work, not "Seattle, WA" beside Seattle or "Anywhere" beside Remote. A row that ends in "Elsewhere"
-        # ends there because its place named no town — "Texas, United States" — and repeating that by the
-        # title says no more than the word does.
-        # Shortened, since a board that gives a place in full ("Boulder, Colorado, United States") is saying
-        # one thing the row wants and two it doesn't.
-        place = short_place(listing["place"]) or listing["place"]
-        if (not place or where == CITIES["elsewhere"] or place.endswith("cities") or place == "Anywhere"
-                or place.startswith(where.split()[0])):
-            place = ""
-        # What it pays and whether it's hybrid are kept in the data (jobs.json) but left off the row: a board
-        # states them inconsistently, and they crowd out the title.
-        facts = [part for part in (place, listing["level"]) if part]
-        when = render_time(listing["posted"]) if listing["posted"] else ""
-        company = f'<span class="company">{html.escape(listing["company"])}</span>'
-        detail = f'<span class="facts">{html.escape(" · ".join(facts))}</span>' if facts else ""
-        # On a phone the row reads as one line, so where it is comes after the rest instead of a column.
-        via = f'<span class="via">in {html.escape(where)}</span>'
-        rows.append(
-            f'<li class="row" data-city="{" ".join(listing.get("cities") or [listing["city"]])}" data-kind="{kind}" '
-            f'data-from="{html.escape(listing["company"])}">{icon(kind)}'
-            f'<div class="headline"><a class="title" href="{html.escape(listing["link"])}">{html.escape(listing["title"])}</a> '
-            + " ".join(part for part in (company, when, detail, via) if part)
-            + f'{shared.preview(listing["title"], listing["about"])}</div> '
-            f'<span class="source"><span>{html.escape(where)}</span></span></li>'
+    """The board: the jobs that fit best first, then every job newest first, with the city menu, the filter,
+    the search and the pager over them."""
+    rows = [render_row(listing) for listing in listings]
+    best = featured(listings, built_at)
+    lead = ""
+    if best:
+        lead = (
+            '<h1 class="featured-title">Worth a look</h1>\n<ul class="featured">\n'
+            + "\n".join(render_row(listing, instead=why) for (_, why), listing in best)
+            + '\n</ul>\n<p class="featured-none" hidden></p>\n'
         )
 
     failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
@@ -804,7 +904,8 @@ def render_index(listings, failed, stale, built_at):
     )
 
     body = (
-        show_filter
+        show_filter + lead
+        + '<h1 class="all-title">Everything</h1>\n' * bool(lead)
         + f'<ul class="posts" data-page-size="{PAGE_SIZE}">\n' + "\n".join(rows) + "\n</ul>\n"
         '<p class="empty" hidden></p>\n'
         '<nav class="pager"></nav>\n'
@@ -859,7 +960,7 @@ def render_json(listings, built_at):
 
 
 INDEX_JS = """
-  const links = [...document.querySelectorAll(".posts a.title")];
+  const links = [...document.querySelectorAll(".posts a.title, .featured a.title")];
 
   // A dot beside the jobs you haven't opened yet. Browsers keep visited links private from pages, so clicks
   // are remembered here instead, in this browser only, for 30 days.
@@ -876,7 +977,8 @@ INDEX_JS = """
     const markRead = event => {
       if (event.button > 1) return;  // Right-clicks only open a menu.
       clicked[a.href] = Date.now();
-      li.classList.remove("unread");
+      // A featured job is on the page twice; opening either marks both.
+      for (const other of links) if (other.href === a.href) other.closest("li").classList.remove("unread");
       saveClicked();
     };
     a.addEventListener("click", markRead);
@@ -887,6 +989,13 @@ INDEX_JS = """
   // them. The city and the search are kept in the address (?city=, ?q=), so a list can be sent to someone;
   // the kind is remembered in this browser.
   const list = document.querySelector(".posts");
+  // The few jobs that lead the page. They're filtered and searched with the rest, and the heading above
+  // them goes when nothing in them is left.
+  const lead = document.querySelector(".featured");
+  const leadRows = lead ? [...lead.children] : [];
+  const leadTitle = document.querySelector(".featured-title");
+  const leadNone = document.querySelector(".featured-none");
+  const allTitle = document.querySelector(".all-title");
   const pageSize = Number(list.dataset.pageSize);
   const items = [...list.children];
   const pager = document.querySelector(".pager");
@@ -900,7 +1009,7 @@ INDEX_JS = """
   // leave a reader who chose it last time looking at an empty page.
   if (show !== "all" && !(filter && filter.querySelector('[data-show="' + show + '"]'))) show = "all";
   const plain = text => text.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
-  const searchable = new Map(items.map(li => [li, plain(li.textContent)]));
+  const searchable = new Map([...items, ...leadRows].map(li => [li, plain(li.textContent)]));
   const query = () => (search && search.offsetParent ? search.value.trim() : "");
   if (search) search.value = new URLSearchParams(location.search).get("q") || "";
   if (where) {
@@ -921,6 +1030,17 @@ INDEX_JS = """
     const shown = items.filter(li => (show === "all" || li.dataset.kind === show)
       && (!city || li.dataset.city.split(" ").includes(city))
       && words.every(word => searchable.get(li).includes(word)));
+    const leadShown = leadRows.filter(li => (show === "all" || li.dataset.kind === show)
+      && (!city || li.dataset.city.split(" ").includes(city))
+      && words.every(word => searchable.get(li).includes(word)));
+    leadRows.forEach(li => { li.hidden = !leadShown.includes(li); });
+    if (lead) lead.hidden = leadShown.length === 0;
+    if (leadTitle) leadTitle.hidden = leadShown.length === 0;
+    if (allTitle) allTitle.hidden = leadShown.length === 0;
+    if (leadNone) {
+      leadNone.textContent = "Nothing here fits especially well right now.";
+      leadNone.hidden = leadShown.length > 0 || shown.length === 0;
+    }
     const pages = Math.max(1, Math.ceil(shown.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     items.forEach(li => { li.hidden = true; });
@@ -999,6 +1119,11 @@ CSS = """
     .facts { white-space: normal; }
     .posts .row > .source { display: none; }
   }
+  /* The few jobs that lead the page: the same rows, set apart by the heading above them. */
+  .featured { margin-bottom: 1rem; }
+  .featured .facts { color: #8a8a8a; }
+  .featured-none { color: #666; font-size: .9rem; }
+  .all-title { margin-top: 2.25rem; }
   .sources { columns: 2; column-gap: 2.5rem; }
   .sources li { break-inside: avoid; }
   @media (max-width: 34rem) { .sources { columns: 1; } }

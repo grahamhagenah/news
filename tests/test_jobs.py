@@ -364,6 +364,55 @@ class Dates(unittest.TestCase):
         self.assertEqual(quick[0][1], [], "a metro board's isn't")
 
 
+class Fit(unittest.TestCase):
+    """Scoring a job against the work this board is kept for, and the few that lead the page."""
+
+    def job(self, title, kind="builtin", posted=date(2026, 10, 10), about=()):
+        return build.job({"kind": kind, "url": "https://x/", "city": "boston", "name": "A Board"},
+                         title, "Acme", f"https://x/{title}", posted, about_=about)
+
+    def test_the_work_this_board_is_for_scores_above_the_rest(self):
+        web = build.fit(self.job("Web Content Specialist", kind="madgex"))[0]
+        for title, kind in (("Senior Backend Engineer, Distributed Systems", "builtin"),
+                            ("Postdoctoral Research Fellow", "madgex"),
+                            ("Staff Machine Learning Engineer", "builtin"),
+                            ("Account Executive, Enterprise", "builtin")):
+            self.assertGreater(web, build.fit(self.job(title, kind=kind))[0], title)
+
+    def test_a_posting_is_read_for_what_a_title_cant_say(self):
+        plain = self.job("Senior Associate, Communications")
+        said = self.job("Senior Associate, Communications",
+                        about=["We run a Drupal site and hold it to WCAG 2.1 AA, with some PHP behind it."])
+        self.assertGreater(build.fit(said)[0], build.fit(plain)[0])
+        self.assertIn("Drupal", build.fit(said)[1])
+
+    def test_a_posting_cant_outweigh_what_a_job_calls_itself(self):
+        said = " ".join(label for label, _ in build.FIT_IN_BODY)
+        stuffed = self.job("Registered Nurse", about=[f"WordPress Drupal CMS WCAG React PHP JavaScript HTML CSS Figma SEO Adobe {said}"])
+        self.assertLessEqual(build.fit(stuffed)[0] - build.fit(self.job("Registered Nurse"))[0],
+                             build.FIT_BODY_MOST)
+
+    def test_a_reason_is_given_once(self):
+        points, why = build.fit(self.job("SEO Specialist", about=["We care about SEO."]))
+        self.assertEqual(len(why), len(set(why)))
+        self.assertLessEqual(len(why), build.FIT_REASONS)
+
+    def test_what_leads_the_page_is_the_best_of_whats_open(self):
+        built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        good = self.job("Web Accessibility Specialist", kind="madgex", posted=date(2026, 10, 10))
+        dull = self.job("Account Executive", posted=date(2026, 10, 15))
+        best = build.featured([good, dull], built_at)
+        self.assertEqual([listing["title"] for _, listing in best], ["Web Accessibility Specialist"])
+
+    def test_a_metro_boards_old_job_drops_out_and_a_universitys_doesnt(self):
+        built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        old_day = date(2026, 8, 8)  # 69 days: gone from a metro board, still open at a university.
+        metro = self.job("Senior Web Designer, UX", posted=old_day)
+        university = self.job("Senior Web Designer, UX", kind="madgex", posted=old_day)
+        self.assertEqual(build.featured([metro], built_at), [])
+        self.assertEqual(len(build.featured([university], built_at)), 1)
+
+
 class Page(unittest.TestCase):
     def listings(self):
         make = lambda title, city, **rest: dict(
@@ -431,6 +480,25 @@ class Page(unittest.TestCase):
                                   datetime(2026, 10, 16, tzinfo=timezone.utc))
         self.assertIn('<span class="facts">Boulder, Colorado</span>', page)
         self.assertIn('<span class="source"><span>Denver</span></span>', page)
+
+    def test_the_best_fitting_jobs_lead_the_page(self):
+        source = {"kind": "madgex", "url": "https://x/", "city": "anywhere", "name": "A Board"}
+        strong = build.job(source, "Digital Accessibility Specialist", "A University", "https://x/1",
+                           date(2026, 10, 14), place="Boston, MA")
+        page = build.render_index(build.without_repeats(self.listings() + [strong]), [], [],
+                                  datetime(2026, 10, 16, tzinfo=timezone.utc))
+        self.assertIn('<ul class="featured">', page)
+        lead = page.split('<ul class="featured">')[1].split("</ul>")[0]
+        self.assertIn("Digital Accessibility Specialist", lead)
+        self.assertIn("accessibility", lead, "a featured row says why it's there")
+        self.assertIn('<h1 class="all-title">Everything</h1>', page)
+        # The job is in both lists: the lead says what to look at, the list stays a list of everything.
+        self.assertEqual(page.count("Digital Accessibility Specialist</a>"), 2)
+
+    def test_a_page_with_nothing_outstanding_has_no_lead(self):
+        page = build.render_index(self.listings(), [], [], datetime(2026, 10, 16, tzinfo=timezone.utc))
+        self.assertNotIn('<ul class="featured">', page)
+        self.assertNotIn('<h1 class="all-title">', page)  # The CSS names it whether or not the page uses it.
 
     def test_a_board_that_failed_says_so(self):
         page = build.render_index(self.listings(), ["Built In Boston"], [("Remote OK", date(2026, 10, 15))],
