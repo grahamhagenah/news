@@ -130,12 +130,13 @@ def menu(names, everything, label):
             f"{options}</select>")
 
 
-def preview(title, paragraphs):
+def preview(title, paragraphs, note=""):
     """The box that opens under a headline on hover: the full headline, shown only when the one-line one is cut
-    off, then the item's first paragraphs. It goes right after the headline's title, which the hover is on."""
+    off, then the item's first paragraphs. It goes right after the headline's title, which the hover is on.
+    note is markup the page puts above them, for something it has to say about the item itself."""
     body = "".join(f"<p>{html.escape(paragraph)}</p>" for paragraph in paragraphs)
-    return (f'<div class="preview{"" if body else " title-only"}">'
-            f'<p class="full-title">{html.escape(title)}</p>{body}</div>')
+    return (f'<div class="preview{"" if body or note else " title-only"}">'
+            f'<p class="full-title">{html.escape(title)}</p>{note}{body}</div>')
 
 
 # The page around a list: its ground, its width, and the header at the top of it. A page written without the

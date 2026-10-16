@@ -856,27 +856,27 @@ def render_row(listing, scored=None):
         place = ""
     # What it pays and whether it's hybrid are kept in the data (jobs.json) but left off the row: a board
     # states them inconsistently, and they crowd out the title.
-    facts = [] if scored else [part for part in (place, listing["level"]) if part]
+    facts = [part for part in (place, listing["level"]) if part]
     when = render_time(listing["posted"]) if listing["posted"] else ""
     company = f'<span class="company">{html.escape(listing["company"])}</span>'
     detail = f'<span class="facts">{html.escape(" · ".join(facts))}</span>' if facts else ""
     # On a phone the row reads as one line, so where it is comes after the rest instead of a column.
     via = f'<span class="via">in {html.escape(where)}</span>'
+    # A featured job's score and the words behind it go in the box that opens under its headline, with what
+    # the posting says. A row of its own for them was a row's worth of page for something read once.
+    note, tag = "", ""
     if scored:
         points, why = scored
-        said = html.escape(" · ".join(why))
-        detail = (f'<button class="fit" type="button" aria-expanded="false" '
-                  f'aria-label="How well it fits: {said}">{points}</button>'
-                  f'<span class="why">{said}</span>')
+        note = (f'<p class="why"><span class="score">{points}</span>'
+                f'{html.escape(" · ".join(why))}</p>')
+        # A phone has no hover, so it never sees that box. It gets the number alone, in the row.
+        tag = f'<span class="score-row" aria-hidden="true">{points}</span>'
     return (
         f'<li class="row" data-city="{" ".join(listing.get("cities") or [listing["city"]])}" data-kind="{kind}" '
         f'data-from="{html.escape(listing["company"])}">{icon(kind)}'
         f'<div class="headline"><a class="title" href="{html.escape(listing["link"])}">{html.escape(listing["title"])}</a> '
-        # A featured row's tag goes last, after where it is, so a phone's line of text reads as a sentence
-        # and what opens under it opens under the whole row.
-        + " ".join(part for part in ((company, when, via, detail) if scored else (company, when, detail, via))
-                   if part)
-        + f'{shared.preview(listing["title"], listing["about"])}</div> '
+        + " ".join(part for part in (company, when, detail, via, tag) if part)
+        + f'{shared.preview(listing["title"], listing["about"], note=note)}</div> '
         f'<span class="source"><span>{html.escape(where)}</span></span></li>'
     )
 
@@ -993,14 +993,6 @@ INDEX_JS = """
     };
     a.addEventListener("click", markRead);
     a.addEventListener("auxclick", markRead);
-  }
-
-  // Why a featured job is here opens on a tap as well as a hover, since a phone has no hover.
-  for (const tag of document.querySelectorAll(".featured .fit")) {
-    tag.addEventListener("click", () => {
-      const open = tag.closest("li").classList.toggle("open");
-      tag.setAttribute("aria-expanded", open ? "true" : "false");
-    });
   }
 
   // One page of jobs at a time, with the filter (the kind of work), the menu (the city) and the search over
@@ -1137,30 +1129,25 @@ CSS = """
     .facts { white-space: normal; }
     /* Where it is has already been said in the line, by "in Boston"; the column would say it twice. */
     .posts .row > .source, .featured .row > .source { display: none; }
-    /* A headline is a run of text here rather than a box, and a run of text broken over three lines is no
-       place to hang anything from: what opens under a tag hangs from the row instead. */
-    .featured .headline { position: static; }
+    /* No hover here, so no box: a featured job says how well it fits in the row itself. */
+    /* Named with the list it's in, so it beats the rule above that hides it whatever their order. */
+    .featured .score-row { display: inline; margin-left: .5em; padding: 0 .4em; border: 1px solid #333;
+                           border-radius: 999px; color: #777; font-size: .75em; }
   }
   /* The few jobs that lead the page: the same rows, set apart by the heading above them. Why a job is here
      takes more words than the small print of an ordinary row, and the parts of a headline share one line —
      so it goes on a line of its own underneath, where it can't squeeze the title out of its own row. */
   .featured { margin-bottom: 1rem; }
-  .featured .headline { flex-wrap: wrap; }
   /* Only the up and down of it: a phone's row keeps a left margin for the mark beside its first line. */
   .featured .row { padding-top: .5rem; padding-bottom: .5rem; }
-  /* How well a job fits, as a number in the row, with what's behind it kept out of the way until it's
-     asked for: hovered, tabbed to, or tapped, which is the only one of the three a phone has. */
-  .featured .fit { margin-left: .6em; padding: 0 .45em; border: 1px solid #333; border-radius: 999px;
-                   background: none; color: #777; font: inherit; font-size: .72em; line-height: 1.7;
-                   cursor: pointer; }
-  .featured .fit:hover, .featured .fit:focus-visible { color: #ddd; border-color: #666; outline: none; }
-  /* What's behind the tag opens over the page rather than in it: a row that moved everything under it
-     down each time the pointer crossed a tag would be worse than not having the tag. */
-  .featured .why { display: none; position: absolute; z-index: 2; top: calc(100% - .4rem); left: 0;
-                   width: max-content; max-width: min(30rem, 100%); box-sizing: border-box; padding: .5rem .7rem;
-                   border: 1px solid #333; border-radius: 6px; background: #000; color: #bbb;
-                   font-size: .8em; line-height: 1.5; white-space: normal; pointer-events: none; }
-  .featured .fit:hover + .why, .featured .fit:focus + .why, .featured .open .why { display: block; }
+  /* How well a featured job fits, at the top of the box that opens under its headline, above what the
+     posting says. The number is the score, and what follows it is what earned it. */
+  .preview .why { display: flex; align-items: baseline; gap: .5em; margin-bottom: .7em; padding-bottom: .6em;
+                  border-bottom: 1px solid #222; color: #999; }
+  .preview .score { flex: none; padding: 0 .45em; border: 1px solid #444; border-radius: 999px;
+                    color: #ddd; font-size: .9em; }
+  /* Where the box can be opened, the number is in it; a row doesn't need it as well. */
+  .score-row { display: none; }
   /* Where a row is three columns, the mark sits with the title rather than in the middle of a row that may
      now run to three lines. On a phone the mark is placed against the first line already. */
   @media (min-width: 34.01rem) {
