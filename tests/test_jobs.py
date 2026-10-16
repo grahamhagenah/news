@@ -168,6 +168,7 @@ class Readers(unittest.TestCase):
             found = self.read("usajobs", "https://data.usajobs.gov/", "anywhere")
         job = found[0]
         self.assertEqual(job["title"], "Interaction Designer (User Experience)")
+        self.assertEqual(job["link"], "https://www.usajobs.gov/job/839922200", "without the port it spells out")
         self.assertEqual(job["company"], "Internal Revenue Service")
         self.assertEqual(job["city"], "boston")
         self.assertEqual(job["salary"], "$118K–$153K")

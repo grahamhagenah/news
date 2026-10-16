@@ -546,7 +546,9 @@ def read_usajobs(source):
             listings.append(job(
                 source, text(said["PositionTitle"]),
                 text(said.get("OrganizationName") or said.get("DepartmentName", "")),
-                said.get("PositionURI", ""), date.fromisoformat(day) if day else None,
+                # It gives its own address with the port spelled out: "usajobs.gov:443/job/886695900".
+                re.sub(r"(?<=usajobs\.gov):443(?=/)", "", said.get("PositionURI", "")),
+                date.fromisoformat(day) if day else None,
                 place=text(said.get("PositionLocationDisplay", "")),
                 salary=salary_range(number(pay.get("MinimumRange")), number(pay.get("MaximumRange"))),
                 about_=about(((said.get("UserArea") or {}).get("Details") or {}).get("JobSummary", "")),
