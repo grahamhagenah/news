@@ -16,6 +16,10 @@ on:
         description: Rebuild the events page now, not only when it's due
         type: boolean
         default: false
+      jobs:
+        description: Rebuild the job board now, not only when it's due
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -142,7 +146,8 @@ jobs:
           # the user agent. Without both, the federal board is left out of the build rather than failing it.
           USAJOBS_KEY: ${{ secrets.USAJOBS_KEY }}
           USAJOBS_EMAIL: ${{ secrets.USAJOBS_EMAIL }}
-          JOBS_EVERY_HOURS: ${{ github.event_name != 'push' && '2' || '' }}
+          # Empty means build now. (In GitHub's `a && b || c`, b can't be empty, so the condition is inverted.)
+          JOBS_EVERY_HOURS: ${{ (github.event_name != 'push' && !inputs.jobs) && '2' || '' }}
       - name: Publish the job board
         if: hashFiles('dist/jobs/index.html') != ''
         continue-on-error: true
