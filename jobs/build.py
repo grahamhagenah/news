@@ -669,9 +669,12 @@ def render_index(listings, failed, stale, built_at):
         kind = kind_of(listing)
         where = where_of(listing)
         # The place only where it says more than the city at the end of the row does: "USA Only" for remote
-        # work, not "Seattle, WA" beside Seattle or "Anywhere" beside Remote.
+        # work, not "Seattle, WA" beside Seattle or "Anywhere" beside Remote. A row that ends in "Elsewhere"
+        # ends there because its place named no town — "Texas, United States" — and repeating that by the
+        # title says no more than the word does.
         place = listing["place"]
-        if not place or place.endswith("cities") or place == "Anywhere" or place.startswith(where.split()[0]):
+        if (not place or where == CITIES["elsewhere"] or place.endswith("cities") or place == "Anywhere"
+                or place.startswith(where.split()[0])):
             place = ""
         # What it pays and whether it's hybrid are kept in the data (jobs.json) but left off the row: a board
         # states them inconsistently, and they crowd out the title.

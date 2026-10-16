@@ -347,6 +347,20 @@ class Page(unittest.TestCase):
         self.assertIn('<button data-show="product">', page)
         self.assertIn('data-kind="product"', page)
 
+    def test_a_row_that_cant_name_a_town_says_only_elsewhere(self):
+        source = {"kind": "madgex", "url": "https://x/", "city": "anywhere", "name": "A Board"}
+        vague = build.job(source, "Web Developer", "A School", "https://x/1", date(2026, 10, 10),
+                          place="Texas, United States")
+        named = build.job(source, "UX Designer", "A School", "https://x/2", date(2026, 10, 10),
+                          place="Conway, SC")
+        page = build.render_index(build.without_repeats([vague, named]), [], [],
+                                  datetime(2026, 10, 16, tzinfo=timezone.utc))
+        self.assertNotIn("Texas, United States", page, "the column already says it isn't a town we cover")
+        self.assertIn('<span class="source"><span>Elsewhere</span></span>', page)
+        # A place that is a town still names itself, at the end of the row and not beside the title.
+        self.assertIn('<span class="source"><span>Conway, SC</span></span>', page)
+        self.assertNotIn('<span class="facts">Conway, SC</span>', page)
+
     def test_a_board_that_failed_says_so(self):
         page = build.render_index(self.listings(), ["Built In Boston"], [("Remote OK", date(2026, 10, 15))],
                                   datetime(2026, 10, 16, tzinfo=timezone.utc))
