@@ -301,8 +301,9 @@ class Listing(unittest.TestCase):
     def test_design_and_engineering_are_told_apart(self):
         self.assertEqual(build.kind_of(self.job("Senior UX Researcher")), "design")
         self.assertEqual(build.kind_of(self.job("Staff Software Engineer")), "engineering")
-        # Anything remote is filed as remote, whatever the work is.
-        self.assertEqual(build.kind_of(self.job("Product Designer", city="remote")), "remote")
+        # Where it's worked isn't a kind of work: a remote designer is a designer.
+        self.assertEqual(build.kind_of(self.job("Product Designer", city="remote")), "design")
+        self.assertEqual(build.kind_of(self.job("Software Engineer", city="remote")), "engineering")
 
     def test_the_work_around_the_thing_is_its_own_kind(self):
         for title in ("Group Product Manager", "Data Analyst", "Technical Writer", "Developer Advocate",
@@ -386,12 +387,15 @@ class Page(unittest.TestCase):
         # The company sits beside the title; the city is the row's last column.
         self.assertIn('<span class="company">Acme</span>', page)
         self.assertIn('<span class="source"><span>2 cities</span></span>', page)
+        # Remote is still where a job is, at the end of its row and in the city menu.
         self.assertIn('<span class="source"><span>Remote</span></span>', page)
+        self.assertIn('<li class="row" data-city="remote" data-kind="design"', page)
         self.assertNotIn("Boston, MA", page, "the city column already says where it is")
         # The menu names only the cities with jobs on the page, in the order CITIES gives.
         menu = page.split('<select class="pick" aria-label="City">')[1].split("</select>")[0]
         self.assertEqual(re.findall(r'<option value="([^"]*)">', menu), ["", "boston", "newyork", "remote"])
-        self.assertIn('data-show="design"', page)
+        self.assertIn('<button data-show="design">', page)
+        self.assertNotIn('<button data-show="remote">', page, "where it's worked isn't one of the kinds")
         self.assertIn('<nav class="pager">', page)
 
     def test_the_product_filter_shows_only_when_such_a_job_is_on_the_page(self):

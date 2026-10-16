@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Build the job board: web and design jobs in a handful of metro areas, and remote ones, newest first.
+"""Build the job board: web and design jobs in a handful of metro areas, and remote ones, newest first. The
+filter is the kind of work; where it's worked is the city at the end of a row, which "Remote" is one of.
 
 Sources are in sources.txt, the titles worth listing in keywords.txt. Run it from the repo's top folder:
 `python3 -m jobs.build` writes dist/jobs.
@@ -700,7 +701,6 @@ ICON_DRAWINGS = {
     "engineering": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 6.5L4 8l2 1.5M10 6.5L12 8l-2 1.5"/>',
     "design": '<circle cx="8" cy="8" r="5.25"/><circle cx="8" cy="8" r="1.75" fill="currentColor" stroke="none"/>',
     "product": '<path d="M8 2.25l5.25 2.75v6L8 13.75 2.75 11V5z"/><path d="M2.75 5L8 7.75 13.25 5M8 7.75v6"/>',
-    "remote": '<path d="M8 2.75a5.25 5.25 0 0 1 0 10.5a5.25 5.25 0 0 1 0-10.5z"/><path d="M2.75 8h10.5M8 2.75c1.6 1.7 1.6 8.8 0 10.5c-1.6-1.7-1.6-8.8 0-10.5z"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 # What a title is about, for the filter. Design is the studio's work, drawing and research included; product
@@ -738,10 +738,8 @@ def where_of(listing):
 
 
 def kind_of(listing):
-    """Which filter a job sits under. Anything remote is filed as remote, whatever the work is; otherwise the
-    title decides, design before product so a product designer isn't filed as product management."""
-    if listing["city"] == "remote":
-        return "remote"
+    """Which filter a job sits under: the kind of work it is, whatever and wherever it's worked. The title
+    decides, design before product so a product designer isn't filed as product management."""
     if DESIGN.search(listing["title"]):
         return "design"
     if PRODUCT.search(listing["title"]):
@@ -797,7 +795,7 @@ def render_index(listings, failed, stale, built_at):
              if any(city in (listing.get("cities") or [listing["city"]]) for listing in listings)]
     cities = "".join(f'<option value="{city}">{html.escape(CITIES[city])}</option>' for city in there)
     menu = (f'<select class="pick" aria-label="City"><option value="">All cities</option>{cities}</select>')
-    kinds = [("engineering", "Engineering"), ("design", "Design"), ("product", "Product"), ("remote", "Remote")]
+    kinds = [("engineering", "Engineering"), ("design", "Design"), ("product", "Product")]
     show_filter = (
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
         + "".join(f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>'
@@ -898,6 +896,9 @@ INDEX_JS = """
   const where = document.querySelector(".filter .pick");
   let show = "all";
   try { show = localStorage.getItem("jobs-show") || "all"; } catch (error) {}
+  // A kind this page hasn't got — one that's been dropped since, or that nothing matches today — would
+  // leave a reader who chose it last time looking at an empty page.
+  if (show !== "all" && !(filter && filter.querySelector('[data-show="' + show + '"]'))) show = "all";
   const plain = text => text.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
   const searchable = new Map(items.map(li => [li, plain(li.textContent)]));
   const query = () => (search && search.offsetParent ? search.value.trim() : "");
@@ -966,16 +967,15 @@ HEAD = """<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">"""
 
 CSS = """
-  /* The kinds' marks: green for building it, violet for designing it, amber for the work around it, coral
-     for remote. */
-  :root { --engineering: #34d399; --design: #a78bfa; --product: #fbbf24; --remote: #fb7185; }
+  /* The kinds' marks: green for building it, violet for designing it, amber for the work around it. Where
+     it's worked isn't one of them — that's the city at the end of the row, "Remote" among the rest. */
+  :root { --engineering: #34d399; --design: #a78bfa; --product: #fbbf24; }
   h1 { margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
        letter-spacing: .08em; text-transform: uppercase; }
   h1:first-child, header + h1 { margin-top: 0; }
   .filter [data-show="engineering"] .icon { color: var(--engineering); }
   .filter [data-show="design"] .icon { color: var(--design); }
   .filter [data-show="product"] .icon { color: var(--product); }
-  .filter [data-show="remote"] .icon { color: var(--remote); }
   li { padding: .4rem 0; }
   /* Until the script picks the page, show the first one, so the whole list never flashes up. */
   .posts:not(.paged) li:nth-child(n+PAGE_START) { display: none; }
@@ -992,7 +992,6 @@ CSS = """
   .unread > .icon { color: var(--engineering); }
   .row[data-kind="design"].unread > .icon { color: var(--design); }
   .row[data-kind="product"].unread > .icon { color: var(--product); }
-  .row[data-kind="remote"].unread > .icon { color: var(--remote); }
   @media (max-width: 34rem) {
     /* A phone's row reads as one line: the title, when it went up, where it is, and who it's with. */
     .headline > time, .headline > .facts, .headline > .company { margin-left: 0; }
