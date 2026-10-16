@@ -42,7 +42,10 @@ DAYS_TO_KEEP = 30  # A posting older than this has usually gone.
 # months. These are read as far back as this instead, and still sort by their date like everything else.
 DAYS_TO_KEEP_SLOW = 120
 SLOW_KINDS = ("madgex", "jibe", "silkroad", "workday", "greenhouse")
-PER_SOURCE = 120  # At most this many from one source, so no board crowds out the rest.
+# At most this many from one source, so no board can crowd out the rest. It's a guard rather than a trim:
+# at 120 it was cutting Inside Higher Ed, which is a board worth reading in full, and the sources here are
+# each bounded by how much they're asked for (a Madgex board, the most of them, can return 160).
+PER_SOURCE = 200
 PREVIEW_CHARS = 600
 # A source that fails falls back to its jobs from the last build, if they're no older than this.
 FALLBACK_LIMIT = timedelta(days=2)
@@ -339,9 +342,14 @@ def read_remotive(source):
 # others didn't: together they hold 89% of everything the eighteen found between them. "web developer" and
 # "user experience" were dropped from the set for that reason — near enough all of what they return comes
 # back under "web manager", "web content" and "ux designer" anyway.
+#
+# Two more were dropped for what they found rather than how much: "instructional designer" is e-learning and
+# curriculum work, and "accessibility" on its own is a university's disability services — testing centres,
+# accommodations, resource centres — rather than the accessibility of what's on its website. The narrower
+# "digital accessibility" finds that work, and keywords.txt still keeps a job whose title says accessibility
+# however it was found.
 MADGEX_QUERIES = ("web manager", "graphic designer", "software engineer", "data analyst", "ux designer",
-                  "instructional designer", "digital accessibility", "accessibility", "front end developer",
-                  "web content")
+                  "digital accessibility", "front end developer", "web content")
 # Its description is the pay (when it gives one), the employer, the posting itself, then the place, each on
 # its own line. The pay line is the one starting with a number: "53,142 - 88600:", "Up to GBP 75,000:".
 MADGEX_PAY = re.compile(r"^[^A-Za-z]*\d")
