@@ -47,7 +47,7 @@ techjobs   https://techjobsforgood.com/          anywhere   Tech Jobs for Good
 jibe       https://jobs.tufts.edu/                              anywhere   Tufts University
 silkroad   https://jobs.silkroad.com/BU/External                anywhere   Boston University
 workday    https://northeastern.wd1.myworkdayjobs.com/careers   anywhere   Northeastern University
-workday    https://wd1.myworkdaysite.com/recruiting/wellesley/wellesley-staff   anywhere   Wellesley College
+# Wellesley was read for a while and dropped: its whole staff board is seven jobs, so it never held one.
 
 # Non-profits, each from its own Greenhouse board — the openings a 501(c)(3) publishes itself, which is
 # where this work is posted rather than on any board. Each of these is a charity, so the work counts
@@ -61,9 +61,9 @@ greenhouse https://job-boards.greenhouse.io/propublica        anywhere   ProPubl
 greenhouse https://job-boards.greenhouse.io/consumerreports   anywhere   Consumer Reports
 greenhouse https://job-boards.greenhouse.io/humanrightswatch  anywhere   Human Rights Watch
 
-# Boston's non-profit hospital systems, which are large employers of web, design and data people.
+# Boston's non-profit hospital systems, which are large employers of web, design and data people. Tufts
+# Medicine was read for a while and dropped: 72 postings a build, all clinical, and never a match.
 workday    https://massgeneralbrigham.wd1.myworkdayjobs.com/MGBExternal   anywhere   Mass General Brigham
-workday    https://tuftsmedicine.wd1.myworkdayjobs.com/Jobs               anywhere   Tufts Medicine
 
 # The federal government, every job of which counts towards loan forgiveness. Read only when USAJOBS_KEY
 # and USAJOBS_EMAIL are set: a free key from developer.usajobs.gov, kept as repo secrets.

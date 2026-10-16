@@ -427,11 +427,12 @@ class Page(unittest.TestCase):
 class Fallback(unittest.TestCase):
     def test_a_board_that_fails_shows_its_last_good_jobs(self):
         built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
-        listing = build.job(source("remoteok", "https://remoteok.com/api", "remote", "Remote OK"),
-                            "Frontend Engineer", "Acme", "https://remoteok.com/1", date(2026, 10, 15))
-        previous = {"sources": {"Remote OK": {"fetched": (built_at - timedelta(hours=3)).isoformat(),
-                                              "jobs": [build.saved(listing)]}}}
-        listings, failed, stale = build.gather([], ["Remote OK"], previous, built_at)
+        board = source("remoteok", "https://remoteok.com/api", "remote", "Remote OK")
+        listing = build.job(board, "Frontend Engineer", "Acme", "https://remoteok.com/1", date(2026, 10, 15))
+        previous = {"sources": {board["url"]: {"name": "Remote OK",
+                                               "fetched": (built_at - timedelta(hours=3)).isoformat(),
+                                               "jobs": [build.saved(listing)]}}}
+        listings, failed, stale = build.gather([], [board], previous, built_at)
         self.assertEqual([item["title"] for item in listings], ["Frontend Engineer"])
         self.assertEqual(listings[0]["posted"], date(2026, 10, 15), "its day survives the round trip")
         self.assertEqual(failed, [])
@@ -439,9 +440,28 @@ class Fallback(unittest.TestCase):
 
     def test_an_old_copy_is_no_use(self):
         built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
-        previous = {"sources": {"Remote OK": {"fetched": (built_at - timedelta(days=5)).isoformat(), "jobs": []}}}
-        listings, failed, stale = build.gather([], ["Remote OK"], previous, built_at)
+        board = source("remoteok", "https://remoteok.com/api", "remote", "Remote OK")
+        previous = {"sources": {board["url"]: {"name": "Remote OK", "jobs": [],
+                                               "fetched": (built_at - timedelta(days=5)).isoformat()}}}
+        listings, failed, stale = build.gather([], [board], previous, built_at)
         self.assertEqual((listings, failed, stale), ([], ["Remote OK"], []))
+
+    def test_two_feeds_of_one_board_keep_their_own_jobs(self):
+        """Both We Work Remotely feeds are called "We Work Remotely", which is the name a row and the page
+        show; a record kept by name would have left them sharing one."""
+        built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        feeds = [source("wwr", f"https://weworkremotely.com/{part}.rss", "remote", "We Work Remotely")
+                 for part in ("programming", "design")]
+        fetched = (built_at - timedelta(hours=3)).isoformat()
+        previous = {"sources": {feed["url"]: {
+            "name": "We Work Remotely", "fetched": fetched,
+            "jobs": [build.saved(build.job(feed, f"{part.title()} Engineer", "Acme",
+                                           f"https://weworkremotely.com/{part}/1", date(2026, 10, 15)))],
+        } for feed, part in zip(feeds, ("programming", "design"))}}
+        listings, failed, stale = build.gather([], feeds, previous, built_at)
+        self.assertEqual(sorted(listing["title"] for listing in listings),
+                         ["Design Engineer", "Programming Engineer"])
+        self.assertEqual(failed, [])
 
 
 if __name__ == "__main__":

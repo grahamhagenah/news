@@ -608,7 +608,7 @@ def collect(sources, keywords, built_at):
             days=DAYS_TO_KEEP_SLOW if source["kind"] in SLOW_KINDS else DAYS_TO_KEEP)
         if error:
             errors[source["name"]] = str(error)
-            failed.append(source["name"])
+            failed.append(source)
             print(f"✗ {source['name']}: {error}", file=sys.stderr)
             continue
         kept = [listing for listing in found
@@ -1013,11 +1013,13 @@ def previous_build():
 
 
 def gather(gathered, failed, previous, built_at):
-    """Each source's jobs as they loaded, or its last good ones when it failed and they're recent enough."""
+    """Each source's jobs as they loaded, or its last good ones when it failed and they're recent enough.
+    A source is remembered by its address rather than its name, since two feeds of one board share a name
+    and would otherwise keep one record between them."""
     kept_sources = previous.get("sources", {})
     listings, still_failed, stale = [], [], []
-    for name in failed:
-        kept = kept_sources.get(name)
+    for source in failed:
+        name, kept = source["name"], kept_sources.get(source["url"])
         if not kept or built_at - datetime.fromisoformat(kept["fetched"]) > FALLBACK_LIMIT:
             still_failed.append(name)
             continue
@@ -1066,8 +1068,8 @@ def main():
     # What this build found, for the next one to fall back on when a board won't load.
     record = {
         "built": built_at.isoformat(),
-        "sources": {source["name"]: {"fetched": built_at.isoformat(),
-                                     "jobs": [saved(listing) for listing in found]}
+        "sources": {source["url"]: {"name": source["name"], "fetched": built_at.isoformat(),
+                                    "jobs": [saved(listing) for listing in found]}
                     for source, found in gathered},
         "failing": still_failing(errors, previous, built_at),
     }
