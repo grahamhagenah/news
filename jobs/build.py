@@ -54,6 +54,7 @@ USER_AGENT = "Mozilla/5.0 (compatible; rss-reader/1.0)"
 CITIES = {
     "boston": "Boston",
     "newyork": "New York",
+    "washingtondc": "Washington, DC",
     "bayarea": "Bay Area",
     "seattle": "Seattle",
     "denver": "Denver",
@@ -76,6 +77,11 @@ METROS = {
                "watertown, ma", "wellesley", "framingham", "braintree", "chelsea, ma"),
     "newyork": ("new york", "brooklyn", "queens, ny", "bronx", "manhattan", "staten island", "long island city",
                 "jersey city", "hoboken", "newark, nj", "yonkers", "white plains", "new rochelle"),
+    # The federal government's own metro, which is most of what USAJOBS carries. "Washington" alone is a
+    # state as well as a city, so it's only ever given with what follows it.
+    "washingtondc": ("washington, dc", "washington, district of columbia", "arlington, va", "alexandria, va",
+                     "bethesda", "silver spring", "rockville", "mclean", "reston", "falls church",
+                     "fairfax, va", "college park, md", "suitland", "fort belvoir", "quantico", "langley, va"),
     "bayarea": ("san francisco", "oakland", "berkeley", "san jose", "palo alto", "mountain view", "menlo park",
                 "santa clara", "sunnyvale", "redwood city", "san mateo", "fremont", "stanford", "emeryville",
                 "cupertino", "hayward", "walnut creek", "santa cruz"),

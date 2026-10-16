@@ -227,8 +227,8 @@ class Metros(unittest.TestCase):
         self.assertEqual(build.metro_of("Medford, Massachusetts"), "boston")
         self.assertEqual(build.metro_of("Cambridge, Massachusetts"), "boston")
         self.assertEqual(build.metro_of("New York, New York"), "newyork")
-        # Not a state that only follows the town's own name: Washington, DC isn't Seattle.
-        self.assertEqual(build.metro_of("Washington, DC"), "elsewhere")
+        # Not a state that only follows the town's own name: Washington, DC is the capital, not Seattle.
+        self.assertEqual(build.metro_of("Washington, DC"), "washingtondc")
 
     def test_a_town_in_a_metro_is_that_metro(self):
         self.assertEqual(build.metro_of("Cambridge, MA"), "boston")
@@ -238,6 +238,13 @@ class Metros(unittest.TestCase):
         # Several places, the first metro among them winning; and a metro named beside remote work.
         self.assertEqual(build.metro_of("Medford, MA / Boston, MA / Remote (Select US States)"), "boston")
         self.assertEqual(build.metro_of("Remote (US)/Oakland, CA"), "bayarea")
+
+    def test_the_capital_is_its_own_metro(self):
+        for place in ("Washington, DC", "Washington, District of Columbia", "Arlington, VA", "Bethesda, MD"):
+            self.assertEqual(build.metro_of(place), "washingtondc", place)
+        # "Washington" on its own is the state Seattle is in, and a state is no metro.
+        self.assertEqual(build.metro_of("Seattle, Washington"), "seattle")
+        self.assertEqual(build.metro_of("Washington, United States"), "elsewhere")
 
     def test_nowhere_in_particular_is_remote(self):
         self.assertEqual(build.metro_of("Remote (US)"), "remote")
