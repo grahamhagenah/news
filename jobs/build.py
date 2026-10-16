@@ -383,9 +383,9 @@ def render_index(listings, failed, stale, built_at):
         place = listing["place"]
         if not place or place.endswith("cities") or place == "Anywhere" or place.startswith(where.split()[0]):
             place = ""
-        facts = [part for part in (place, listing["salary"],
-                                   listing["arrangement"] if listing["arrangement"] != "Remote" else "",
-                                   listing["level"]) if part]
+        # What it pays and whether it's hybrid are kept in the data (jobs.json) but left off the row: a board
+        # states them inconsistently, and they crowd out the title.
+        facts = [part for part in (place, listing["level"]) if part]
         when = render_time(listing["posted"]) if listing["posted"] else ""
         company = f'<span class="company">{html.escape(listing["company"])}</span>'
         detail = f'<span class="facts">{html.escape(" · ".join(facts))}</span>' if facts else ""

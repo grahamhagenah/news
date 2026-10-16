@@ -163,7 +163,10 @@ class Page(unittest.TestCase):
         page = build.render_index(self.listings(), [], [], datetime(2026, 10, 16, tzinfo=timezone.utc))
         self.assertIn('data-city="boston newyork"', page)
         self.assertIn('data-city="remote"', page)
-        self.assertIn("$150K–$190K", page)
+        # What it pays and how it's worked stay out of the row, though the export keeps them.
+        self.assertNotIn("$150K–$190K", page)
+        self.assertNotIn("Hybrid", page)
+        self.assertIn("Senior", page)
         # The company sits beside the title; the city is the row's last column.
         self.assertIn('<span class="company">Acme</span>', page)
         self.assertIn('<span class="source"><span>2 cities</span></span>', page)
