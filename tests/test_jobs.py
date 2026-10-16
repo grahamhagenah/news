@@ -25,6 +25,9 @@ ROUTES = [
     ("remotive.com/api", "remotive.json"),
     ("jobsrss", "madgex.xml"),
     ("techjobsforgood.com", "techjobs.html"),
+    ("jobs.tufts.edu", "tufts.json"),
+    ("jobs.silkroad.com", "bu.html"),
+    ("/wday/cxs/", "workday.json"),
 ]
 
 
@@ -117,6 +120,39 @@ class Readers(unittest.TestCase):
         self.assertEqual(build.techjobs_age("today", today), today)
         self.assertIsNone(build.techjobs_age("", today))
 
+    def test_jibe_reads_a_universitys_own_json(self):
+        found = self.read("jibe", "https://jobs.tufts.edu/", "anywhere")
+        job = found[0]
+        self.assertTrue(job["link"].startswith("https://jobs.tufts.edu/jobs/"))
+        self.assertEqual(job["company"], "Tufts University")
+        self.assertEqual(job["city"], "boston", "Boston, Massachusetts, by the place it names")
+        self.assertIn(job["arrangement"], ("Remote", "Hybrid", ""))
+        self.assertTrue(job["posted"], "its date, whose offset this Python can't read in full")
+        self.assertTrue(any(listing["about"] for listing in found))
+
+    def test_silkroad_reads_a_panel(self):
+        found = self.read("silkroad", "https://jobs.silkroad.com/BU/External", "anywhere")
+        job = found[0]
+        self.assertTrue(job["link"].startswith("https://jobs.silkroad.com/BU/External/jobs/"))
+        self.assertEqual(job["company"], "A Board", "it never says, so the board's own name stands in")
+        self.assertEqual(job["city"], "boston")
+        # It shouts some of its towns; a row shouldn't.
+        self.assertNotIn("BOSTON", " ".join(listing["place"] for listing in found))
+        self.assertTrue(all(listing["posted"] is None for listing in found), "it carries no dates")
+
+    def test_workday_reads_a_posting(self):
+        found = self.read("workday", "https://northeastern.wd1.myworkdayjobs.com/careers", "anywhere")
+        job = found[0]
+        self.assertTrue(job["link"].startswith("https://northeastern.wd1.myworkdayjobs.com/careers/job/"))
+        self.assertEqual(job["city"], "boston")
+        self.assertTrue(job["posted"], '"Posted 30+ Days Ago" and the rest, as a day')
+
+    def test_workday_api_from_either_kind_of_address(self):
+        self.assertEqual(build.workday_api("https://northeastern.wd1.myworkdayjobs.com/careers"),
+                         "https://northeastern.wd1.myworkdayjobs.com/wday/cxs/northeastern/careers/jobs")
+        self.assertEqual(build.workday_api("https://wd1.myworkdaysite.com/recruiting/wellesley/wellesley-staff"),
+                         "https://wd1.myworkdaysite.com/wday/cxs/wellesley/wellesley-staff/jobs")
+
     def test_salary_range(self):
         self.assertEqual(build.salary_range(90000, 120000), "$90K–$120K")
         self.assertEqual(build.salary_range(None, 120000), "$120K")
@@ -151,6 +187,14 @@ class Keywords(unittest.TestCase):
 
 class Metros(unittest.TestCase):
     """A nationwide board's own locations, filed under the metro they're in."""
+
+    def test_a_state_written_out_in_full_is_the_same_state(self):
+        # METROS gives an ambiguous town its state's short name; a board may write the state out.
+        self.assertEqual(build.metro_of("Medford, Massachusetts"), "boston")
+        self.assertEqual(build.metro_of("Cambridge, Massachusetts"), "boston")
+        self.assertEqual(build.metro_of("New York, New York"), "newyork")
+        # Not a state that only follows the town's own name: Washington, DC isn't Seattle.
+        self.assertEqual(build.metro_of("Washington, DC"), "elsewhere")
 
     def test_a_town_in_a_metro_is_that_metro(self):
         self.assertEqual(build.metro_of("Cambridge, MA"), "boston")
@@ -227,6 +271,39 @@ class Listing(unittest.TestCase):
         self.assertEqual(build.kind_of(self.job("Principal Product Designer")), "design")
         self.assertEqual(build.kind_of(self.job("Art Director, Brand")), "design")
         self.assertEqual(build.kind_of(self.job("QA Engineer")), "engineering")
+
+
+class Dates(unittest.TestCase):
+    """Boards that don't date their openings, and boards whose openings stay up for months."""
+
+    def source(self, kind, city="anywhere"):
+        return {"kind": kind, "url": "https://x/", "city": city, "name": "A School"}
+
+    def test_an_undated_job_is_dated_the_day_it_was_first_seen(self):
+        built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        listings = [build.job(self.source("silkroad"), "Web Developer", "", "https://x/jobs/1", None,
+                              place="Boston, MA"),
+                    build.job(self.source("silkroad"), "UX Designer", "", "https://x/jobs/2", None,
+                              place="Boston, MA")]
+        previous = {"sources": {"A School": {"fetched": built_at.isoformat(),
+                                             "jobs": [{"link": "https://x/jobs/1", "posted": "2026-10-02"}]}}}
+        dated = build.first_seen(listings, previous, built_at)
+        self.assertEqual(dated[0]["posted"], date(2026, 10, 2), "the day the board first saw it")
+        self.assertEqual(dated[1]["posted"], date(2026, 10, 16), "new to the board today")
+
+    def test_a_university_board_is_read_further_back(self):
+        built_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        long_ago = date(2026, 7, 20)
+
+        def reader(source):
+            return [build.job(source, "Web Developer", "A School", "https://x/1", long_ago)]
+
+        keywords = build.read_keywords()
+        with mock.patch.dict(build.READERS, {"madgex": reader, "builtin": reader}):
+            slow, _, _ = build.collect([self.source("madgex")], keywords, built_at)
+            quick, _, _ = build.collect([self.source("builtin", "boston")], keywords, built_at)
+        self.assertEqual(len(slow[0][1]), 1, "a university's posting is usually still open months later")
+        self.assertEqual(quick[0][1], [], "a metro board's isn't")
 
 
 class Page(unittest.TestCase):

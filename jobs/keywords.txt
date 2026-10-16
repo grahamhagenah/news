@@ -43,7 +43,10 @@ ui
 product design
 interaction
 visual
-research
+researcher
+user research
+ux research
+design research
 branding
 
 # Product and program work
@@ -52,7 +55,8 @@ product management
 product owner
 product lead
 head of product
-program manager
+technical program manager
+digital program manager
 
 # Data and analytics
 data analyst

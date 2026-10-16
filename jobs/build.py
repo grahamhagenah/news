@@ -17,7 +17,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from urllib.parse import quote, urlencode, urljoin
+from urllib.parse import quote, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 from shared import site as shared
@@ -38,6 +38,10 @@ BOARD_URL = SITE_URL + "board.json"
 EASTERN = ZoneInfo("America/New_York")
 PAGE_SIZE = 30  # Jobs per page of the list.
 DAYS_TO_KEEP = 30  # A posting older than this has usually gone.
+# Except on a university or higher-ed board, which leaves a posting up until the job is filled — often
+# months. These are read as far back as this instead, and still sort by their date like everything else.
+DAYS_TO_KEEP_SLOW = 120
+SLOW_KINDS = ("madgex", "jibe", "silkroad", "workday")
 PER_SOURCE = 120  # At most this many from one source, so no board crowds out the rest.
 PREVIEW_CHARS = 600
 # A source that fails falls back to its jobs from the last build, if they're no older than this.
@@ -84,6 +88,12 @@ METROS = {
     "losangeles": ("los angeles", "pasadena, ca", "santa monica", "long beach", "burbank", "glendale, ca",
                    "culver city", "irvine", "northridge", "malibu", "claremont", "pomona", "torrance"),
 }
+# How a place writes the states our metros are in, for matching a town given as "Medford, Massachusetts"
+# against METROS' "medford, ma". Only a state after a comma is shortened, so the town in "New York, New York"
+# is left alone.
+STATES = {"massachusetts": "MA", "new york": "NY", "new jersey": "NJ", "california": "CA", "washington": "WA",
+          "colorado": "CO", "illinois": "IL", "texas": "TX"}
+STATE_AFTER_TOWN = re.compile(rf",\s*({'|'.join(STATES)})(?!\w)", re.I)
 # A place that says the job is done from wherever you are, rather than naming somewhere.
 REMOTE_PLACE = re.compile(r"(?<!\w)(remote|anywhere|work from home|telecommut\w*|virtual)", re.I)
 # A place that reads as one, for a row to show in place of a metro's name: "Atlanta, Georgia", "Madison, WI".
@@ -112,15 +122,20 @@ def read_keywords():
 _fetched, _fetching = {}, threading.Lock()
 
 
-def fetch(url, attempts=3, timeout=20):
-    """The page or data at url, as text, downloaded once a build however many times it's read."""
+def fetch(url, attempts=3, timeout=20, body=None):
+    """The page or data at url, as text, downloaded once a build however many times it's read. With body
+    (JSON), it's asked for by POST, which is how a Workday board answers."""
+    key = (url, body)
     with _fetching:
-        pending, first = _fetched.get(url), url not in _fetched
+        pending, first = _fetched.get(key), key not in _fetched
         if first:
-            pending = _fetched[url] = Future()
+            pending = _fetched[key] = Future()
     if first:
         try:
-            pending.set_result(shared.fetch(url, USER_AGENT, attempts, timeout)[1].decode("utf-8", "replace"))
+            pending.set_result(shared.fetch(
+                url, USER_AGENT, attempts, timeout,
+                body=body.encode() if body else None,
+                content_type="application/json" if body else None)[1].decode("utf-8", "replace"))
         except Exception as error:
             pending.set_exception(error)
     return pending.result()
@@ -148,7 +163,7 @@ def about(markup, limit=PREVIEW_CHARS):
 def metro_of(place, arrangement=""):
     """Which metro a place is in: the first of METROS it names, or remote when it names nowhere at all. A
     place in none of them is "elsewhere", which a row shows under the place's own name."""
-    said = f"{place} {arrangement}"
+    said = STATE_AFTER_TOWN.sub(lambda found: ", " + STATES[found.group(1).casefold()], f"{place} {arrangement}")
     for city, towns in METROS.items():
         if any(re.search(rf"(?<!\w){re.escape(town)}(?!\w)", said, re.I) for town in towns):
             return city
@@ -396,6 +411,90 @@ def read_techjobs(source):
     return listings
 
 
+# A university's own HR board. Each runs on something different, and none of them is a metro board: a job's
+# own location decides which city it's filed under, as it does for the nationwide boards.
+UNIVERSITY_QUERIES = ("web", "developer", "designer", "data")
+
+
+def read_jibe(source):
+    """A board on Jibe (Tufts), whose own JSON answers a keyword search with everything a row needs."""
+    listings = []
+    for query in UNIVERSITY_QUERIES:
+        found = json.loads(fetch(f"{source['url'].rstrip('/')}/api/jobs?keywords={quote(query)}&page=1&limit=20"))
+        for item in found.get("jobs", []):
+            data = item.get("data", {})
+            if not data.get("title"):
+                continue
+            # Its dates are ISO with no colon in the offset, which this Python can't read; the day is enough.
+            posted = (data.get("posted_date") or "")[:10]
+            tags = " ".join(str(tag) for tag in (data.get("tags1") or []))
+            listings.append(job(
+                source, text(data["title"]), text(data.get("hiring_organization", "")),
+                f"{source['url'].rstrip('/')}/jobs/{data.get('slug', '')}",
+                date.fromisoformat(posted) if posted else None,
+                place=text(data.get("full_location", "")),
+                salary=text(" ".join(str(tag) for tag in (data.get("tags5") or []))),
+                arrangement="Hybrid" if "hybrid" in tags.casefold() else
+                            "Remote" if REMOTE_PLACE.search(tags) else "",
+                about_=about(data.get("responsibilities") or data.get("description") or ""),
+            ))
+    return listings
+
+
+# A board on SilkRoad (Boston University): panels of openings, ten to a page and grouped by department, with
+# no dates — those jobs are dated by the day this board first saw them (see first_seen). It lists 200-odd
+# openings, so it's asked the same keyword searches as the rest rather than read page by page.
+SILKROAD_JOB = re.compile(r'<a id="Jobs_PagedJobList_Job-\d+"[^>]*?href="([^"]+)"(.*?)</a>', re.S)
+SILKROAD_TITLE = re.compile(r'class="sr-panel__title"[^>]*>(.*?)</div>', re.S)
+SILKROAD_PLACE = re.compile(r'class="sr-panel__meta"[^>]*>(.*?)</span>', re.S)
+
+
+def read_silkroad(source):
+    """A board on SilkRoad: a panel for each opening, with where it is and nothing else."""
+    listings = []
+    for query in UNIVERSITY_QUERIES:
+        for link, rest in SILKROAD_JOB.findall(fetch(f"{source['url']}?SearchString={quote(query)}")):
+            title = SILKROAD_TITLE.search(rest)
+            if not title:
+                continue
+            place = text(next((m.group(1) for m in [SILKROAD_PLACE.search(rest)] if m), ""))
+            # It shouts some of its towns: "BOSTON, MA".
+            listings.append(job(
+                source, text(title.group(1)), "", urljoin(source["url"], link), None,
+                place=place.title() if place.isupper() else place,
+            ))
+    return listings
+
+
+def workday_api(url):
+    """Where a Workday board's own JSON is, worked out from the board's address: a myworkdayjobs host puts
+    the tenant in the host and the site in the path, a myworkdaysite host puts both in the path."""
+    parts = urlsplit(url)
+    path = [part for part in parts.path.split("/") if part]
+    tenant, site = (path[-2], path[-1]) if len(path) > 1 else (parts.netloc.split(".")[0], path[-1])
+    return f"{parts.scheme}://{parts.netloc}/wday/cxs/{tenant}/{site}/jobs"
+
+
+def read_workday(source):
+    """A board on Workday (Northeastern, Wellesley), whose JSON answers a keyword search by POST. It gives a
+    row everything but a description, so these jobs have no preview."""
+    api, listings = workday_api(source["url"]), []
+    today = datetime.now(EASTERN).date()
+    for query in UNIVERSITY_QUERIES:
+        body = json.dumps({"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": query})
+        for posting in json.loads(fetch(api, body=body)).get("jobPostings", []):
+            if not posting.get("title"):
+                continue
+            # "Posted 30+ Days Ago", "Posted Yesterday", "Posted Today".
+            said = (posting.get("postedOn") or "").replace("Posted", "").replace("+", "").strip()
+            listings.append(job(
+                source, text(posting["title"]), "",
+                urljoin(source["url"].rstrip("/") + "/", "." + posting.get("externalPath", "")),
+                builtin_age(said, today), place=text(posting.get("locationsText", "")),
+            ))
+    return listings
+
+
 def salary_range(low, high):
     """What a job pays, as the board gives it: "$90K–$120K", or nothing when it doesn't say."""
     def short(amount):
@@ -406,7 +505,8 @@ def salary_range(low, high):
 
 
 READERS = {"builtin": read_builtin, "wwr": read_wwr, "remoteok": read_remoteok, "remotive": read_remotive,
-           "madgex": read_madgex, "techjobs": read_techjobs}
+           "madgex": read_madgex, "techjobs": read_techjobs, "jibe": read_jibe, "silkroad": read_silkroad,
+           "workday": read_workday}
 
 
 def load(source):
@@ -427,9 +527,10 @@ def collect(sources, keywords, built_at):
     """Every source's jobs that keywords allows, newest first, each company's posting listed once."""
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(load, sources))
-    cutoff = built_at.date() - timedelta(days=DAYS_TO_KEEP)
     gathered, failed, errors = [], [], {}
     for source, found, error in results:
+        cutoff = built_at.date() - timedelta(
+            days=DAYS_TO_KEEP_SLOW if source["kind"] in SLOW_KINDS else DAYS_TO_KEEP)
         if error:
             errors[source["name"]] = str(error)
             failed.append(source["name"])
@@ -467,6 +568,23 @@ def without_repeats(listings):
             # Everywhere it's posted, rather than the one place the first copy named.
             same["place"] = f"{len(same['cities'])} cities"
     return [jobs[key] for key in order]
+
+
+def first_seen(listings, previous, built_at):
+    """A day for a job whose board doesn't date its openings (a university's HR board, mostly): the day this
+    board first saw it. board.json keeps it, so it holds from build to build, and an undated job sorts with
+    the rest rather than falling to the end of the page. The first build after a board is added dates all of
+    its jobs that day, which is the best this can do."""
+    seen = {}
+    for kept in previous.get("sources", {}).values():
+        for saved_job in kept.get("jobs", []):
+            if saved_job.get("link") and saved_job.get("posted"):
+                seen[saved_job["link"]] = saved_job["posted"]
+    for listing in listings:
+        if listing["posted"] is None:
+            was = seen.get(listing["link"])
+            listing["posted"] = date.fromisoformat(was) if was else built_at.date()
+    return listings
 
 
 def newest_first(listings):
@@ -615,7 +733,7 @@ def render_sources(sources, listings, built_at):
                     and (anywhere or listing["city"] == source["city"]))
         where = "Anywhere" if anywhere else CITIES[source["city"]]
         rows.append(f'<li><a href="{html.escape(source["url"])}">{html.escape(source["name"])}</a>'
-                    f'<span class="note">{where} · {count} jobs</span></li>')
+                    f'<span class="note">{where} · {count} job{"" if count == 1 else "s"}</span></li>')
     body = f"""<h1>Where these come from</h1>
 <ul class="sources">
 {chr(10).join(rows)}
@@ -857,7 +975,7 @@ def main():
     listings, failed, stale = gather(gathered, failed, previous, built_at)
     if not listings:
         sys.exit("No jobs — not writing the page.")
-    listings = newest_first(without_repeats(listings))
+    listings = newest_first(without_repeats(first_seen(listings, previous, built_at)))
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)

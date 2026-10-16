@@ -9,6 +9,10 @@
 #   madgex     a board running Madgex (Inside Higher Ed, the Chronicle of Higher Education): its RSS for
 #              each of MADGEX_QUERIES, since its feed only answers a keyword search
 #   techjobs   Tech Jobs for Good's listing pages, for non-profit and public-good work
+#   jibe       a university board on Jibe (Tufts): its own JSON, for each of UNIVERSITY_QUERIES
+#   silkroad   a university board on SilkRoad (BU): its panels, which carry no dates, so those jobs are
+#              dated by the day this board first saw them
+#   workday     a university board on Workday (Northeastern, Wellesley): its own JSON, asked by POST
 # A city is one of the metros in CITIES (jobs/build.py), "remote" for jobs with no place of work, or
 # "anywhere" for a board whose jobs are all over the country, each listing's own place deciding its metro.
 # Only jobs whose titles match keywords.txt are kept, whatever the source.
@@ -35,3 +39,10 @@ remotive   https://remotive.com/api/remote-jobs                                 
 madgex     https://careers.insidehighered.com/   anywhere   Inside Higher Ed
 madgex     https://jobs.chronicle.com/           anywhere   The Chronicle of Higher Education
 techjobs   https://techjobsforgood.com/          anywhere   Tech Jobs for Good
+
+# Boston-area universities, each on its own HR system. Their jobs are where their campuses are, so these are
+# "anywhere" too: Tufts posts in Medford, Boston and Grafton, Northeastern in Boston, Oakland and beyond.
+jibe       https://jobs.tufts.edu/                              anywhere   Tufts University
+silkroad   https://jobs.silkroad.com/BU/External                anywhere   Boston University
+workday    https://northeastern.wd1.myworkdayjobs.com/careers   anywhere   Northeastern University
+workday    https://wd1.myworkdaysite.com/recruiting/wellesley/wellesley-staff   anywhere   Wellesley College

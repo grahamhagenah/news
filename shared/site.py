@@ -20,9 +20,13 @@ SITES = {
 }
 
 
-def fetch(url, user_agent, attempts=3, timeout=20):
-    """The address the request ended at, after redirects, and the response body."""
-    request = urllib.request.Request(url, headers={"User-Agent": user_agent})
+def fetch(url, user_agent, attempts=3, timeout=20, body=None, content_type=None):
+    """The address the request ended at, after redirects, and the response body. With body, it's a POST,
+    which is the only way some boards' own JSON will answer (Workday's)."""
+    headers = {"User-Agent": user_agent}
+    if content_type:
+        headers["Content-Type"] = content_type
+    request = urllib.request.Request(url, data=body, headers=headers)
     for attempt in range(attempts):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
