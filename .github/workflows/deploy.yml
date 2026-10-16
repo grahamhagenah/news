@@ -48,6 +48,7 @@ jobs:
           # address, and the sister site its header names. A copy of the newsfeed sets neither.
           SITE_URL: https://news.grahamhagenah.com/
           EVENTS_URL: https://pushpin.city/boston/
+          JOBS_URL: https://jobs.grahamhagenah.com/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist/news
@@ -61,6 +62,8 @@ jobs:
         env:
           # A free Ticketmaster Discovery API key, for venues like the Paradise.
           TICKETMASTER_KEY: ${{ secrets.TICKETMASTER_KEY }}
+          # The job board's own domain, for the header link to it.
+          JOBS_URL: https://jobs.grahamhagenah.com/
           # Empty means build now. (In GitHub's `a && b || c`, b can't be empty, so the condition is inverted.)
           EVENTS_EVERY_HOURS: ${{ (github.event_name != 'push' && !inputs.events) && '3' || '' }}
       - name: Publish the events page
@@ -132,6 +135,9 @@ jobs:
       - run: python3 -m jobs.build
         continue-on-error: true
         env:
+          # Where the board is published, since it's a domain of ours rather than GitHub Pages' own address.
+          JOBS_URL: https://jobs.grahamhagenah.com/
+          EVENTS_URL: https://pushpin.city/boston/
           JOBS_EVERY_HOURS: ${{ github.event_name != 'push' && '2' || '' }}
       - name: Publish the job board
         if: hashFiles('dist/jobs/index.html') != ''
@@ -140,6 +146,7 @@ jobs:
           DEPLOY_KEY: ${{ secrets.JOBS_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then echo "No JOBS_DEPLOY_KEY yet; not publishing."; exit 0; fi
+          echo jobs.grahamhagenah.com > dist/jobs/CNAME
           touch dist/jobs/.nojekyll
           mkdir -p ~/.ssh && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/jobs && chmod 600 ~/.ssh/jobs
           cd dist/jobs

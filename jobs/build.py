@@ -918,8 +918,9 @@ CSS = """
 
 
 def page(title, body, updated=None):
+    # The header names the other pages beside this one, as theirs name it.
     return shared.page("jobs", title, body, css=CSS.replace("PAGE_START", str(PAGE_SIZE + 1)), head=HEAD,
-                       symbols=ICON_SYMBOLS, updated=updated, links=[("Jobs", "./", True)])
+                       symbols=ICON_SYMBOLS, updated=updated)
 
 
 def saved(listing):
