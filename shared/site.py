@@ -21,12 +21,14 @@ SITES = {
 }
 
 
-def fetch(url, user_agent, attempts=3, timeout=20, body=None, content_type=None):
+def fetch(url, user_agent, attempts=3, timeout=20, body=None, content_type=None, extra=None):
     """The address the request ended at, after redirects, and the response body. With body, it's a POST,
-    which is the only way some boards' own JSON will answer (Workday's)."""
+    which is the only way some boards' own JSON will answer (Workday's); extra adds headers a board asks
+    for (USAJOBS wants a key)."""
     headers = {"User-Agent": user_agent}
     if content_type:
         headers["Content-Type"] = content_type
+    headers.update(extra or {})
     request = urllib.request.Request(url, data=body, headers=headers)
     for attempt in range(attempts):
         try:

@@ -138,6 +138,10 @@ jobs:
           # Where the board is published, since it's a domain of ours rather than GitHub Pages' own address.
           JOBS_URL: https://jobs.grahamhagenah.com/
           EVENTS_URL: https://pushpin.city/boston/
+          # A free key from developer.usajobs.gov, and the email it was issued to, which USAJOBS asks for as
+          # the user agent. Without both, the federal board is left out of the build rather than failing it.
+          USAJOBS_KEY: ${{ secrets.USAJOBS_KEY }}
+          USAJOBS_EMAIL: ${{ secrets.USAJOBS_EMAIL }}
           JOBS_EVERY_HOURS: ${{ github.event_name != 'push' && '2' || '' }}
       - name: Publish the job board
         if: hashFiles('dist/jobs/index.html') != ''

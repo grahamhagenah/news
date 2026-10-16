@@ -43,7 +43,9 @@ ui
 product design
 interaction
 visual
-researcher
+user researcher
+design researcher
+research designer
 user research
 ux research
 design research

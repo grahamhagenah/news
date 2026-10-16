@@ -41,7 +41,7 @@ DAYS_TO_KEEP = 30  # A posting older than this has usually gone.
 # Except on a university or higher-ed board, which leaves a posting up until the job is filled — often
 # months. These are read as far back as this instead, and still sort by their date like everything else.
 DAYS_TO_KEEP_SLOW = 120
-SLOW_KINDS = ("madgex", "jibe", "silkroad", "workday")
+SLOW_KINDS = ("madgex", "jibe", "silkroad", "workday", "greenhouse")
 PER_SOURCE = 120  # At most this many from one source, so no board crowds out the rest.
 PREVIEW_CHARS = 600
 # A source that fails falls back to its jobs from the last build, if they're no older than this.
@@ -94,6 +94,8 @@ METROS = {
 STATES = {"massachusetts": "MA", "new york": "NY", "new jersey": "NJ", "california": "CA", "washington": "WA",
           "colorado": "CO", "illinois": "IL", "texas": "TX"}
 STATE_AFTER_TOWN = re.compile(rf",\s*({'|'.join(STATES)})(?!\w)", re.I)
+# Some boards join the two with a hyphen instead: "Somerville-MA".
+STATE_AFTER_HYPHEN = re.compile(r"(?<=\w)-([A-Z]{2})(?!\w)")
 # A place that says the job is done from wherever you are, rather than naming somewhere.
 REMOTE_PLACE = re.compile(r"(?<!\w)(remote|anywhere|work from home|telecommut\w*|virtual)", re.I)
 # A place that reads as one, for a row to show in place of a metro's name: "Atlanta, Georgia", "Madison, WI".
@@ -122,9 +124,10 @@ def read_keywords():
 _fetched, _fetching = {}, threading.Lock()
 
 
-def fetch(url, attempts=3, timeout=20, body=None):
+def fetch(url, attempts=3, timeout=20, body=None, headers=None):
     """The page or data at url, as text, downloaded once a build however many times it's read. With body
-    (JSON), it's asked for by POST, which is how a Workday board answers."""
+    (JSON), it's asked for by POST, which is how a Workday board answers; headers are the ones a board asks
+    for beyond the usual."""
     key = (url, body)
     with _fetching:
         pending, first = _fetched.get(key), key not in _fetched
@@ -135,7 +138,8 @@ def fetch(url, attempts=3, timeout=20, body=None):
             pending.set_result(shared.fetch(
                 url, USER_AGENT, attempts, timeout,
                 body=body.encode() if body else None,
-                content_type="application/json" if body else None)[1].decode("utf-8", "replace"))
+                content_type="application/json" if body else None,
+                extra=headers)[1].decode("utf-8", "replace"))
         except Exception as error:
             pending.set_exception(error)
     return pending.result()
@@ -164,6 +168,7 @@ def metro_of(place, arrangement=""):
     """Which metro a place is in: the first of METROS it names, or remote when it names nowhere at all. A
     place in none of them is "elsewhere", which a row shows under the place's own name."""
     said = STATE_AFTER_TOWN.sub(lambda found: ", " + STATES[found.group(1).casefold()], f"{place} {arrangement}")
+    said = STATE_AFTER_HYPHEN.sub(r", \1", said)
     for city, towns in METROS.items():
         if any(re.search(rf"(?<!\w){re.escape(town)}(?!\w)", said, re.I) for town in towns):
             return city
@@ -495,6 +500,68 @@ def read_workday(source):
     return listings
 
 
+def read_greenhouse(source):
+    """An employer's own Greenhouse board. Greenhouse publishes every board as JSON for anyone to put on a
+    site of their own, which is the whole of this: one address, every opening, with what the posting says."""
+    token = urlsplit(source["url"]).path.strip("/").split("/")[-1]
+    found = json.loads(fetch(f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"))
+    listings = []
+    for posting in found.get("jobs", []):
+        day = (posting.get("first_published") or posting.get("updated_at") or "")[:10]
+        listings.append(job(
+            source, text(posting.get("title", "")), text(posting.get("company_name", "")),
+            posting.get("absolute_url", ""), date.fromisoformat(day) if day else None,
+            place=text((posting.get("location") or {}).get("name", "")),
+            # Its description is HTML inside JSON, escaped twice over.
+            about_=about(html.unescape(posting.get("content") or "")),
+        ))
+    return listings
+
+
+# The federal government's own board, which answers by key: free, from developer.usajobs.gov, and asked for
+# as the email it was issued to plus the key itself. Without them the source is skipped rather than failed.
+USAJOBS_KEY = os.environ.get("USAJOBS_KEY", "").strip()
+USAJOBS_EMAIL = os.environ.get("USAJOBS_EMAIL", "").strip()
+USAJOBS_QUERIES = ("user experience designer", "web developer", "software engineer", "data analyst")
+
+
+def read_usajobs(source):
+    """USAJOBS, for each of USAJOBS_QUERIES. Everything it carries is a federal job, which is to say every
+    one of them counts towards public service loan forgiveness."""
+    if not (USAJOBS_KEY and USAJOBS_EMAIL):
+        print(f"  {source['name']}: no USAJOBS_KEY and USAJOBS_EMAIL set, so it's left out of this build.")
+        return []
+    headers = {"Authorization-Key": USAJOBS_KEY, "User-Agent": USAJOBS_EMAIL}
+    listings = []
+    for query in USAJOBS_QUERIES:
+        asked = urlencode({"Keyword": query, "ResultsPerPage": 25,
+                           "SortField": "PositionStartDate", "SortDirection": "Desc"})
+        found = json.loads(fetch(f"{source['url'].rstrip('/')}/api/search?{asked}", headers=headers))
+        for item in found.get("SearchResult", {}).get("SearchResultItems", []):
+            said = item.get("MatchedObjectDescriptor", {})
+            if not said.get("PositionTitle"):
+                continue
+            pay = (said.get("PositionRemuneration") or [{}])[0]
+            day = (said.get("PublicationStartDate") or "")[:10]
+            listings.append(job(
+                source, text(said["PositionTitle"]),
+                text(said.get("OrganizationName") or said.get("DepartmentName", "")),
+                said.get("PositionURI", ""), date.fromisoformat(day) if day else None,
+                place=text(said.get("PositionLocationDisplay", "")),
+                salary=salary_range(number(pay.get("MinimumRange")), number(pay.get("MaximumRange"))),
+                about_=about(((said.get("UserArea") or {}).get("Details") or {}).get("JobSummary", "")),
+            ))
+    return listings
+
+
+def number(said):
+    """A figure a board gives as text ("115793.0"), or nothing when it doesn't give one."""
+    try:
+        return float(said)
+    except (TypeError, ValueError):
+        return None
+
+
 def salary_range(low, high):
     """What a job pays, as the board gives it: "$90K–$120K", or nothing when it doesn't say."""
     def short(amount):
@@ -506,7 +573,7 @@ def salary_range(low, high):
 
 READERS = {"builtin": read_builtin, "wwr": read_wwr, "remoteok": read_remoteok, "remotive": read_remotive,
            "madgex": read_madgex, "techjobs": read_techjobs, "jibe": read_jibe, "silkroad": read_silkroad,
-           "workday": read_workday}
+           "workday": read_workday, "greenhouse": read_greenhouse, "usajobs": read_usajobs}
 
 
 def load(source):

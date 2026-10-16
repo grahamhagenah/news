@@ -12,7 +12,9 @@
 #   jibe       a university board on Jibe (Tufts): its own JSON, for each of UNIVERSITY_QUERIES
 #   silkroad   a university board on SilkRoad (BU): its panels, which carry no dates, so those jobs are
 #              dated by the day this board first saw them
-#   workday     a university board on Workday (Northeastern, Wellesley): its own JSON, asked by POST
+#   workday     a board on Workday (universities, hospitals): its own JSON, asked by POST
+#   greenhouse an employer's own Greenhouse board, which Greenhouse publishes as JSON
+#   usajobs    the federal government's board, which answers by key (USAJOBS_KEY, USAJOBS_EMAIL)
 # A city is one of the metros in CITIES (jobs/build.py), "remote" for jobs with no place of work, or
 # "anywhere" for a board whose jobs are all over the country, each listing's own place deciding its metro.
 # Only jobs whose titles match keywords.txt are kept, whatever the source.
@@ -46,3 +48,23 @@ jibe       https://jobs.tufts.edu/                              anywhere   Tufts
 silkroad   https://jobs.silkroad.com/BU/External                anywhere   Boston University
 workday    https://northeastern.wd1.myworkdayjobs.com/careers   anywhere   Northeastern University
 workday    https://wd1.myworkdaysite.com/recruiting/wellesley/wellesley-staff   anywhere   Wellesley College
+
+# Non-profits, each from its own Greenhouse board — the openings a 501(c)(3) publishes itself, which is
+# where this work is posted rather than on any board. Each of these is a charity, so the work counts
+# towards public service loan forgiveness.
+greenhouse https://job-boards.greenhouse.io/aclu              anywhere   ACLU
+greenhouse https://job-boards.greenhouse.io/wikimedia         anywhere   Wikimedia Foundation
+greenhouse https://job-boards.greenhouse.io/codeforamerica    anywhere   Code for America
+greenhouse https://job-boards.greenhouse.io/khanacademy       anywhere   Khan Academy
+greenhouse https://job-boards.greenhouse.io/donorschoose      anywhere   DonorsChoose
+greenhouse https://job-boards.greenhouse.io/propublica        anywhere   ProPublica
+greenhouse https://job-boards.greenhouse.io/consumerreports   anywhere   Consumer Reports
+greenhouse https://job-boards.greenhouse.io/humanrightswatch  anywhere   Human Rights Watch
+
+# Boston's non-profit hospital systems, which are large employers of web, design and data people.
+workday    https://massgeneralbrigham.wd1.myworkdayjobs.com/MGBExternal   anywhere   Mass General Brigham
+workday    https://tuftsmedicine.wd1.myworkdayjobs.com/Jobs               anywhere   Tufts Medicine
+
+# The federal government, every job of which counts towards loan forgiveness. Read only when USAJOBS_KEY
+# and USAJOBS_EMAIL are set: a free key from developer.usajobs.gov, kept as repo secrets.
+usajobs    https://data.usajobs.gov/                                      anywhere   USAJOBS

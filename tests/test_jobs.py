@@ -28,6 +28,8 @@ ROUTES = [
     ("jobs.tufts.edu", "tufts.json"),
     ("jobs.silkroad.com", "bu.html"),
     ("/wday/cxs/", "workday.json"),
+    ("boards-api.greenhouse.io", "greenhouse.json"),
+    ("data.usajobs.gov", "usajobs.json"),
 ]
 
 
@@ -147,6 +149,32 @@ class Readers(unittest.TestCase):
         self.assertEqual(job["city"], "boston")
         self.assertTrue(job["posted"], '"Posted 30+ Days Ago" and the rest, as a day')
 
+    def test_greenhouse_reads_an_employers_own_board(self):
+        found = self.read("greenhouse", "https://job-boards.greenhouse.io/codeforamerica", "anywhere")
+        job = found[0]
+        self.assertEqual(job["company"], "Code for America")
+        self.assertTrue(job["link"].startswith("https://job-boards.greenhouse.io/"))
+        self.assertTrue(job["posted"], "the day it was first published")
+        self.assertEqual(job["city"], "remote", "its board says where, job by job")
+        self.assertTrue(any(listing["about"] for listing in found), "its description, HTML inside JSON")
+
+    def test_usajobs_is_skipped_without_its_key(self):
+        with mock.patch.object(build, "USAJOBS_KEY", ""), mock.patch.object(build, "USAJOBS_EMAIL", ""):
+            self.assertEqual(build.read_usajobs(source("usajobs", "https://data.usajobs.gov/")), [])
+
+    def test_usajobs_reads_a_posting(self):
+        with mock.patch.object(build, "USAJOBS_KEY", "a-key"), \
+             mock.patch.object(build, "USAJOBS_EMAIL", "someone@example.com"):
+            found = self.read("usajobs", "https://data.usajobs.gov/", "anywhere")
+        job = found[0]
+        self.assertEqual(job["title"], "Interaction Designer (User Experience)")
+        self.assertEqual(job["company"], "Internal Revenue Service")
+        self.assertEqual(job["city"], "boston")
+        self.assertEqual(job["salary"], "$118K–$153K")
+        self.assertEqual(job["posted"], date(2026, 10, 9))
+        # A job open to the whole country is remote, wherever its agency sits.
+        self.assertEqual(found[1]["city"], "remote")
+
     def test_workday_api_from_either_kind_of_address(self):
         self.assertEqual(build.workday_api("https://northeastern.wd1.myworkdayjobs.com/careers"),
                          "https://northeastern.wd1.myworkdayjobs.com/wday/cxs/northeastern/careers/jobs")
@@ -187,6 +215,11 @@ class Keywords(unittest.TestCase):
 
 class Metros(unittest.TestCase):
     """A nationwide board's own locations, filed under the metro they're in."""
+
+    def test_a_state_joined_by_a_hyphen_is_the_same_state(self):
+        # Some boards write a place as "Somerville-MA".
+        self.assertEqual(build.metro_of("Somerville-MA"), "boston")
+        self.assertEqual(build.metro_of("Boston-MA"), "boston")
 
     def test_a_state_written_out_in_full_is_the_same_state(self):
         # METROS gives an ambiguous town its state's short name; a board may write the state out.
