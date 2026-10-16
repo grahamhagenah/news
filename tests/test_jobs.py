@@ -164,6 +164,11 @@ class Page(unittest.TestCase):
         self.assertIn('data-city="boston newyork"', page)
         self.assertIn('data-city="remote"', page)
         self.assertIn("$150K–$190K", page)
+        # The company sits beside the title; the city is the row's last column.
+        self.assertIn('<span class="company">Acme</span>', page)
+        self.assertIn('<span class="source"><span>2 cities</span></span>', page)
+        self.assertIn('<span class="source"><span>Remote</span></span>', page)
+        self.assertNotIn("Boston, MA", page, "the city column already says where it is")
         # The menu names only the cities with jobs on the page, in the order CITIES gives.
         menu = page.split('<select class="pick" aria-label="City">')[1].split("</select>")[0]
         self.assertEqual(re.findall(r'<option value="([^"]*)">', menu), ["", "boston", "newyork", "remote"])

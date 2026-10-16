@@ -358,6 +358,12 @@ ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 DESIGN = re.compile(r"(?<!\w)(design(er|s)?|ux|ui|user research|researcher|brand|visual|content strategist)(?!\w)", re.I)
 
 
+def where_of(listing):
+    """Where a job is, as the row's last column says it: its city, or how many it's posted in."""
+    cities = listing.get("cities") or [listing["city"]]
+    return f"{len(cities)} cities" if len(cities) > 1 else CITIES[cities[0]]
+
+
 def kind_of(listing):
     return "remote" if listing["city"] == "remote" else "design" if DESIGN.search(listing["title"]) else "engineering"
 
@@ -371,21 +377,27 @@ def render_index(listings, failed, stale, built_at):
     rows = []
     for listing in listings:
         kind = kind_of(listing)
-        # What the board knows beyond the title, in the order it's worth reading: where, what it pays, how
-        # it's worked, how senior. A phone's row breaks between them.
-        facts = [part for part in (listing["place"], listing["salary"],
-                                   listing["arrangement"] if listing["arrangement"] != "Remote" or not listing["place"] else "",
+        where = where_of(listing)
+        # The place only where it says more than the city at the end of the row does: "USA Only" for remote
+        # work, not "Seattle, WA" beside Seattle or "Anywhere" beside Remote.
+        place = listing["place"]
+        if not place or place.endswith("cities") or place == "Anywhere" or place.startswith(where.split()[0]):
+            place = ""
+        facts = [part for part in (place, listing["salary"],
+                                   listing["arrangement"] if listing["arrangement"] != "Remote" else "",
                                    listing["level"]) if part]
         when = render_time(listing["posted"]) if listing["posted"] else ""
+        company = f'<span class="company">{html.escape(listing["company"])}</span>'
         detail = f'<span class="facts">{html.escape(" · ".join(facts))}</span>' if facts else ""
-        via = f'<span class="via">on {html.escape(listing["source"])}</span>'
+        # On a phone the row reads as one line, so where it is comes after the rest instead of a column.
+        via = f'<span class="via">in {html.escape(where)}</span>'
         rows.append(
             f'<li class="row" data-city="{" ".join(listing.get("cities") or [listing["city"]])}" data-kind="{kind}" '
             f'data-from="{html.escape(listing["company"])}">{icon(kind)}'
             f'<div class="headline"><a class="title" href="{html.escape(listing["link"])}">{html.escape(listing["title"])}</a> '
-            + " ".join(part for part in (when, detail, via) if part)
+            + " ".join(part for part in (company, when, detail, via) if part)
             + f'{shared.preview(listing["title"], listing["about"])}</div> '
-            f'<span class="source"><span>{html.escape(listing["company"])}</span></span></li>'
+            f'<span class="source"><span>{html.escape(where)}</span></span></li>'
         )
 
     failed_note = f"<p>Couldn’t load {html.escape(', '.join(failed))}.</p>\n" if failed else ""
@@ -577,9 +589,13 @@ CSS = """
   /* Until the script picks the page, show the first one, so the whole list never flashes up. */
   .posts:not(.paged) li:nth-child(n+PAGE_START) { display: none; }
   .note, time, .facts { color: #666; font-size: .8em; }
-  .headline time, .headline .facts { flex: none; }
+  /* Who the job is with, beside its title: brighter than the rest of the line, which is detail. */
+  .company { color: #999; font-size: .85em; }
+  .headline time, .headline .facts, .headline .company { flex: none; }
   .headline > .via { display: none; }
-  .facts { margin-left: .6em; white-space: nowrap; }
+  /* The parts of a row are flex items, so the spaces between them in the markup don't show: each keeps its
+     own gap from the one before. */
+  time, .facts, .company { margin-left: .6em; white-space: nowrap; }
   /* Each job's mark: in its kind's color while it's unopened, gray once it's been clicked. */
   .row > .icon { color: #555; }
   .unread > .icon { color: var(--engineering); }
@@ -587,7 +603,7 @@ CSS = """
   .row[data-kind="remote"].unread > .icon { color: var(--remote); }
   @media (max-width: 34rem) {
     /* A phone's row reads as one line: the title, when it went up, where it is, and who it's with. */
-    .headline > time, .headline > .facts { margin-left: 0; }
+    .headline > time, .headline > .facts, .headline > .company { margin-left: 0; }
     .headline > .via { display: inline; color: #666; font-size: .8em; }
     .facts { white-space: normal; }
     .posts .row > .source { display: none; }
