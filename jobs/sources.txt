@@ -56,6 +56,25 @@ workday    https://brown.wd5.myworkdayjobs.com/staff-careers-brown   anywhere   
 # to be worth four requests a build. The two aggregators above carry them when they do.
 # Wellesley was read for a while and dropped: its whole staff board is seven jobs, so it never held one.
 
+# Universities elsewhere, each read from its own Workday board. The two aggregators above carry the big
+# names that pay to syndicate — Berkeley, Johns Hopkins, Stanford — so these are the mid-size schools that
+# don't: of the best jobs they held the day they were added, only one was already on the page. Picked on
+# volume and on whether what they post is this work, not on how well known they are.
+workday    https://cmu.wd115.myworkdayjobs.com/CMU                       anywhere   Carnegie Mellon University
+workday    https://uchicago.wd5.myworkdayjobs.com/External               anywhere   University of Chicago
+workday    https://wustl.wd1.myworkdayjobs.com/External                  anywhere   Washington University in St. Louis
+workday    https://osu.wd1.myworkdayjobs.com/OSUCareers                  anywhere   Ohio State University
+# These two name their campus where the others name a town — "Main Campus", "University of Maryland" —
+# so there's no city to read out of a posting. Both are one campus in one metro, so they name it here.
+workday    https://umd.wd1.myworkdayjobs.com/UMCP                        washingtondc   University of Maryland
+workday    https://georgetown.wd1.myworkdayjobs.com/Georgetown_Admin_Careers   washingtondc   Georgetown University
+workday    https://rit.wd12.myworkdayjobs.com/careers                    anywhere   Rochester Institute of Technology
+workday    https://smithcollege.wd5.myworkdayjobs.com/smithcollege       anywhere   Smith College
+# Smith is the smallest of these and kept anyway: a college in a college town posts web and CMS work and
+# syndicates none of it. Vassar, Wesleyan, UNH, Carleton, Macalester and Mount Holyoke were all tried the
+# same day and held nothing between them, and the Ford, Gates, Pew and Hughes boards hold a handful of
+# openings each, all deep engineering.
+
 # Non-profits, each from its own Greenhouse board — the openings a 501(c)(3) publishes itself, which is
 # where this work is posted rather than on any board. Each of these is a charity, so the work counts
 # towards public service loan forgiveness.
