@@ -14,6 +14,7 @@ import re
 import shutil
 import sys
 import threading
+import unicodedata
 import urllib.error
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
@@ -67,6 +68,18 @@ CITIES = {
     "chicago": "Chicago",
     "austin": "Austin",
     "losangeles": "Los Angeles",
+    # Where the universities and institutions read here actually are. Each of these held three jobs or more
+    # the day it was named, which is the bar: a metro nobody posts in is a filter that never does anything.
+    "pittsburgh": "Pittsburgh",
+    "baltimore": "Baltimore",
+    "stlouis": "St. Louis",
+    "columbus": "Columbus",
+    "sandiego": "San Diego",
+    "rochester": "Rochester",
+    "providence": "Providence",
+    "westernmass": "Western Mass",
+    "atlanta": "Atlanta",
+    "madison": "Madison",
     "remote": "Remote",
     # Boards that list jobs anywhere (a university in a college town, a non-profit in one city) put the ones
     # outside every metro here, under their own place.
@@ -80,7 +93,8 @@ CITIES = {
 METROS = {
     "boston": ("boston", "cambridge, ma", "somerville, ma", "brookline", "newton, ma", "waltham", "medford, ma",
                "quincy, ma", "woburn", "needham", "dedham", "chestnut hill", "charlestown", "malden",
-               "watertown, ma", "wellesley", "framingham", "braintree", "chelsea, ma"),
+               "watertown, ma", "wellesley", "framingham", "braintree", "chelsea, ma",
+               "salem, ma", "lynn, ma", "beverly, ma", "burlington, ma", "lexington, ma"),
     "newyork": ("new york", "brooklyn", "queens, ny", "bronx", "manhattan", "staten island", "long island city",
                 "jersey city", "hoboken", "newark, nj", "yonkers", "white plains", "new rochelle"),
     # The federal government's own metro, which is most of what USAJOBS carries. "Washington" alone is a
@@ -95,16 +109,31 @@ METROS = {
     "denver": ("denver", "boulder", "aurora, co", "lakewood, co", "littleton", "englewood, co", "broomfield",
                "golden, co", "fort collins"),
     "chicago": ("chicago", "evanston", "naperville", "oak park", "skokie", "schaumburg", "elgin, il",
-                "des plaines"),
+                "des plaines", "hyde park campus"),
     "austin": ("austin", "round rock", "cedar park", "pflugerville", "san marcos, tx"),
     "losangeles": ("los angeles", "pasadena, ca", "santa monica", "long beach", "burbank", "glendale, ca",
                    "culver city", "irvine", "northridge", "malibu", "claremont", "pomona", "torrance"),
+    # A university often writes a campus or a building where a company writes a town — "Columbus Campus",
+    # "Hyde Park Campus", "Smith College". The ones the boards read here use are listed with their towns.
+    "pittsburgh": ("pittsburgh", "carnegie mellon"),
+    "baltimore": ("baltimore", "johns hopkins", "towson", "catonsville"),
+    "stlouis": ("st. louis", "st louis", "saint louis", "washington university", "clayton, mo",
+                "university city, mo"),
+    "columbus": ("columbus, oh", "columbus campus"),
+    "sandiego": ("san diego", "la jolla"),
+    "rochester": ("rochester, ny", "rit main location", "henrietta, ny"),
+    "providence": ("providence", "pawtucket", "barus & holley", "south street landing"),
+    "westernmass": ("northampton", "amherst, ma", "springfield, ma", "holyoke", "south hadley", "longmeadow",
+                    "greenfield, ma", "chicopee", "smith college", "mount holyoke"),
+    "atlanta": ("atlanta", "decatur, ga", "marietta"),
+    "madison": ("madison, wi",),
 }
 # How a place writes the states our metros are in, for matching a town given as "Medford, Massachusetts"
 # against METROS' "medford, ma". Only a state after a comma is shortened, so the town in "New York, New York"
 # is left alone.
 STATES = {"massachusetts": "MA", "new york": "NY", "new jersey": "NJ", "california": "CA", "washington": "WA",
-          "colorado": "CO", "illinois": "IL", "texas": "TX"}
+          "colorado": "CO", "illinois": "IL", "texas": "TX", "ohio": "OH", "wisconsin": "WI",
+          "missouri": "MO", "pennsylvania": "PA", "maryland": "MD", "rhode island": "RI", "georgia": "GA"}
 STATE_AFTER_TOWN = re.compile(rf",\s*({'|'.join(STATES)})(?!\w)", re.I)
 # Some boards join the two with a hyphen instead: "Somerville-MA".
 STATE_AFTER_HYPHEN = re.compile(r"(?<=\w)-([A-Z]{2})(?!\w)")
@@ -210,7 +239,10 @@ def about(markup, limit=PREVIEW_CHARS):
 def metro_of(place, arrangement=""):
     """Which metro a place is in: the first of METROS it names, or remote when it names nowhere at all. A
     place in none of them is "elsewhere", which a row shows under the place's own name."""
-    said = STATE_AFTER_TOWN.sub(lambda found: ", " + STATES[found.group(1).casefold()], f"{place} {arrangement}")
+    # "San José" is San Jose, so the accents come off before anything is matched.
+    plain = "".join(mark for mark in unicodedata.normalize("NFD", f"{place} {arrangement}")
+                    if not unicodedata.combining(mark))
+    said = STATE_AFTER_TOWN.sub(lambda found: ", " + STATES[found.group(1).casefold()], plain)
     said = STATE_AFTER_HYPHEN.sub(r", \1", said)
     for city, towns in METROS.items():
         if any(re.search(rf"(?<!\w){re.escape(town)}(?!\w)", said, re.I) for town in towns):
@@ -836,10 +868,10 @@ def icon(kind, decorative=False):
     return shared.icon(kind, None if decorative else kind.capitalize())
 
 
-def render_row(listing, scored=None):
-    """A job as a row: its kind's mark, the title, who it's with, how old it is, and where it is. scored is
-    a featured row's (points, reasons): the points stand in the row as a tag, and the reasons are behind it,
-    for a reader who wants to know why this one is up here."""
+def render_row(listing):
+    """A job as a row: its kind's mark, the title, who it's with, how old it is, and where it is. Every row
+    carries its fit score, which the list can be ordered by, and shows it with the words behind it in the
+    box that opens under the headline."""
     kind = kind_of(listing)
     where = where_of(listing)
     # The place only where it says more than the city at the end of the row does: "USA Only" for remote
@@ -852,6 +884,11 @@ def render_row(listing, scored=None):
     if (not place or where == CITIES["elsewhere"] or place.endswith("cities") or place == "Anywhere"
             or place.startswith(where.split()[0])):
         place = ""
+    # A campus named as a place says nothing beside the employer it belongs to: "Johns Hopkins University"
+    # twice in a row, once as who it's with and once as where.
+    if place and (place.casefold() in listing["company"].casefold()
+                  or listing["company"].casefold() in place.casefold()):
+        place = ""
     # What it pays and whether it's hybrid are kept in the data (jobs.json) but left off the row: a board
     # states them inconsistently, and they crowd out the title.
     facts = [part for part in (place, listing["level"]) if part]
@@ -860,17 +897,16 @@ def render_row(listing, scored=None):
     detail = f'<span class="facts">{html.escape(" · ".join(facts))}</span>' if facts else ""
     # On a phone the row reads as one line, so where it is comes after the rest instead of a column.
     via = f'<span class="via">in {html.escape(where)}</span>'
-    # A featured job's score and the words behind it go in the box that opens under its headline, with what
-    # the posting says. A row of its own for them was a row's worth of page for something read once.
-    note = ""
-    if scored:
-        points, why = scored
-        note = (f'<p class="why"><span class="score">{points}</span>'
-                f'<span class="score-said">fit score</span>'
-                f'<span class="score-for">{html.escape(" · ".join(why))}</span></p>')
+    # The score and the words behind it go in the box that opens under the headline, with what the posting
+    # says. A row of its own for them was a row's worth of page for something read once.
+    points, why = fit(listing)
+    note = (f'<p class="why"><span class="score">{points}</span>'
+            f'<span class="score-said">fit score</span>'
+            + (f'<span class="score-for">{html.escape(" · ".join(why))}</span>' if why else "")
+            + '</p>')
     return (
         f'<li class="row" data-city="{" ".join(listing.get("cities") or [listing["city"]])}" data-kind="{kind}" '
-        f'data-from="{html.escape(listing["company"])}">{icon(kind)}'
+        f'data-score="{points}" data-from="{html.escape(listing["company"])}">{icon(kind)}'
         f'<div class="headline"><a class="title" href="{html.escape(listing["link"])}">{html.escape(listing["title"])}</a> '
         + " ".join(part for part in (company, when, detail, via) if part)
         + f'{shared.preview(listing["title"], listing["about"], note=note)}</div> '
@@ -887,7 +923,7 @@ def render_index(listings, failed, stale, built_at):
     if best:
         lead = (
             '<h1 class="featured-title">Worth a look</h1>\n<ul class="featured">\n'
-            + "\n".join(render_row(listing, scored=scored) for scored, listing in best)
+            + "\n".join(render_row(listing) for _, listing in best)
             + '\n</ul>\n<p class="featured-none" hidden></p>\n'
         )
 
@@ -902,12 +938,16 @@ def render_index(listings, failed, stale, built_at):
              if any(city in (listing.get("cities") or [listing["city"]]) for listing in listings)]
     cities = "".join(f'<option value="{city}">{html.escape(CITIES[city])}</option>' for city in there)
     menu = (f'<select class="pick" aria-label="City"><option value="">All cities</option>{cities}</select>')
+    # Newest first is what a board is for; best fit first is for reading the whole of it at once, and uses
+    # the same score as the jobs at the top of the page.
+    order = ('<select class="pick order" aria-label="Order"><option value="">Newest</option>'
+             '<option value="fit">Best fit</option></select>')
     kinds = [("engineering", "Engineering"), ("design", "Design"), ("product", "Product")]
     show_filter = (
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
         + "".join(f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>'
                   for key, label in kinds if any(kind_of(listing) == key for listing in listings))
-        + f'<span class="finders">{menu}{shared.SEARCH}</span></nav>\n'
+        + f'<span class="finders">{menu}{order}{shared.SEARCH}</span></nav>\n'
     )
 
     body = (
@@ -918,7 +958,7 @@ def render_index(listings, failed, stale, built_at):
         '<nav class="pager"></nav>\n'
         f"<footer>\n{failed_note}"
         f'<p>{len(listings)} jobs from <a href="sources.html">{len(set(listing["source"] for listing in listings))} '
-        'boards</a>, newest first.</p>\n'
+        'boards</a>.</p>\n'
         "</footer>\n"
         f"<script>{INDEX_JS}</script>"
     )
@@ -1015,6 +1055,7 @@ INDEX_JS = """
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
   const where = document.querySelector(".filter .pick");
+  const order = document.querySelector(".filter .order");
   let show = "all";
   try { show = localStorage.getItem("jobs-show") || "all"; } catch (error) {}
   // A kind this page hasn't got — one that's been dropped since, or that nothing matches today — would
@@ -1028,10 +1069,12 @@ INDEX_JS = """
     where.value = new URLSearchParams(location.search).get("city") || "";
     if (where.selectedIndex < 0) where.value = "";  // A city with nothing on the page now.
   }
+  if (order) order.value = new URLSearchParams(location.search).get("sort") === "fit" ? "fit" : "";
   const address = page => {
     const params = new URLSearchParams();
     if (query()) params.set("q", query());
     if (where && where.value) params.set("city", where.value);
+    if (order && order.value) params.set("sort", order.value);
     if (page > 1) params.set("page", page);
     return params.toString() ? "?" + params : location.pathname;
   };
@@ -1045,18 +1088,26 @@ INDEX_JS = """
     const leadShown = leadRows.filter(li => (show === "all" || li.dataset.kind === show)
       && (!city || li.dataset.city.split(" ").includes(city))
       && words.every(word => searchable.get(li).includes(word)));
-    leadRows.forEach(li => { li.hidden = !leadShown.includes(li); });
-    if (lead) lead.hidden = leadShown.length === 0;
-    if (leadTitle) leadTitle.hidden = leadShown.length === 0;
-    if (allTitle) allTitle.hidden = leadShown.length === 0;
+    // Ordering the whole list by fit puts the same jobs at the top in the same order, so the few that lead
+    // the page would be saying it twice. The list itself is the answer then.
+    const leading = !(order && order.value === "fit") && leadShown.length > 0;
+    leadRows.forEach(li => { li.hidden = !leading || !leadShown.includes(li); });
+    if (lead) lead.hidden = !leading;
+    if (leadTitle) leadTitle.hidden = !leading;
+    if (allTitle) allTitle.hidden = !leading;
     if (leadNone) {
       leadNone.textContent = "Nothing here fits especially well right now.";
-      leadNone.hidden = leadShown.length > 0 || shown.length === 0;
+      leadNone.hidden = leading || shown.length === 0 || (order && order.value === "fit");
     }
-    const pages = Math.max(1, Math.ceil(shown.length / pageSize));
+    // Best fit reorders the rows themselves, since what the page shows is their order in it. Ties keep the
+    // order they came in, which is newest first.
+    const ordered = order && order.value === "fit"
+      ? [...shown].sort((a, b) => Number(b.dataset.score) - Number(a.dataset.score)) : shown;
+    for (const li of ordered) list.appendChild(li);
+    const pages = Math.max(1, Math.ceil(ordered.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     items.forEach(li => { li.hidden = true; });
-    shown.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
+    ordered.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
     list.classList.add("paged");
     const link = (n, text) => `<a href="${address(n)}">${text}</a>`;
     pager.innerHTML = pages < 2 ? "" :
@@ -1068,6 +1119,7 @@ INDEX_JS = """
       : place ? `No jobs in ${place} right now.` : "No jobs right now.";
     empty.hidden = shown.length > 0;
     if (where) where.classList.toggle("chosen", Boolean(city));
+    if (order) order.classList.toggle("chosen", Boolean(order.value));
     if (filter) for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
   }
   showJobs();
@@ -1081,6 +1133,10 @@ INDEX_JS = """
     showJobs();
   });
   if (search) search.addEventListener("input", () => {
+    history.replaceState(null, "", address(1));
+    showJobs();
+  });
+  if (order) order.addEventListener("change", () => {
     history.replaceState(null, "", address(1));
     showJobs();
   });

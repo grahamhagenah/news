@@ -253,15 +253,39 @@ class Metros(unittest.TestCase):
         self.assertEqual(build.metro_of("Anywhere in the World"), "remote")
 
     def test_everywhere_else_is_elsewhere(self):
-        for place in ("Atlanta, Georgia", "Madison, WI", "Oxford", "", "Amherst, MA"):
+        for place in ("Tulsa, Oklahoma", "Lincoln, NE", "Oxford", "", "Hanover, NH"):
             self.assertEqual(build.metro_of(place), "elsewhere", place)
+
+    def test_the_places_these_boards_post_from_are_named(self):
+        for place, city in (("Pittsburgh, PA", "pittsburgh"), ("Baltimore, Maryland", "baltimore"),
+                            ("St. Louis, MO", "stlouis"), ("Columbus, Ohio", "columbus"),
+                            ("La Jolla, CA", "sandiego"), ("Rochester, NY", "rochester"),
+                            ("Providence, RI", "providence"), ("Northampton, MA", "westernmass"),
+                            ("Atlanta, Georgia", "atlanta"), ("Madison, WI", "madison")):
+            self.assertEqual(build.metro_of(place), city, place)
+
+    def test_a_campus_counts_as_the_town_it_is_in(self):
+        """A university writes a campus where a company writes a town."""
+        for place, city in (("Columbus Campus", "columbus"), ("Hyde Park Campus", "chicago"),
+                            ("Smith College", "westernmass"), ("Johns Hopkins University", "baltimore"),
+                            ("Washington University Medical Campus", "stlouis"),
+                            ("RIT Main Location", "rochester")):
+            self.assertEqual(build.metro_of(place), city, place)
+
+    def test_an_accent_doesnt_hide_a_town(self):
+        self.assertEqual(build.metro_of("San José"), "bayarea")
+        self.assertEqual(build.metro_of("San Jose, CA"), "bayarea")
+
+    def test_a_madison_in_another_state_isnt_this_one(self):
+        self.assertEqual(build.metro_of("Madison, South Dakota"), "elsewhere")
+        self.assertEqual(build.metro_of("Rochester, MN"), "elsewhere")
 
     def test_a_row_names_the_place_rather_than_elsewhere(self):
         source = {"kind": "madgex", "url": "https://x/", "city": "anywhere", "name": "A Board"}
-        listing = build.job(source, "Web Developer", "Georgia Tech", "https://x/1", date(2026, 10, 10),
-                            place="Atlanta, Georgia")
+        listing = build.job(source, "Web Developer", "Tulsa University", "https://x/1", date(2026, 10, 10),
+                            place="Tulsa, Oklahoma")
         self.assertEqual(listing["city"], "elsewhere")
-        self.assertEqual(build.where_of(listing), "Atlanta, Georgia")
+        self.assertEqual(build.where_of(listing), "Tulsa, Oklahoma")
         # A place that isn't one falls back to the city's own name.
         self.assertEqual(build.where_of(dict(listing, place="Main Campus")), "Elsewhere")
         # The country, how it's worked and every place after the first are more than the column can hold.

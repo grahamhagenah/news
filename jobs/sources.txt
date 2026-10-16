@@ -48,7 +48,7 @@ jibe       https://jobs.tufts.edu/                              anywhere   Tufts
 silkroad   https://jobs.silkroad.com/BU/External                anywhere   Boston University
 workday    https://northeastern.wd1.myworkdayjobs.com/careers   anywhere   Northeastern University
 workday    https://brandeis.wd5.myworkdayjobs.com/Jobs          anywhere   Brandeis University
-workday    https://brown.wd5.myworkdayjobs.com/staff-careers-brown   anywhere   Brown University
+workday    https://brown.wd5.myworkdayjobs.com/staff-careers-brown   providence   Brown University
 # Brown is in Providence rather than Boston, so its jobs file under elsewhere. Its first build held three
 # matches and none of them were this work: on probation.
 # Berklee, Suffolk, Babson, Emerson and WPI are all on Workday too, and were each tried: between them they
