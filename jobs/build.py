@@ -864,18 +864,16 @@ def render_row(listing, scored=None):
     via = f'<span class="via">in {html.escape(where)}</span>'
     # A featured job's score and the words behind it go in the box that opens under its headline, with what
     # the posting says. A row of its own for them was a row's worth of page for something read once.
-    note, tag = "", ""
+    note = ""
     if scored:
         points, why = scored
         note = (f'<p class="why"><span class="score">{points}</span>'
                 f'{html.escape(" · ".join(why))}</p>')
-        # A phone has no hover, so it never sees that box. It gets the number alone, in the row.
-        tag = f'<span class="score-row" aria-hidden="true">{points}</span>'
     return (
         f'<li class="row" data-city="{" ".join(listing.get("cities") or [listing["city"]])}" data-kind="{kind}" '
         f'data-from="{html.escape(listing["company"])}">{icon(kind)}'
         f'<div class="headline"><a class="title" href="{html.escape(listing["link"])}">{html.escape(listing["title"])}</a> '
-        + " ".join(part for part in (company, when, detail, via, tag) if part)
+        + " ".join(part for part in (company, when, detail, via) if part)
         + f'{shared.preview(listing["title"], listing["about"], note=note)}</div> '
         f'<span class="source"><span>{html.escape(where)}</span></span></li>'
     )
@@ -1129,10 +1127,6 @@ CSS = """
     .facts { white-space: normal; }
     /* Where it is has already been said in the line, by "in Boston"; the column would say it twice. */
     .posts .row > .source, .featured .row > .source { display: none; }
-    /* No hover here, so no box: a featured job says how well it fits in the row itself. */
-    /* Named with the list it's in, so it beats the rule above that hides it whatever their order. */
-    .featured .score-row { display: inline; margin-left: .5em; padding: 0 .4em; border: 1px solid #333;
-                           border-radius: 999px; color: #777; font-size: .75em; }
   }
   /* The few jobs that lead the page: the same rows, set apart by the heading above them. Why a job is here
      takes more words than the small print of an ordinary row, and the parts of a headline share one line —
@@ -1141,13 +1135,12 @@ CSS = """
   /* Only the up and down of it: a phone's row keeps a left margin for the mark beside its first line. */
   .featured .row { padding-top: .5rem; padding-bottom: .5rem; }
   /* How well a featured job fits, at the top of the box that opens under its headline, above what the
-     posting says. The number is the score, and what follows it is what earned it. */
+     posting says. The number is the score, and what follows it is what earned it. A phone has no hover and
+     so never opens the box: there, the order the jobs are in is what the score has to say. */
   .preview .why { display: flex; align-items: baseline; gap: .5em; margin-bottom: .7em; padding-bottom: .6em;
                   border-bottom: 1px solid #222; color: #999; }
   .preview .score { flex: none; padding: 0 .45em; border: 1px solid #444; border-radius: 999px;
                     color: #ddd; font-size: .9em; }
-  /* Where the box can be opened, the number is in it; a row doesn't need it as well. */
-  .score-row { display: none; }
   /* Where a row is three columns, the mark sits with the title rather than in the middle of a row that may
      now run to three lines. On a phone the mark is placed against the first line already. */
   @media (min-width: 34.01rem) {
