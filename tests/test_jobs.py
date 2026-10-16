@@ -361,6 +361,16 @@ class Page(unittest.TestCase):
         self.assertIn('<span class="source"><span>Conway, SC</span></span>', page)
         self.assertNotIn('<span class="facts">Conway, SC</span>', page)
 
+    def test_a_place_beside_the_title_is_shortened_too(self):
+        source = {"kind": "madgex", "url": "https://x/", "city": "anywhere", "name": "A Board"}
+        # Boulder is in the Denver metro, so the row says where it is — but not what country.
+        listing = build.job(source, "Graphic Designer", "A School", "https://x/1", date(2026, 10, 10),
+                            place="Boulder, Colorado, United States")
+        page = build.render_index(build.without_repeats([listing]), [], [],
+                                  datetime(2026, 10, 16, tzinfo=timezone.utc))
+        self.assertIn('<span class="facts">Boulder, Colorado</span>', page)
+        self.assertIn('<span class="source"><span>Denver</span></span>', page)
+
     def test_a_board_that_failed_says_so(self):
         page = build.render_index(self.listings(), ["Built In Boston"], [("Remote OK", date(2026, 10, 15))],
                                   datetime(2026, 10, 16, tzinfo=timezone.utc))
