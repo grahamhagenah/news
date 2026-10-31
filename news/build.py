@@ -732,7 +732,7 @@ def render_index(feeds, posts, failed, stale, built_at):
         + PLAYER +
         f'<ul class="posts" data-page-size="{PAGE_SIZE}">\n' + "\n".join(items) + "\n</ul>\n"
         '<p class="empty" hidden></p>\n'
-        '<nav class="pager"></nav>\n'
+        '<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         f"<footer>\n{failed_note}"
         '<p><a href="sources.html">Add or remove sites</a></p>\n'
         "</footer>\n"
@@ -944,12 +944,15 @@ INDEX_JS = """
     location.reload();
   });
 
-  // Show one page of posts at a time; ?page=2 shows the next set. Every post is in the page, so the
-  // new-post check and the unread dots still see all of them.
+  // Show a page of posts to begin with; Load more, at the bottom, adds the next page under them, and ?page=2
+  // keeps how many are showing, so going back to the list or reloading it doesn't lose the place. Every post is
+  // in the page, so the new-post check and the unread dots still see all of them.
   const list = document.querySelector(".posts");
   const pageSize = Number(list.dataset.pageSize);
   const items = [...list.children];
   const pager = document.querySelector(".pager");
+  const more = pager.querySelector(".more");
+  let loaded = 1, shownNow = [];
   const empty = document.querySelector(".empty");
 
   // The filter shows every post, or only articles, podcast episodes or videos. The choice is remembered in
@@ -987,13 +990,11 @@ INDEX_JS = """
     const pages = Math.max(1, Math.ceil(shown.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     items.forEach(li => { li.hidden = true; });
-    shown.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
+    shown.forEach((li, i) => { li.hidden = i >= page * pageSize; });
     list.classList.add("paged");
-    const link = (n, text) => `<a href="${address(n)}">${text}</a>`;
-    pager.innerHTML = pages < 2 ? "" :
-      (page > 1 ? link(page - 1, "← Newer") : "<span></span>") +
-      `<span>Page ${page} of ${pages}</span>` +
-      (page < pages ? link(page + 1, "Older →") : "<span></span>");
+    loaded = page;
+    shownNow = shown;
+    pager.hidden = page >= pages;
     empty.textContent = words.length ? `Nothing ${source ? "from " + source : "here"} matches “${query()}”.`
       : source ? `Nothing from ${source} right now.`
       : { podcasts: "No podcast episodes right now.", videos: "No videos right now." }[show] || "No articles right now.";
@@ -1002,6 +1003,14 @@ INDEX_JS = """
     if (filter) for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
   }
   showPosts();
+
+  more.addEventListener("click", () => {
+    const first = shownNow[loaded * pageSize];
+    history.replaceState(null, "", address(loaded + 1));
+    showPosts();
+    // With nothing left to load the button goes, so the reader carries on from the first of the new posts.
+    if (pager.hidden && first) first.querySelector("a").focus({ preventScroll: true });
+  });
 
   if (filter) filter.addEventListener("click", event => {
     const b = event.target.closest("button");

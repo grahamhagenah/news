@@ -2630,7 +2630,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     body = (
         f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}<span class="finders">{shared.menu(venues, "All venues", "Venue")}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
-        + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager"></nav>\n'
+        + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
@@ -3399,12 +3399,15 @@ INDEX_JS = """
   // talks/) its links go to; its home page, which has every event, shows one in place instead, and puts its
   // page's address in the address bar. Here, the choice is remembered in this browser. The search keeps the events
   // with every word typed somewhere in their name, place or description (accents aside), and is kept in the
-  // address (?q=). A hundred of what's shown are on a page, however many days that takes; ?page=2 shows the
-  // next hundred. A day split between two pages has its heading on both. A weekend's page shows all of it.
+  // address (?q=). A hundred of what's shown come first, however many days that takes; Load more, at the
+  // bottom, adds the next hundred under them, and ?page=2 keeps how many are showing, for Back and reloading.
+  // A weekend's page shows all of it.
   const EVENTS_PER_PAGE = document.querySelector(".filter").hasAttribute("data-one-page") ? 100000 : 100; // A weekend, whole.
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
   const pager = document.querySelector(".pager");
+  const more = pager.querySelector(".more");
+  let loaded = 1, shownNow = [];
   const empty = document.querySelector(".empty");
   empty.dataset.none = empty.textContent;  // What it says with nothing narrowing it, as the page wrote it.
   const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -3459,18 +3462,16 @@ INDEX_JS = """
       && words.every(word => searchable.get(li).includes(word)));
     const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
-    const onPage = new Set(rows.slice((page - 1) * EVENTS_PER_PAGE, page * EVENTS_PER_PAGE));
+    const onPage = new Set(rows.slice(0, page * EVENTS_PER_PAGE));
     const passing = new Set(rows);
     for (const day of document.querySelectorAll(".day")) {
       const lis = day.querySelectorAll(":scope > ul > li");
       for (const li of lis) { li.hidden = !onPage.has(li); li.classList.toggle("passes", passing.has(li)); }
       day.hidden = ![...lis].some(li => !li.hidden);
     }
-    const link = (n, text) => `<a href="${address(n)}">${text}</a>`;
-    pager.innerHTML = pages < 2 ? "" :
-      (page > 1 ? link(page - 1, "← Earlier") : "<span></span>") +
-      `<span>Page ${page} of ${pages}</span>` +
-      (page < pages ? link(page + 1, "Later →") : "<span></span>");
+    loaded = page;
+    shownNow = rows;
+    pager.hidden = page >= pages;
     // With a venue or a search narrowing it, what the page says of those; with neither, what it says of itself.
     const at = venue.value ? ` at ${venue.value}` : "";
     const narrowed = empty.dataset.narrowed;
@@ -3497,6 +3498,13 @@ INDEX_JS = """
     }
   }
   showEvents();
+  more.addEventListener("click", () => {
+    const first = shownNow[loaded * EVENTS_PER_PAGE];
+    history.replaceState(null, "", address(loaded + 1));
+    showEvents();
+    // With nothing left to load the button goes, so the reader carries on from the first of the new events.
+    if (pager.hidden && first) first.querySelector("a").focus({ preventScroll: true });
+  });
   filter.addEventListener("click", event => {
     const b = event.target.closest("[data-show]");
     // A kind's own page has only its events, so its links go to the others' pages; so does a click to open one

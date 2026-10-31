@@ -955,7 +955,7 @@ def render_index(listings, failed, stale, built_at):
         + '<h1 class="all-title">Everything</h1>\n' * bool(lead)
         + f'<ul class="posts" data-page-size="{PAGE_SIZE}">\n' + "\n".join(rows) + "\n</ul>\n"
         '<p class="empty" hidden></p>\n'
-        '<nav class="pager"></nav>\n'
+        '<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         f"<footer>\n{failed_note}"
         f'<p>{len(listings)} jobs from <a href="sources.html">{len(set(listing["source"] for listing in listings))} '
         'boards</a>.</p>\n'
@@ -1051,6 +1051,8 @@ INDEX_JS = """
   const pageSize = Number(list.dataset.pageSize);
   const items = [...list.children];
   const pager = document.querySelector(".pager");
+  const more = pager.querySelector(".more");
+  let loaded = 1, shownNow = [];
   const empty = document.querySelector(".empty");
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
@@ -1107,13 +1109,11 @@ INDEX_JS = """
     const pages = Math.max(1, Math.ceil(ordered.length / pageSize));
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
     items.forEach(li => { li.hidden = true; });
-    ordered.forEach((li, i) => { li.hidden = i < (page - 1) * pageSize || i >= page * pageSize; });
+    ordered.forEach((li, i) => { li.hidden = i >= page * pageSize; });
     list.classList.add("paged");
-    const link = (n, text) => `<a href="${address(n)}">${text}</a>`;
-    pager.innerHTML = pages < 2 ? "" :
-      (page > 1 ? link(page - 1, "← Newer") : "<span></span>") +
-      `<span>Page ${page} of ${pages}</span>` +
-      (page < pages ? link(page + 1, "Older →") : "<span></span>");
+    loaded = page;
+    shownNow = ordered;
+    pager.hidden = page >= pages;
     const place = city ? where.options[where.selectedIndex].textContent : "";
     empty.textContent = words.length ? `Nothing ${place ? "in " + place : "here"} matches \\u201c${query()}\\u201d.`
       : place ? `No jobs in ${place} right now.` : "No jobs right now.";
@@ -1123,6 +1123,14 @@ INDEX_JS = """
     if (filter) for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
   }
   showJobs();
+
+  // Load more adds the next page of jobs under those showing; ?page= keeps how many, for Back and reloading.
+  more.addEventListener("click", () => {
+    const first = shownNow[loaded * pageSize];
+    history.replaceState(null, "", address(loaded + 1));
+    showJobs();
+    if (pager.hidden && first) first.querySelector("a").focus({ preventScroll: true });
+  });
 
   if (filter) filter.addEventListener("click", event => {
     const b = event.target.closest("button");
@@ -1215,8 +1223,6 @@ CSS = """
   .sources li { break-inside: avoid; }
   @media (max-width: 34rem) { .sources { columns: 1; } }
   .help { color: #777; font-size: .85em; }
-  .pager { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
-  .pager a, .pager a:visited { color: #999; }
   .empty { color: #777; }
 """
 

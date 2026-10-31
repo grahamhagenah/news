@@ -224,8 +224,12 @@ BASE_CSS = HEADER_CSS + """
     .finders .search { flex: 1 1 0; min-width: 3rem; width: 0; font-size: 1rem; }
     .pick { flex: 0 1 auto; min-width: 0; max-width: 60%; font-size: 1rem; }
   }
-  .pager { display: flex; justify-content: space-between; margin-top: 2.5rem; color: #666; font-size: .8rem; }
-  .pager a, .pager a:visited { color: #999; }
+  /* Load more, under the list: the next page of it, added below what's showing. */
+  .pager { display: flex; justify-content: center; margin-top: 2.5rem; }
+  .more { padding: .55rem 1.4rem; border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
+          font: inherit; font-size: .85rem; cursor: pointer; }
+  .more:hover { border-color: #555; color: #fff; }
+  .more:focus-visible { outline: 2px solid #888; outline-offset: 2px; }
   .empty { color: #666; font-size: .9rem; }
   /* Back to the top: a quiet arrow in the corner, faded in once the page has been scrolled a screen or so. */
   .to-top { position: fixed; z-index: 2; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(1.5rem, env(safe-area-inset-bottom));

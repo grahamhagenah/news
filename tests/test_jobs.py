@@ -526,7 +526,7 @@ class Page(unittest.TestCase):
         self.assertEqual(re.findall(r'<option value="([^"]*)">', menu), ["", "boston", "newyork", "remote"])
         self.assertIn('<button data-show="design">', page)
         self.assertNotIn('<button data-show="remote">', page, "where it's worked isn't one of the kinds")
-        self.assertIn('<nav class="pager">', page)
+        self.assertIn('<button class="more" type="button">Load more</button>', page)
 
     def test_the_product_filter_shows_only_when_such_a_job_is_on_the_page(self):
         page = build.render_index(self.listings(), [], [], datetime(2026, 10, 16, tzinfo=timezone.utc))
