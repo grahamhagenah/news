@@ -588,6 +588,43 @@ def render_json(posts, built_at):
     )
 
 
+def render_rss(posts, built_at):
+    """The current list as an RSS 2.0 feed (feed.xml), for feed readers and services that send feeds to a
+    Kindle, which take RSS or Atom and not posts.json. Each item is its post's title, link, source, date and
+    preview; a podcast episode carries its audio as an enclosure."""
+    def text(value):
+        return html.escape(value or "", quote=False)
+
+    items = []
+    for post in posts:
+        parts = [f"      <title>{text(post['title'])}</title>",
+                 f"      <link>{text(post['link'])}</link>",
+                 f'      <guid isPermaLink="true">{text(post["link"])}</guid>',
+                 f"      <dc:creator>{text(post['source'])}</dc:creator>"]
+        if post["date"]:
+            parts.append(f"      <pubDate>{format_datetime(post['date'])}</pubDate>")
+        if post.get("summary"):
+            paragraphs = "".join(f"<p>{html.escape(paragraph, quote=False)}</p>" for paragraph in post["summary"])
+            parts.append(f"      <description>{text(paragraphs)}</description>")
+        if post.get("comments"):
+            parts.append(f"      <comments>{text(post['comments'])}</comments>")
+        if post.get("audio"):
+            parts.append(f'      <enclosure url="{html.escape(post["audio"], quote=True)}" length="0" type="audio/mpeg"/>')
+        items.append("    <item>\n" + "\n".join(parts) + "\n    </item>")
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Newsfeed</title>
+    <link>{text(SITE_URL)}</link>
+    <atom:link href="{html.escape(SITE_URL + 'feed.xml', quote=True)}" rel="self" type="application/rss+xml"/>
+    <description>The latest posts, podcast episodes and videos from a few sites, newest first.</description>
+    <lastBuildDate>{format_datetime(built_at)}</lastBuildDate>
+{chr(10).join(items)}
+  </channel>
+</rss>
+"""
+
+
 # Each post's mark, before its source: a page of text for an article, headphones for a podcast episode, a
 # screen with a play button for a video.
 # Drawn once in the page; rows point to the drawing. Unread, it takes its kind's color; read, it goes gray.
@@ -1021,7 +1058,8 @@ options after its name, when you add it or in feeds.txt:</p>
 
 <h1>Export</h1>
 <p><a href="feeds.opml" download>Download these sites as OPML</a>, the file format other feed readers import.
-The current list of posts is also available as <a href="posts.json">JSON</a>.</p>
+The current list of posts is also available as an <a href="feed.xml">RSS feed</a>, for a feed reader or a
+Kindle, and as <a href="posts.json">JSON</a>.</p>
 
 <footer><p>Updated {render_time(built_at, "updated")} · <a href="./">Back to the news</a> ·
 <a href="make-your-own.html">Make your own newsfeed</a></p></footer>
@@ -1139,7 +1177,8 @@ def render_opml(feeds, built_at):
 HEAD = """<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="manifest" href="manifest.webmanifest">"""
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="alternate" type="application/rss+xml" title="Newsfeed" href="feed.xml">"""
 
 # The newsfeed's own styles, on top of the ones it shares with the events page (shared/site.py).
 CSS = """
@@ -1368,6 +1407,7 @@ def main():
     posts = all_posts(feeds)
     (OUT_DIR / "index.html").write_text(render_index(feeds, posts, failed, stale, built_at))
     (OUT_DIR / "posts.json").write_text(render_json(posts, built_at))
+    (OUT_DIR / "feed.xml").write_text(render_rss(posts, built_at))
     (OUT_DIR / "sources.html").write_text(render_sources(feeds, built_at))
     (OUT_DIR / "make-your-own.html").write_text(render_guide(built_at))
     (OUT_DIR / "feeds.opml").write_text(render_opml(feeds, built_at))
@@ -1380,7 +1420,7 @@ def main():
         "failing": still_failing(errors, previous, built_at),
     }
     (OUT_DIR / "feeds.json").write_text(json.dumps(record, ensure_ascii=False))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html, posts.json, sources.html, make-your-own.html, "
+    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html, posts.json, feed.xml, sources.html, make-your-own.html, "
           "feeds.opml and feeds.json")
 
 

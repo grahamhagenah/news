@@ -327,6 +327,19 @@ class Page(unittest.TestCase):
         self.assertIn("Couldn’t load Broken Blog", page)
         self.assertIn("Couldn’t reach Slow Site", page)
 
+    def test_rss_feed(self):
+        import xml.etree.ElementTree as ET
+        with mock.patch.object(build, "fetch", sample):
+            feeds = [build.read_feed(site(url)) for url in ("https://www.nytimes.com/", "https://feeds.megaphone.fm/the-big-picture")]
+        posts = build.all_posts(feeds)
+        channel = ET.fromstring(build.render_rss(posts, datetime.now(timezone.utc))).find("channel")
+        items = channel.findall("item")
+        self.assertEqual(len(items), len(posts))
+        self.assertEqual([item.findtext("link") for item in items], [post["link"] for post in posts])
+        self.assertEqual([item.findtext("title") for item in items], [post["title"] for post in posts])
+        self.assertEqual(sum(item.find("enclosure") is not None for item in items), sum(post["podcast"] for post in posts))
+        self.assertTrue(all(item.findtext("pubDate") for item in items if posts[items.index(item)]["date"]))
+
     def test_artist_and_title(self):
         self.assertEqual(build.artist_and_title("Beck: Ride Lonesome"), ("Beck", "Ride Lonesome"))
         self.assertEqual(build.artist_and_title("Yung Lean: “That’s It” [ft. Future]"), ("Yung Lean", "That's It"))
