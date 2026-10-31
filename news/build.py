@@ -588,10 +588,27 @@ def render_json(posts, built_at):
     )
 
 
-def render_rss(posts, built_at):
-    """The current list as an RSS 2.0 feed (feed.xml), for feed readers and services that send feeds to a
-    Kindle, which take RSS or Atom and not posts.json. Each item is its post's title, link, source, date and
-    preview; a podcast episode carries its audio as an enclosure."""
+# The RSS feeds beside the page: everything, and the articles alone, for readers that fetch each post's page
+# to read offline (KOReader's news downloader, on a Kindle), where a video or an episode is an empty page.
+RSS_FEEDS = {
+    "feed.xml": ("Newsfeed", "The latest posts, podcast episodes and videos from a few sites, newest first."),
+    "articles.xml": ("Newsfeed: articles", "The latest articles from a few sites, newest first, without podcast "
+                                           "episodes or videos."),
+}
+
+
+def is_article(post):
+    return not post["podcast"] and not post.get("video")
+
+
+def render_rss(posts, built_at, path="feed.xml"):
+    """The current list as an RSS 2.0 feed (RSS_FEEDS), for feed readers and Kindle readers, which take RSS or
+    Atom and not posts.json. Each item is its post's title, link, source, date and preview; a podcast episode
+    carries its audio as an enclosure. articles.xml has only the articles."""
+    title, description = RSS_FEEDS[path]
+    if path == "articles.xml":
+        posts = [post for post in posts if is_article(post)]
+
     def text(value):
         return html.escape(value or "", quote=False)
 
@@ -614,10 +631,10 @@ def render_rss(posts, built_at):
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
-    <title>Newsfeed</title>
+    <title>{text(title)}</title>
     <link>{text(SITE_URL)}</link>
-    <atom:link href="{html.escape(SITE_URL + 'feed.xml', quote=True)}" rel="self" type="application/rss+xml"/>
-    <description>The latest posts, podcast episodes and videos from a few sites, newest first.</description>
+    <atom:link href="{html.escape(SITE_URL + path, quote=True)}" rel="self" type="application/rss+xml"/>
+    <description>{text(description)}</description>
     <lastBuildDate>{format_datetime(built_at)}</lastBuildDate>
 {chr(10).join(items)}
   </channel>
@@ -1058,8 +1075,9 @@ options after its name, when you add it or in feeds.txt:</p>
 
 <h1>Export</h1>
 <p><a href="feeds.opml" download>Download these sites as OPML</a>, the file format other feed readers import.
-The current list of posts is also available as an <a href="feed.xml">RSS feed</a>, for a feed reader or a
-Kindle, and as <a href="posts.json">JSON</a>.</p>
+The current list of posts is also available as an <a href="feed.xml">RSS feed</a>, for a feed reader, as one
+with only the <a href="articles.xml">articles</a>, for reading offline (KOReader’s news downloader, on a
+Kindle), and as <a href="posts.json">JSON</a>.</p>
 
 <footer><p>Updated {render_time(built_at, "updated")} · <a href="./">Back to the news</a> ·
 <a href="make-your-own.html">Make your own newsfeed</a></p></footer>
@@ -1178,7 +1196,8 @@ HEAD = """<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="alternate" type="application/rss+xml" title="Newsfeed" href="feed.xml">"""
+<link rel="alternate" type="application/rss+xml" title="Newsfeed" href="feed.xml">
+<link rel="alternate" type="application/rss+xml" title="Newsfeed: articles" href="articles.xml">"""
 
 # The newsfeed's own styles, on top of the ones it shares with the events page (shared/site.py).
 CSS = """
@@ -1407,7 +1426,8 @@ def main():
     posts = all_posts(feeds)
     (OUT_DIR / "index.html").write_text(render_index(feeds, posts, failed, stale, built_at))
     (OUT_DIR / "posts.json").write_text(render_json(posts, built_at))
-    (OUT_DIR / "feed.xml").write_text(render_rss(posts, built_at))
+    for path in RSS_FEEDS:
+        (OUT_DIR / path).write_text(render_rss(posts, built_at, path))
     (OUT_DIR / "sources.html").write_text(render_sources(feeds, built_at))
     (OUT_DIR / "make-your-own.html").write_text(render_guide(built_at))
     (OUT_DIR / "feeds.opml").write_text(render_opml(feeds, built_at))
@@ -1420,7 +1440,7 @@ def main():
         "failing": still_failing(errors, previous, built_at),
     }
     (OUT_DIR / "feeds.json").write_text(json.dumps(record, ensure_ascii=False))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html, posts.json, feed.xml, sources.html, make-your-own.html, "
+    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/index.html, posts.json, feed.xml, articles.xml, sources.html, make-your-own.html, "
           "feeds.opml and feeds.json")
 
 

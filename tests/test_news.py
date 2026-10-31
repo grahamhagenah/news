@@ -340,6 +340,21 @@ class Page(unittest.TestCase):
         self.assertEqual(sum(item.find("enclosure") is not None for item in items), sum(post["podcast"] for post in posts))
         self.assertTrue(all(item.findtext("pubDate") for item in items if posts[items.index(item)]["date"]))
 
+    def test_articles_feed_leaves_out_episodes_and_videos(self):
+        import xml.etree.ElementTree as ET
+        with mock.patch.object(build, "fetch", sample):
+            feeds = [build.read_feed(site(url)) for url in ("https://www.nytimes.com/", "https://feeds.megaphone.fm/the-big-picture",
+                                                            "https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A")]
+        posts = build.all_posts(feeds)
+        channel = ET.fromstring(build.render_rss(posts, datetime.now(timezone.utc), "articles.xml")).find("channel")
+        links = [item.findtext("link") for item in channel.findall("item")]
+        articles = [post["link"] for post in posts if not post["podcast"] and not post["video"]]
+        self.assertTrue(articles)
+        self.assertLess(len(articles), len(posts))
+        self.assertEqual(links, articles)
+        self.assertIsNone(channel.find("item/enclosure"))
+        self.assertTrue(channel.find("{http://www.w3.org/2005/Atom}link").get("href").endswith("/articles.xml"))
+
     def test_artist_and_title(self):
         self.assertEqual(build.artist_and_title("Beck: Ride Lonesome"), ("Beck", "Ride Lonesome"))
         self.assertEqual(build.artist_and_title("Yung Lean: “That’s It” [ft. Future]"), ("Yung Lean", "That's It"))
