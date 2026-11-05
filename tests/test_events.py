@@ -1183,7 +1183,40 @@ class HomePage(unittest.TestCase):
 
 
 # A poster from one of the places films' own art comes from (PICTURE_HOSTS).
-POSTER = "https://image.tmdb.org/t/p/w780/poster.jpg"
+POSTER = "https://image.tmdb.org/t/p/w342/poster.jpg"
+
+
+class PictureSize(unittest.TestCase):
+    """The build can't make a picture smaller, so one too big to copy (a megabyte for a box 160 pixels wide)
+    isn't used at all."""
+
+    class Answer:
+        def __init__(self, size):
+            self.size = size
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self, most):
+            return b"\xff\xd8\xff" + b"x" * (min(self.size, most) - 3)
+
+    def setUp(self):
+        build._pictures.clear()
+        self.addCleanup(build._pictures.clear)
+
+    def test_up_to_the_most_is_kept_and_past_it_isnt(self):
+        with mock.patch.object(build.urllib.request, "urlopen", return_value=self.Answer(build.PICTURE_MOST)):
+            self.assertEqual(len(build.picture_bytes("https://x/fits.jpg")), build.PICTURE_MOST)
+        with mock.patch.object(build.urllib.request, "urlopen", return_value=self.Answer(build.PICTURE_MOST + 1)):
+            self.assertIsNone(build.picture_bytes("https://x/too-big.jpg"))
+            self.assertIsNone(build.picture_shape("https://x/too-big.jpg"), "so it has no shape, and isn't shown")
+
+    def test_tmdbs_smaller_poster(self):
+        self.assertEqual(build.lighter("https://image.tmdb.org/t/p/w780/a.jpg"), "https://image.tmdb.org/t/p/w342/a.jpg")
+        self.assertEqual(build.lighter("https://image.tmdb.org/t/p/w342/a.jpg"), "https://image.tmdb.org/t/p/w342/a.jpg")
 
 
 class Biggest(unittest.TestCase):
@@ -1276,7 +1309,23 @@ class Biggest(unittest.TestCase):
         events = [self.showing("Wide Release", "Coolidge Corner", image="https://coolidge.org/lobby.jpg"),
                   self.showing("Wide Release", "Lexington Venue", image="https://image.tmdb.org/t/p/w780/a.jpg")]
         events += [self.showing("Wide Release", f"Theater {n}") for n in range(2)]
-        self.assertEqual(build.biggest_film(events, self.built)["image"], "https://image.tmdb.org/t/p/w780/a.jpg")
+        self.assertEqual(build.biggest_film(events, self.built)["image"], "https://image.tmdb.org/t/p/w342/a.jpg",
+                         "TMDB's smaller size of it")
+
+    def test_a_poster_before_a_still_from_wherever_it_comes(self):
+        """Alamo's still is the more preferred host, but West Newton's poster is the one shown."""
+        still, poster = "https://img-assets.drafthouse.com/still.jpg", "https://img.vwassets.com/x/vertical_poster.jpg"
+        shapes = {still: (1920, 1080), poster: (675, 1000)}
+        events = [self.showing("Wide Release", "Alamo", image=still), self.showing("Wide Release", "West Newton", image=poster)]
+        events += [self.showing("Wide Release", f"Theater {n}") for n in range(2)]
+        with mock.patch.object(build, "picture_shape", side_effect=lambda url: shapes.get(url)):
+            film = build.biggest_film(events, self.built)
+        self.assertEqual((film["image"], film["standing"]), (poster, True))
+        # With no poster, the still; and one that won't load or is too big to copy (no shape) is passed over.
+        shapes[poster] = None
+        with mock.patch.object(build, "picture_shape", side_effect=lambda url: shapes.get(url)):
+            film = build.biggest_film(events, self.built)
+        self.assertEqual((film["image"], film["standing"]), (still, False))
 
     def test_no_picture_rather_than_a_theaters_photograph_or_a_cropped_one(self):
         """Only a film's own art, and only where its shape is known: otherwise the film is words alone."""

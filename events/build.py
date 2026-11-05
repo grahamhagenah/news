@@ -549,7 +549,11 @@ def read_jsonld(source):
 def lighter(image, page=""):
     """A smaller copy of a picture where its host makes one, rather than the full size schema.org gives (up to
     2560 pixels and a megabyte or two): Ticketmaster's 1024-pixel one, 800 pixels from imgix, and from a
-    WordPress site, the size nearest 800 pixels wide its page uses (poster-2-768x1138.jpg for poster-2-scaled.jpg)."""
+    WordPress site, the size nearest 800 pixels wide its page uses (poster-2-768x1138.jpg for poster-2-scaled.jpg),
+    and TMDB's 342-pixel poster for its 780: the poster is only ever shown small, and that's sharp at 88 pixels
+    on a screen of three to a point, for a seventh of the bytes."""
+    if "image.tmdb.org/t/p/" in image:
+        return re.sub(r"/t/p/(w780|w1280|original)/", "/t/p/w342/", image)
     if "ticketm.net/" in image:
         return image.replace("_TABLET_LANDSCAPE_LARGE_16_9", "_TABLET_LANDSCAPE_16_9")
     if ".imgix.net/" in image and not re.search(r"[?&]w=", image):
@@ -2474,12 +2478,14 @@ BIGGEST_DAYS = 7  # How far ahead to look for the biggest film.
 BIGGEST_SHARE = 3
 BIGGEST_FLOOR = 3
 FRESH_SHOWN = 3  # How many of the newest announcements are listed.
-# Where a film's own art comes from, in the order they're preferred: a poster from a film database or a
-# chain's own, before any theater's photograph — which is as often its lobby as the film, and isn't used at all.
+# Where a film's own art comes from, in the order they're preferred (a poster from any of them still comes before
+# a still from any): a film database's or a chain's own, never a theater's photograph, as often its lobby as the film.
 PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
                  "indy-systems.imgix.net", "img.vwassets.com", "ticketing.phoenixmovies.net")
 
-PICTURE_MOST = 3_000_000  # A poster bigger than this is left where it is rather than copied into the site.
+# A picture bigger than this isn't shown: the build can't make one smaller, and a megabyte for a box 160 pixels
+# wide (one theater's still came to that) is a slower page for nothing. Posters at their smaller sizes are a tenth.
+PICTURE_MOST = 300_000
 _pictures = {}
 
 
@@ -2555,13 +2561,21 @@ def picture_shape(url):
 
 
 def biggest_picture(showings):
-    """The picture to show a film by, out of the ones its theaters gave it."""
-    pictures = [item["image"] for item in showings if item.get("image")]
-    for host in PICTURE_HOSTS:
-        for picture in pictures:
-            if f"//{host}/" in picture:
-                return picture
-    return ""
+    """The picture to show a film by, out of the ones its theaters gave it, and its shape: its own art, from one of
+    PICTURE_HOSTS, and a poster before a still — a poster is the film's face, recognized at a glance, and stands
+    beside its name in a box half as wide; a still, cut down to 160 pixels, is a scene nobody can make out. Only
+    one whose shape can be read and that's small enough to copy (PICTURE_MOST). ("", None) where there's none."""
+    pictures = list(dict.fromkeys(lighter(item["image"]) for item in showings if item.get("image")))
+    ranked = [picture for host in PICTURE_HOSTS for picture in pictures if f"//{host}/" in picture]
+    stills = []
+    for picture in ranked:
+        shape = picture_shape(picture)
+        if not shape:
+            continue
+        if shape[1] > shape[0] * 1.2:
+            return picture, shape
+        stills.append((picture, shape))
+    return stills[0] if stills else ("", None)
 
 
 def biggest_film(events, built_at, before=""):
@@ -2603,10 +2617,7 @@ def biggest_film(events, built_at, before=""):
     # A picture only where it's a film's own art, from one of PICTURE_HOSTS, and only where its shape could be
     # read: a theater's own photograph is as often its lobby as the film, and a box guessed at crops a poster's
     # title off. Without one, the film is words, as everything else on the page is.
-    picture = lighter(biggest_picture(showings))
-    shape = picture_shape(picture) if picture else None
-    if not shape:
-        picture = ""
+    picture, shape = biggest_picture(showings)
     width, height = shape or (16, 9)
     said = clip(next((item["about"] for item in showings if item.get("about")), []), 150, most=1)
     return {"key": key, "id": listing_id(day, title)[0], "title": title, "theaters": theaters, "day": day,
