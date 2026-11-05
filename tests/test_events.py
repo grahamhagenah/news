@@ -1182,6 +1182,10 @@ class HomePage(unittest.TestCase):
         self.assertIn('<h1 class="tagline">', film)
 
 
+# A poster from one of the places films' own art comes from (PICTURE_HOSTS).
+POSTER = "https://image.tmdb.org/t/p/w780/poster.jpg"
+
+
 class Biggest(unittest.TestCase):
     """The week's biggest film: the one the most of a city's theaters have taken."""
 
@@ -1209,8 +1213,29 @@ class Biggest(unittest.TestCase):
         events = [self.showing("Wide Release", f"Theater {n}") for n in range(5)]
         events += [self.showing("Smaller", f"Theater {n}") for n in range(3)]
         film = build.biggest_film(events, self.built)
-        self.assertEqual((film["title"], film["facts"]), ("Wide Release", "5 theaters · Today"))
+        self.assertEqual((film["title"], film["theaters"], film["day"]), ("Wide Release", 5, date(2026, 9, 20)))
         self.assertEqual(film["id"], "2026-09-20-wide-release", "its row's address on the page")
+
+    def test_its_day_is_a_date_the_page_names(self):
+        """Not "Today" written in at the build, which would still say so after midnight: the page's script names
+        the day by the reader's clock, as it does the days' headings."""
+        events = [self.showing("Wide Release", f"Theater {n}") for n in range(4)]
+        lead, _ = build.render_lead(events, self.built)
+        self.assertIn('4 theaters · <span class="lead-day" data-date="2026-09-20">Sun, Sep 20</span>', lead)
+        self.assertNotIn("Today", lead)
+        self.assertIn('document.querySelectorAll(".lead-day")', build.INDEX_JS)
+        # Not a <time datetime>, which the shared script would take for a timestamp and show as an age ("18h").
+        self.assertNotIn("datetime=", lead)
+
+    def test_a_tie_goes_to_the_one_shown_more_and_never_to_the_order_read(self):
+        busy = [self.showing("Busy Film", f"Theater {n}", hour=hour) for n in range(4) for hour in (13, 16, 19)]
+        quiet = [self.showing("Quiet Film", f"Theater {n}") for n in range(4)]
+        self.assertEqual(self.biggest(quiet + busy), "Busy Film")
+        self.assertEqual(self.biggest(busy + quiet), "Busy Film")
+        # Shown as often, too: by name, the same whichever is read first.
+        twins = [self.showing(title, f"Theater {n}") for title in ("Beta", "Alpha") for n in range(4)]
+        self.assertEqual(self.biggest(twins), "Alpha")
+        self.assertEqual(self.biggest(twins[::-1]), "Alpha")
 
     def test_it_stays_until_something_is_bigger(self):
         """What leads the page changes when a bigger film turns up, not when another draws level with it."""
@@ -1253,8 +1278,17 @@ class Biggest(unittest.TestCase):
         events += [self.showing("Wide Release", f"Theater {n}") for n in range(2)]
         self.assertEqual(build.biggest_film(events, self.built)["image"], "https://image.tmdb.org/t/p/w780/a.jpg")
 
+    def test_no_picture_rather_than_a_theaters_photograph_or_a_cropped_one(self):
+        """Only a film's own art, and only where its shape is known: otherwise the film is words alone."""
+        lobby = [self.showing("Wide Release", f"Theater {n}", image="https://coolidge.org/lobby.jpg") for n in range(4)]
+        self.assertEqual(build.biggest_film(lobby, self.built)["image"], "")
+        self.assertNotIn("<img", build.render_lead(lobby, self.built)[0])
+        poster = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
+        with mock.patch.object(build, "picture_shape", return_value=None):  # It wouldn't load, so no shape.
+            self.assertNotIn("<img", build.render_lead(poster, self.built)[0])
+
     def test_a_poster_and_a_still_each_get_their_own_shape(self):
-        events = [self.showing("Wide Release", f"Theater {n}", image="https://x/a.jpg") for n in range(4)]
+        events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         standing, _ = build.render_lead(events, self.built)
         self.assertIn('class="biggest standing"', standing)
         self.assertIn('width="76" height="114"', standing)
@@ -1266,25 +1300,25 @@ class Biggest(unittest.TestCase):
     def test_the_poster_is_copied_into_the_site(self):
         """So it loads with the page, not after it from a theater's server; a new poster is a new file."""
         poster = b"\xff\xd8\xff\xe0" + b"a poster"
-        events = [self.showing("Wide Release", f"Theater {n}", image="https://x/poster.jpg") for n in range(4)]
+        events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         with mock.patch.object(build, "picture_bytes", return_value=poster):
             lead, _ = build.render_lead(events, self.built)
         [(name, data)] = build.KEPT_PICTURES.items()
         self.assertRegex(name, r"^pictures/[0-9a-f]{16}\.jpg$")
         self.assertEqual(data, poster)
         self.assertIn(f'src="{build.PUBLIC_ROOT}{name}"', lead)
-        self.assertNotIn("https://x/poster.jpg", lead)
+        self.assertNotIn(POSTER, lead)
 
     def test_a_poster_that_wont_copy_stays_where_it_is(self):
-        events = [self.showing("Wide Release", f"Theater {n}", image="https://x/poster.jpg") for n in range(4)]
+        events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         lead, _ = build.render_lead(events, self.built)  # picture_bytes gives nothing, as when it won't load.
-        self.assertIn('src="https://x/poster.jpg"', lead)
+        self.assertIn(f'src="{POSTER}"', lead)
         self.assertEqual(build.KEPT_PICTURES, {})
         with mock.patch.object(build, "picture_bytes", return_value=b"GIF89a..."):
             self.assertEqual(build.kept_picture("https://x/poster.gif"), "https://x/poster.gif", "not one to copy")
 
     def test_the_film_beside_whats_announced(self):
-        films = [self.showing("Wide Release", f"Theater {n}", image="https://x/poster.jpg") for n in range(4)]
+        films = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         announced = [dict(build.event(source("aeg", "x", "music", "The Sinclair"), "A show", date(2026, 9, 22), time(20),
                                       image="https://x/band.jpg"), added="2026-09-19")]
         lead, film = build.render_lead(films + announced, self.built)

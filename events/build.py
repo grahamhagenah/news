@@ -2474,8 +2474,8 @@ BIGGEST_DAYS = 7  # How far ahead to look for the biggest film.
 BIGGEST_SHARE = 3
 BIGGEST_FLOOR = 3
 FRESH_SHOWN = 3  # How many of the newest announcements are listed.
-# Whose picture to use, where theaters differ: a film's own art before a theater's photograph of its lobby.
-# The first of these the film has, else the first picture any theater gave it.
+# Where a film's own art comes from, in the order they're preferred: a poster from a film database or a
+# chain's own, before any theater's photograph — which is as often its lobby as the film, and isn't used at all.
 PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
                  "indy-systems.imgix.net", "img.vwassets.com", "ticketing.phoenixmovies.net")
 
@@ -2561,7 +2561,7 @@ def biggest_picture(showings):
         for picture in pictures:
             if f"//{host}/" in picture:
                 return picture
-    return pictures[0] if pictures else ""
+    return ""
 
 
 def biggest_film(events, built_at, before=""):
@@ -2586,19 +2586,30 @@ def biggest_film(events, built_at, before=""):
             best[key] = (theaters, day, showings)
     if not best:
         return None
-    key = min(best, key=lambda found: (-best[found][0], best[found][1]))
+    # Among films at as many theaters, the soonest, then the one shown more often that day — a dozen showings at
+    # four theaters is more of a film than four — then by name, so the choice never rests on the order theaters
+    # happened to be read in. It's kept from then on, so it had better not be arbitrary.
+    showings = {found: sum(len(item["times"]) or 1 for item in best[found][2]) for found in best}
+    key = min(best, key=lambda found: (-best[found][0], best[found][1], -showings[found], found))
     if before in best and best[before][0] >= best[key][0]:
         key = before
     theaters, day, showings = best[key]
     # The same name the row below uses, chosen the same way, so the two read as the one film.
     title = min((item["title"] for item in showings), key=lambda name: (len(name), sum(map(str.isupper, name))))
     # No first showing: the page's script moves a row's on as each one passes, and one written into the page
-    # when it was built would be hours out of date by the evening. The row below has the times.
-    facts = [f"{theaters} theaters", "Today" if day == here else f"{day:%a, %b} {day.day}"]
+    # when it was built would be hours out of date by the evening. The row below has the times. Nor "Today": the
+    # day is written as a date, and the script names it as it does the days' headings, by the clock it's read
+    # by — "Today" written in at the build would still say so after midnight, until the next one.
+    # A picture only where it's a film's own art, from one of PICTURE_HOSTS, and only where its shape could be
+    # read: a theater's own photograph is as often its lobby as the film, and a box guessed at crops a poster's
+    # title off. Without one, the film is words, as everything else on the page is.
     picture = lighter(biggest_picture(showings))
-    width, height = (picture_shape(picture) if picture else None) or (16, 9)
+    shape = picture_shape(picture) if picture else None
+    if not shape:
+        picture = ""
+    width, height = shape or (16, 9)
     said = clip(next((item["about"] for item in showings if item.get("about")), []), 150, most=1)
-    return {"key": key, "id": listing_id(day, title)[0], "title": title, "facts": " · ".join(facts),
+    return {"key": key, "id": listing_id(day, title)[0], "title": title, "theaters": theaters, "day": day,
             "about": said[0] if said else "", "image": picture, "standing": height > width * 1.2}
 
 
@@ -2619,7 +2630,9 @@ def render_lead(events, built_at, before=""):
             f'href="{PUBLIC_ROOT}?{urlencode({"event": film["id"]})}">{picture}'
             f'<span class="biggest-said"><span class="lead-tag biggest-tag">{icon("film", decorative=True)}'
             f'Playing everywhere</span><b class="biggest-title">{html.escape(film["title"])}</b>'
-            f'<span class="biggest-facts">{html.escape(film["facts"])}</span>'
+            # A data-date, not a datetime: the shared script reads every datetime as a timestamp to age ("18h").
+            f'<span class="biggest-facts">{film["theaters"]} theaters · <span class="lead-day" '
+            f'data-date="{film["day"].isoformat()}">{film["day"]:%a, %b} {film["day"].day}</span></span>'
             + (f'<span class="biggest-about">{html.escape(film["about"])}</span>' if film["about"] else "")
             + '</span></a>')
     if fresh:
@@ -3543,6 +3556,11 @@ INDEX_JS = """
     else day.querySelector(".relative").textContent =
       day.dataset.date === today ? "Today" : day.dataset.date === tomorrow ? "Tomorrow" : "";
   }
+  // The film over the listings says its day the same way, by the same clock.
+  for (const when of document.querySelectorAll(".lead-day")) {
+    const date = when.dataset.date;
+    if (date === today || date === tomorrow) when.textContent = date === today ? "Today" : "Tomorrow";
+  }
 
   // A day's heading pinned to the top of the window gets a faint line under it: the one at the top whose day
   // is still on screen. Checked as the page scrolls, once a frame at most, and whenever the list changes.
@@ -4313,7 +4331,10 @@ CSS = """
      of it music — music's violet. */
   .biggest-tag { color: var(--film); }
   .fresh-tag { color: var(--music); }
-  .biggest-title { color: #fff; font-size: 1.1rem; font-weight: 500; line-height: 1.25; }
+  /* Two lines at most, as the description under it has: a restoration's full billing ("Dr. Strangelove or: How
+     I Learned to Stop Worrying… (50th Anniversary 4K Restoration)") would otherwise take four on a phone. */
+  .biggest-title { overflow: hidden; color: #fff; font-size: 1.1rem; font-weight: 500; line-height: 1.25;
+                   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .biggest:hover .biggest-title { text-decoration: underline; }
   .biggest-facts { color: #999; font-size: .85rem; }
   .biggest-about { overflow: hidden; color: #6e6e6e; font-size: .85rem; line-height: 1.45;
