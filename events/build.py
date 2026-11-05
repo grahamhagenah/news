@@ -4337,6 +4337,10 @@ CSS = """
   .biggest-picture { flex: none; width: 160px; height: 90px; border-radius: 4px; object-fit: cover; background: #161616; }
   /* A poster, which stands on its end, rather than a still from the film. */
   .biggest.standing .biggest-picture { width: 76px; height: 114px; }
+  /* A still, the full height of the words beside it rather than its own sixteen by nine, which stopped short of
+     them: cropped at its sides to fit, the middle of the scene kept. Never shorter than the sixteen by nine. */
+  .biggest:not(.standing) { align-items: stretch; }
+  .biggest:not(.standing) .biggest-picture { height: auto; min-height: 90px; aspect-ratio: auto; object-position: center; }
   .biggest-said { display: grid; gap: .2rem; min-width: 0; }
   /* Each heading in a color of its own: the film's amber, and for what's announced — concerts and talks, most
      of it music — music's violet. */
