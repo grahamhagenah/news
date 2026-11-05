@@ -2329,19 +2329,20 @@ def clock(moment):
 
 
 # Each row's mark for its category, in the category's color: two beamed eighth notes for music, a frame of
-# film with sprocket holes down both sides for film, a paintbrush for art & talks. Drawn once in the page;
+# film with sprocket holes down both sides for film, a speech bubble for art & talks. Drawn once in the page;
 # rows point to the drawing.
 ICON_DRAWINGS = {
     # A notice's mark: a circle with an exclamation point.
     "notice": '<circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v3.5"/><circle cx="8" cy="11" r=".5" fill="currentColor"/>',
-    # Tabler Icons' "brush" (MIT license, version 3.50.0), its paths verbatim. Tabler draws on a 24-unit square
-    # at a stroke of 2, so it's scaled into these 16-unit ones, at the stroke the others here are drawn with.
-    # Chosen over a framed picture, which read as a photograph at a row's size, and a museum's columns, a bank.
+    # Tabler Icons' "message" (MIT license, version 3.50.0), its paths verbatim: a square speech bubble with two
+    # lines of words in it, for the talks, readings and conversations most of these listings are, and square as
+    # film's frame beside it is. Tabler draws on a 24-unit square at a stroke of 2, so it's scaled into these
+    # 16-unit ones, at the stroke the others here are drawn with. Chosen over a framed picture (read as a
+    # photograph at a row's size), a museum's columns (a bank), a paintbrush and a round bubble.
     "art": ('<g transform="scale(.6667)" stroke-width="2.25">'
-            '<path d="M3 21v-4a4 4 0 1 1 4 4h-4"/>'
-            '<path d="M21 3a16 16 0 0 0 -12.8 10.2"/>'
-            '<path d="M21 3a16 16 0 0 1 -10.2 12.8"/>'
-            '<path d="M10.6 9a9 9 0 0 1 4.4 4.4"/>'
+            '<path d="M8 9h8"/>'
+            '<path d="M8 13h6"/>'
+            '<path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12"/>'
             '</g>'),
     "music": '<path d="M5.5 12.5V4l8-2v8.5"/><circle cx="3.75" cy="12.5" r="1.75" fill="currentColor"/>'
              '<circle cx="11.75" cy="10.5" r="1.75" fill="currentColor"/>',
@@ -4329,7 +4330,9 @@ CSS = """
   .lead > :first-child:not(:only-child) { padding-right: 1.5rem; }
   .lead-tag { display: block; color: #6e6e6e; font-size: .72rem; font-weight: 500; letter-spacing: .07em;
               text-transform: uppercase; }
-  .lead-tag .icon, .lead-tag .spark-mark { width: 12px; height: 12px; margin-right: .4em; vertical-align: -1px; }
+  /* The headings' marks a size over their small capitals, the film's frame and announced's spark plain at a
+     glance, set down so their middles meet the letters'. */
+  .lead-tag .icon, .lead-tag .spark-mark { width: 15px; height: 15px; margin-right: .45em; vertical-align: -3px; }
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   /* The film's words start at the top beside its poster, so its heading is level with Just announced's. */
   .biggest { display: flex; align-items: flex-start; gap: 1rem; color: inherit; }
@@ -4409,18 +4412,21 @@ CSS = """
        times and the venue as much as on the name itself. */
     .day > ul > li.row:hover .title { text-decoration: underline; }
   }
+  /* Each row's mark at fourteen pixels, a little over the height of the capitals beside it: at their height,
+     twelve, its lines come to a pixel thick and what tells the kinds apart — a film frame's sprockets, the lines
+     in a speech bubble — runs together. */
+  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { width: 14px; height: 14px; }
+  /* On a phone, thirteen, in a slot with less room after it than the newsfeed's: a row's words start that much
+     nearer the edge and wrap that much less. Set by the middle of the letters, as the slot it replaces was. */
+  @media (max-width: 34rem) {
+    .day > ul > li.row { padding-left: calc(13px + .5em); }
+    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
+      width: 13px; height: 13px; top: calc(.4rem + .72em - 6.5px); }
+  }
   /* A narrow window with a pointer has both: the band's room at the edge and the icon's slot after it. The
      band's padding would otherwise stand in for the slot, and the icon, still at the edge, sit on the name. */
-  /* On a phone, each row's mark in a slot a size smaller than the newsfeed's, with less room after it: a row's
-     words start that much nearer the edge and wrap that much less, and the mark, in its kind's color, still reads
-     at twelve pixels. Set by the middle of the letters, as the slot it replaces was. */
-  @media (max-width: 34rem) {
-    .day > ul > li.row { padding-left: calc(12px + .5em); }
-    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
-      width: 12px; height: 12px; top: calc(.4rem + .72em - 6px); }
-  }
   @media (hover: hover) and (pointer: fine) and (max-width: 34rem) {
-    .day > ul > li.row { padding-left: calc(.6rem + 12px + .5em); }
+    .day > ul > li.row { padding-left: calc(.6rem + 13px + .5em); }
     .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { left: .6rem; }
   }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
