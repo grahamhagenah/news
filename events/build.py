@@ -2310,22 +2310,59 @@ def published_to(dates):
     return end
 
 
-def one_nights(events):
+# How far back a film's other showings make its one listed showing the end of a run rather than its only one.
+RUN_LOOKBACK = 7
+# How long the days a city's films were listed on are remembered (film_days), from build to build.
+FILM_DAYS_KEPT = 60
+
+
+def film_days(before, events, sources, built_at):
+    """Each city's films and every day each has been listed on, the last build's (before, from its
+    listings.json) with today's added: a listing has only what's still to come, so without this a film down to
+    the last showing of a long run looks the same as one on for a night. With since, the day the remembering
+    began, so a showing isn't judged against days nobody was keeping. Days past FILM_DAYS_KEPT are dropped, and
+    the beginning with them."""
+    today = built_at.astimezone(BOSTON).date()
+    cutoff = (today - timedelta(days=FILM_DAYS_KEPT)).isoformat()
+    city_of = {source["name"]: source["city"] for source in sources}
+    kept = {}
+    for slug in sorted(set(city_of.values())):
+        old = before.get(slug) or {}
+        kept[slug] = (max(old.get("since") or today.isoformat(), cutoff),
+                      {key: set(days) for key, days in (old.get("films") or {}).items()})
+    for item in events:
+        if item["category"] == "film" and city_of.get(item["source"]) in kept:
+            kept[city_of[item["source"]]][1].setdefault(film_key(item["title"]), set()).add(item["date"].isoformat())
+    return {slug: {"since": since, "films": {key: sorted(day for day in days if day >= cutoff)
+                                             for key, days in sorted(films.items()) if any(day >= cutoff for day in days)}}
+            for slug, (since, films) in kept.items()}
+
+
+def one_nights(events, days_seen=None):
     """The films on once in all of what's listed, as their listings' addresses: one showing, at one theater, on
-    one day, and that theater's own listings running unbroken at least ONE_NIGHT_AHEAD days past it without it
-    again. From a city's whole listing, not one page's share of it, which would make tonight's only showing of a
-    film on all week look like its only one."""
+    one day; that theater's own listings running unbroken at least ONE_NIGHT_AHEAD days past it without it again;
+    and none of it in the RUN_LOOKBACK days before, by what's been remembered of the city's films (days_seen, its
+    film_days) — or it's the last of a run, not a night of its own. A showing too soon after the remembering began
+    to know what came before it isn't called one; with nothing remembered, what's listed is all there is to go by,
+    from its first day. From a city's whole listing, not one page's share of it, which would make tonight's only
+    showing of a film on all week look like its only one."""
     films, days = {}, {}
     for item in events:
         if item["category"] == "film":
             films.setdefault(film_key(item["title"]), []).append(item)
             days.setdefault(item["source"], set()).add(item["date"])
+    if not films:
+        return set()
     horizon = {source: published_to(dates) for source, dates in days.items()}
+    since = date.fromisoformat(days_seen["since"]) if days_seen else min(min(dates) for dates in days.values())
+    seen = (days_seen or {}).get("films", {})
     nights = set()
-    for showings in films.values():
+    for key, showings in films.items():
         if len(showings) == 1 and len(showings[0]["times"]) <= 1:
             item = showings[0]
-            if (horizon[item["source"]] - item["date"]).days >= ONE_NIGHT_AHEAD:
+            lookback = item["date"] - timedelta(days=RUN_LOOKBACK)
+            before = [day for day in seen.get(key, ()) if lookback.isoformat() <= day < item["date"].isoformat()]
+            if (horizon[item["source"]] - item["date"]).days >= ONE_NIGHT_AHEAD and since <= lookback and not before:
                 nights.add(listing_id(item["date"], item["title"], item["venue"])[0])
     return nights
 
@@ -2768,19 +2805,21 @@ def venue_menu(venues, towns, events):
     return f'<select class="pick" aria-label="Venue">{options}</select>'
 
 
-def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False, added=False, biggest=""):
+def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False, added=False, biggest="",
+                 days_seen=None):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
     page (music/, film/, talks/), holding only that kind's events, or with weekend (0 for this one, 1 for the
     next), only Friday to Sunday's, or tonight, only today's (and tomorrow's, for after midnight), or added,
     what's turned up in the last week, by the day it did. biggest is the film the home page led with last time,
-    which it goes on leading with until a bigger one turns up."""
+    which it goes on leading with until a bigger one turns up. days_seen is the city's film_days, for telling a
+    film on one night from the last night of a run."""
     root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
         # With more, where there's more of it on the listing's own page, for its view.
         events = [dict(item, about=shorter(item.get("about", [])), more=shorter(item.get("about", [])) != item.get("about", []))
                   for item in events if item["source"] in shown]
-    nights = one_nights(events)
+    nights = one_nights(events, days_seen)
     events = [dict(item, once=True) if listing_id(item["date"], item["title"], item["venue"])[0] in nights else item
               for item in events]
     # The venue filter's choices: every venue with events coming up, whatever their kind (on a kind's page, a
@@ -4816,15 +4855,17 @@ def main():
                             (previous.get("biggest") or {}).get(city.slug, ""))
         leading[city.slug] = film["key"] if film else ""
     use_city(BOSTON_CITY)
+    # The days each city's films have been listed on, kept from build to build to tell a one-off from the end of a run.
+    days_seen = film_days(previous.get("film_days") or {}, events, sources, built_at)
     record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at),
-              "first_seen": first_seen, "biggest": leading}
+              "first_seen": first_seen, "biggest": leading, "film_days": days_seen}
     (OUT_DIR / "listings.json").write_text(json.dumps(record, ensure_ascii=False))
     print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/listings.json, and index.html pointing at {PUBLIC_SITE}boston/")
 
     # Each city's public site, from the same listings; then the site's own root.
     for city in CITIES:
         use_city(city)
-        write_city(city, *by_city(city, events, sources, failed, stale), built_at, leading[city.slug])
+        write_city(city, *by_city(city, events, sources, failed, stale), built_at, leading[city.slug], days_seen.get(city.slug))
     use_city(BOSTON_CITY)
     shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
     # Anything a service wants to find at the site's root to know the site is ours: Google Search Console's
@@ -4865,7 +4906,7 @@ def by_city(city, events, sources, failed, stale):
             [name for name in failed if name in names], [(name, fetched) for name, fetched in stale if name in names])
 
 
-def write_city(city, events, sources, failed, stale, built_at, biggest=""):
+def write_city(city, events, sources, failed, stale, built_at, biggest="", days_seen=None):
     """A city's public site, in its folder (CITY_DIR), with use_city() pointing the PUBLIC_ names at it; its
     home page led by biggest, where that's still the biggest film on."""
     CITY_DIR.mkdir(parents=True, exist_ok=True)
@@ -4873,7 +4914,7 @@ def write_city(city, events, sources, failed, stale, built_at, biggest=""):
     shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
     shutil.copytree(ROOT / "share" / city.slug, CITY_DIR / "share", dirs_exist_ok=True)
     KEPT_PICTURES.clear()
-    (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, biggest=biggest))
+    (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, biggest=biggest, days_seen=days_seen))
     # The pictures its home page shows, beside it.
     for name, data in KEPT_PICTURES.items():
         (CITY_DIR / name).parent.mkdir(parents=True, exist_ok=True)
@@ -4888,14 +4929,14 @@ def write_city(city, events, sources, failed, stale, built_at, biggest=""):
         (CITY_DIR / "contact.html").write_text(render_redirect(f"{PUBLIC_SITE}contact/"))
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (CITY_DIR / slug).mkdir(exist_ok=True)
-        (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category))
+        (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category, days_seen=days_seen))
     (CITY_DIR / PUBLIC_TONIGHT[0]).mkdir(parents=True, exist_ok=True)
-    (CITY_DIR / PUBLIC_TONIGHT[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, tonight=True))
+    (CITY_DIR / PUBLIC_TONIGHT[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, tonight=True, days_seen=days_seen))
     (CITY_DIR / PUBLIC_NEW[0]).mkdir(parents=True, exist_ok=True)
-    (CITY_DIR / PUBLIC_NEW[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, added=True))
+    (CITY_DIR / PUBLIC_NEW[0] / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, added=True, days_seen=days_seen))
     for ahead, (path, *_) in enumerate(PUBLIC_WEEKENDS):
         (CITY_DIR / path).mkdir(parents=True, exist_ok=True)
-        (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead))
+        (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead, days_seen=days_seen))
     (CITY_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
     # Each listing's own page, for the preview a shared link to it shows.
     for path, page in event_pages(sources, events).items():

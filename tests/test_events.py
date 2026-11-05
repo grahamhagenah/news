@@ -1143,36 +1143,77 @@ class OneNight(unittest.TestCase):
         """The rest of a theater's listing: a film on every day through a day, but for some days dark."""
         return [self.film(f"Long Run at {venue}", venue, day) for day in range(through + 1) if day not in gaps]
 
+    # Remembering since well before any of these, with nothing remembered of them.
+    REMEMBERED = {"since": "2026-08-01", "films": {}}
+
     def test_a_film_on_once_at_a_theater_that_has_published_well_past_it(self):
         events = [self.film("Bullitt", "Brattle", 2)] + self.schedule("Brattle", 14)
-        self.assertEqual(build.one_nights(events), {"2026-09-22-bullitt-brattle"})
+        self.assertEqual(build.one_nights(events, self.REMEMBERED), {"2026-09-22-bullitt-brattle"})
+
+    def test_not_the_last_showing_of_a_run(self):
+        """A film listed on the days before its one showing still to come was on for a run, not one night."""
+        events = [self.film("Long Film", "Brattle", 2)] + self.schedule("Brattle", 14)
+        ran = {"since": "2026-08-01", "films": {"long film": ["2026-09-10", "2026-09-15", "2026-09-19"]}}
+        self.assertEqual(build.one_nights(events, ran), set())
+        # A revival weeks after an earlier run is a night of its own.
+        revived = {"since": "2026-08-01", "films": {"long film": ["2026-08-20", "2026-08-21"]}}
+        self.assertEqual(build.one_nights(events, revived), {"2026-09-22-long-film-brattle"})
+
+    def test_not_so_soon_after_the_remembering_began_that_what_came_before_is_unknown(self):
+        just_begun = {"since": "2026-09-20", "films": {}}
+        soon = [self.film("Bullitt", "Brattle", 2)] + self.schedule("Brattle", 20)
+        later = [self.film("Bullitt", "Brattle", 9)] + self.schedule("Brattle", 20)
+        self.assertEqual(build.one_nights(soon, just_begun), set(), "the week before it went unwatched")
+        self.assertEqual(build.one_nights(later, just_begun), {"2026-09-29-bullitt-brattle"}, "the week before is listed")
 
     def test_not_where_the_theater_hasnt_published_far_enough_to_know(self):
         """A theater listing a week ahead hasn't said whether Thursday's new release is on again Monday."""
         events = [self.film("New Release", "Kendall", 4)] + self.schedule("Kendall", 8)
-        self.assertEqual(build.one_nights(events), set())
+        self.assertEqual(build.one_nights(events, self.REMEMBERED), set())
 
     def test_a_gala_a_month_off_doesnt_count_as_publishing_that_far(self):
         events = [self.film("New Release", "Cinema", 2)] + self.schedule("Cinema", 6) + [self.film("Gala", "Cinema", 30)]
-        self.assertNotIn("2026-09-22-new-release-cinema", build.one_nights(events))
+        self.assertNotIn("2026-09-22-new-release-cinema", build.one_nights(events, self.REMEMBERED))
         # Dark a few days a week, as a repertory house is, is still publishing.
         events = [self.film("Bullitt", "Archive", 2)] + self.schedule("Archive", 16, gaps={5, 6, 7, 12, 13, 14})
-        self.assertIn("2026-09-22-bullitt-archive", build.one_nights(events))
+        self.assertIn("2026-09-22-bullitt-archive", build.one_nights(events, self.REMEMBERED))
 
     def test_not_a_film_on_twice_anywhere(self):
         twice_a_day = [self.film("Bullitt", "Brattle", 2, times=(16, 19))] + self.schedule("Brattle", 14)
         two_theaters = [self.film("Bullitt", "Brattle", 2), self.film("Bullitt", "Coolidge", 9)] + self.schedule("Brattle", 14)
-        self.assertEqual(build.one_nights(twice_a_day), set())
-        self.assertEqual(build.one_nights(two_theaters), set())
+        self.assertEqual(build.one_nights(twice_a_day, self.REMEMBERED), set())
+        self.assertEqual(build.one_nights(two_theaters, self.REMEMBERED), set())
 
     def test_tagged_from_the_whole_listing_on_every_page(self):
         """Tonight's page has only today's showing of a film on all week; it isn't its one night."""
         brattle = dict(source("aeg", "x", "film", "Brattle"), public=True)
         week = [build.event(brattle, "On All Week", date(2026, 9, 20) + timedelta(days=d), time(19)) for d in range(15)]
         once = build.event(brattle, "Bullitt", date(2026, 9, 20), time(21))
-        tonight = build.render_index(week + [once], [brattle], [], [], self.built, public=True, tonight=True)
+        tonight = build.render_index(week + [once], [brattle], [], [], self.built, public=True, tonight=True,
+                                     days_seen=self.REMEMBERED)
         self.assertEqual(tonight.count('<span class="once-tag">One night</span>'), 1)
         self.assertLess(tonight.index(">Bullitt<"), tonight.index("One night"))
+
+
+class FilmDays(unittest.TestCase):
+    """What's remembered of each city's films from build to build."""
+
+    def test_today_added_to_what_was_remembered_and_the_old_let_go(self):
+        built = datetime(2026, 11, 20, 16, 0, tzinfo=timezone.utc)
+        brattle = dict(source("aeg", "x", "film", "Brattle"), city="boston")
+        before = {"boston": {"since": "2026-08-01", "films": {"bullitt": ["2026-08-15", "2026-11-10"], "gone": ["2026-08-02"]}}}
+        today = [build.event(brattle, "Bullitt", date(2026, 11, 21), time(19)),
+                 build.event(brattle, "Paris, Texas", date(2026, 11, 22), time(19))]
+        kept = build.film_days(before, today, [brattle], built)["boston"]
+        self.assertEqual(kept["films"], {"bullitt": ["2026-11-10", "2026-11-21"], "paris texas": ["2026-11-22"]},
+                         "past FILM_DAYS_KEPT let go, and a film with nothing left forgotten")
+        self.assertEqual(kept["since"], "2026-09-21", "remembered only as far back as what's kept")
+
+    def test_remembering_begins_with_the_first_build_that_does(self):
+        built = datetime(2026, 11, 20, 16, 0, tzinfo=timezone.utc)
+        brattle = dict(source("aeg", "x", "film", "Brattle"), city="boston")
+        kept = build.film_days({}, [build.event(brattle, "Bullitt", date(2026, 11, 21), time(19))], [brattle], built)
+        self.assertEqual(kept, {"boston": {"since": "2026-11-20", "films": {"bullitt": ["2026-11-21"]}}})
 
 
 class VenueMenu(unittest.TestCase):
