@@ -47,13 +47,13 @@ def card(heading, line, kinds, path):
         f'stroke-linecap="round" stroke-linejoin="round">{build.ICON_DRAWINGS[kind]}</g></svg>'
         for kind in kinds
     )
-    # The site's name with its pin before it, as in the header: a home card's heading, the others' last line.
+    # The site's name as it is in the header, its i's dot a pin's head: a home card's heading, the others' last line.
     home = path is None or heading == build.PUBLIC_NAME
-    # A longer heading a little smaller, to keep it on one line; the pin takes about three letters' room.
-    length = len(heading) + 3 * home
-    size = 92 if length <= 22 else 80 if length <= 25 else 70
-    title = f"{build.PIN_MARK}{html.escape(heading)}" if home else html.escape(heading)
-    site = "" if home else f"<span>{build.PIN_MARK}{html.escape(build.PUBLIC_NAME)}</span> · "
+    # A longer heading a little smaller, to keep it on one line.
+    size = 92 if len(heading) <= 22 else 80 if len(heading) <= 25 else 70
+    named = lambda name: build.WORDMARK + html.escape(name.removeprefix("Pushpin"))  # noqa: E731
+    title = named(heading) if home else html.escape(heading)
+    site = "" if home else f"<span>{named(build.PUBLIC_NAME)}</span> · "
     base = build.PUBLIC_SITE if path is None else build.PUBLIC_URL
     address = base.removeprefix("https://").rstrip("/") + ("/" + path.rstrip("/") if path else "")
     return f"""<!doctype html><meta charset="utf-8"><style>
@@ -66,8 +66,9 @@ def card(heading, line, kinds, path):
   p {{ margin: 30px 0 0; max-width: 940px; color: #8c8c8c; font-size: 38px; line-height: 1.35; text-wrap: balance; }}
   footer {{ margin-top: auto; color: #5c5c5c; font-size: 28px; }}
   footer span {{ color: #8c8c8c; }}
-  .pin {{ width: .9em; height: .9em; margin-right: .2em; vertical-align: -.1em; color: #fff; }}
-  footer .pin {{ width: 1em; height: 1em; margin-right: .3em; vertical-align: -.15em; }}
+  .wordmark .i {{ position: relative; }}
+  .wordmark .tittle {{ position: absolute; left: 50%; top: .05em; width: .26em; height: .26em; margin-left: -.13em;
+                       border-radius: 50%; background: #fbbf24; }}
 </style>
 <div class="icons">{icons}</div>
 <h1>{title}</h1>
@@ -76,15 +77,14 @@ def card(heading, line, kinds, path):
 """
 
 
-def pin_on_black(size, margin=1 / 6):
-    """The favicon's pin in white on black, filling a square: what a phone puts on its home screen, and what a
-    search engine shows beside a result, neither of which takes the SVG — and where the outline on nothing it
-    draws in a browser tab would be a few grey strokes on white."""
-    pin = re.search(r"<g .*?</g>", (PUSHPIN / "favicon.svg").read_text()).group().replace("<g ", '<g stroke="#fff" ', 1)
+def dots_on_black(size, margin=1 / 6):
+    """The favicon's three dots on black, filling a square: what a phone puts on its home screen, and what a
+    search engine shows beside a result, neither of which takes the SVG."""
+    dots = "".join(re.findall(r"<circle [^>]*/>", (PUSHPIN / "favicon.svg").read_text()))
     inset = round(size * margin)
     return (f'<!doctype html><style>html, body {{ margin: 0; width: {size}px; height: {size}px; background: #000; }}</style>'
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
-            f'<svg x="{inset}" y="{inset}" width="{size - 2 * inset}" height="{size - 2 * inset}" viewBox="0 0 24 24">{pin}</svg></svg>')
+            f'<svg x="{inset}" y="{inset}" width="{size - 2 * inset}" height="{size - 2 * inset}" viewBox="0 0 24 24">{dots}</svg></svg>')
 
 
 def icon_file(png, destination):
@@ -118,9 +118,9 @@ def main():
         build.use_city(build.BOSTON_CITY)
         name, heading, line, kinds, path = SITE_CARD
         shoot(card(heading, line, kinds, path), (1200, 630), OUT / "site" / f"{name}.png", scratch)
-        shoot(pin_on_black(180), (180, 180), PUSHPIN / "apple-touch-icon.png", scratch)
+        shoot(dots_on_black(180), (180, 180), PUSHPIN / "apple-touch-icon.png", scratch)
         # For search results: a 48-pixel square, the size Google asks for, and the .ico it looks for by name.
-        shoot(pin_on_black(48, margin=1 / 8), (48, 48), PUSHPIN / "favicon-48.png", scratch)  # Larger: it's shown small.
+        shoot(dots_on_black(48, margin=1 / 8), (48, 48), PUSHPIN / "favicon-48.png", scratch)  # Larger: it's shown small.
         icon_file(PUSHPIN / "favicon-48.png", PUSHPIN / "favicon.ico")
 
 

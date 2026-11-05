@@ -591,7 +591,8 @@ class Cities(unittest.TestCase):
         self.assertIn('href="/westernma/film/"', page)
         self.assertIn('<a href="/">All cities</a>', page)
         # Just Pushpin in the header; the line under it says where.
-        self.assertIn('</svg>Pushpin</a>', page)
+        self.assertIn(f'aria-current="page">{build.WORDMARK}</a>', page)
+        self.assertIn('aria-label="Pushpin"', build.WORDMARK, "read as the name, not as Pushp-dotless-i-n")
         self.assertNotIn('<span class="city">', page)
         self.assertIn('<h1 class="tagline">Concerts, films, and talks around Western Mass.</h1>', page)
         about = build.render_about([images], datetime(2026, 9, 15, tzinfo=timezone.utc))

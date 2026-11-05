@@ -2471,11 +2471,11 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 </div>
 </dialog>
 """
-# Pushpin's mark, before its name in the header: Tabler Icons' "pin" (outline, MIT license), verbatim, the
-# same as the favicon's (events/pushpin).
-PIN_MARK = ('<svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" '
-            'stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4"/>'
-            '<path d="M9 15l-4.5 4.5"/><path d="M14.5 4l5.5 5.5"/></g></svg>')
+# Pushpin's name, as its mark: the word, with the dot of its i a pin's head, a little bigger than a dot and in
+# film's amber. A dotless i under a dot of its own, so the dot can be any size and color; read by a screen
+# reader as the name it is, not the letters it's made of. Its favicon is three dots, the three kinds' colors.
+WORDMARK = ('<span class="wordmark" role="img" aria-label="Pushpin">Pushp<span class="i">ı<span class="tittle">'
+            '</span></span>n</span>')
 
 
 def icon(category, decorative=False):
@@ -3078,11 +3078,11 @@ def public_page(path, title, body, built_at=None, description=None, data=None, s
         body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
     head = "\n".join([
-        # The pin (events/pushpin). ?pin3, since browsers keep a site's old icon long after it changes; the
+        # The three dots (events/pushpin). ?dots1, since browsers keep a site's old icon long after it changes; the
         # .ico keeps a plain address, being the one a search engine asks for by name and shows beside a result.
         f'<link rel="icon" href="{root}favicon.ico" sizes="48x48">',
-        f'<link rel="icon" href="{root}favicon.svg?pin3" type="image/svg+xml">',
-        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?pin3">',
+        f'<link rel="icon" href="{root}favicon.svg?dots1" type="image/svg+xml">',
+        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?dots1">',
         f'<link rel="canonical" href="{address}">',
         f'<meta name="description" content="{html.escape(description)}">',
         # What a link to it shows when shared.
@@ -3106,7 +3106,7 @@ def public_page(path, title, body, built_at=None, description=None, data=None, s
     brand = PUBLIC_NAME.partition(" ")[0]
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
                        updated=built_at, links=links, indexable=True, said=said,
-                       marked={PUBLIC_NAME: f'{PIN_MARK}{html.escape(brand)}'},
+                       marked={PUBLIC_NAME: WORDMARK},
                        here=PAGE_NAMES.get(path, ""))
 
 
@@ -3369,8 +3369,8 @@ def site_page(path, title, description, said, body, styles=""):
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<title>{html.escape(title)}</title>\n<meta name="description" content="{html.escape(description)}">\n'
             f'<link rel="canonical" href="{address}">\n<link rel="icon" href="/favicon.ico" sizes="48x48">\n'
-            f'<link rel="icon" href="/favicon.svg?pin3" type="image/svg+xml">\n'
-            f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?pin3">\n'
+            f'<link rel="icon" href="/favicon.svg?dots1" type="image/svg+xml">\n'
+            f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?dots1">\n'
             f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Pushpin">\n'
             f'<meta property="og:title" content="{html.escape(title)}">\n<meta property="og:description" content="{html.escape(description)}">\n'
             f'<meta property="og:url" content="{address}">\n<meta property="og:image" content="{PUBLIC_SITE}share/home.png?pin">\n'
@@ -3381,11 +3381,11 @@ def site_page(path, title, description, said, body, styles=""):
             # so it's white, as a marked one is).
             '<style>' + shared.HEADER_CSS + PIN_CSS + CONTACT_CSS +
             '  .sites a, .sites a:visited { color: #fff; }\n'
-            '  .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }\n'
+            '  .sites .here { color: #fff; font-weight: 700; letter-spacing: -.01em; }\n'
             '  .sites .here::before { content: "/"; margin-right: .5em; color: #444; font-weight: 400; }\n'
             '  .prose { max-width: 34rem; color: #ccc; }\n'
             '  .prose p { margin: 0 0 1em; }\n' + styles + '</style>\n'
-            f'<main>\n<header><nav class="sites" aria-label="Sites"><a href="/">{PIN_MARK}Pushpin</a>{here}</nav></header>\n'
+            f'<main>\n<header><nav class="sites" aria-label="Sites"><a href="/">{WORDMARK}</a>{here}</nav></header>\n'
             f'<h1 class="tagline">{html.escape(said)}</h1>\n{body}</main>\n</html>\n')
 
 
@@ -4277,14 +4277,22 @@ PIN_CSS = """
   /* Wider than the newsfeed and the jobs board it shares its styles with: a row here carries a name, its times
      and its venue on one line, and the film and what's announced sit side by side over them. */
   main { max-width: 52rem; }
+  /* The site's name a size up from the newsfeed's, and the page that's open beside it ("/ Film") with it; the
+     header closer to the top of the page and to what's under it, the name saying enough to need less room. */
+  body { padding-top: 1.5rem; }
+  header { margin-bottom: 1.25rem; }
+  .sites a, .sites a:visited, .sites .here { font-size: 1.35rem; }
   /* The header's words on one baseline: the name, the line beside it and when it was updated are three sizes, and
      centered on each other their bottoms don't meet. */
   header { align-items: baseline; }
   /* On a phone, a narrower gutter than the newsfeed's: every row here hangs its words after its kind's mark, which
      is a gutter of its own on the left, so the page's needn't be as wide. */
   @media (max-width: 34rem) { body { padding-left: 1rem; padding-right: 1rem; } }
-  .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
-  h1.tagline { margin: -1rem 0 1.6rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+  /* The name's i, its dot a pin's head (WORDMARK): a quarter of an em across where a dot is a fifth, in amber. */
+  .wordmark .i { position: relative; }
+  .wordmark .tittle { position: absolute; left: 50%; top: .05em; width: .26em; height: .26em; margin-left: -.13em;
+                      border-radius: 50%; background: #fbbf24; }
+  h1.tagline { margin: -.5rem 0 1.6rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
   /* The home page's, in the header after the site's name, on its line: left with the name, not pushed off to the
      right with the time it was updated. Where the page shows a kind in place, the header names that ("/ Film")
      and this goes, since the two say different things. On a phone there isn't the width, so it has a line of its
@@ -4335,7 +4343,7 @@ PIN_CSS = """
 
 PUBLIC_CSS = """
   /* The page it is, after the name: "/ Film", in white. */
-  .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
+  .sites .here { color: #fff; font-weight: 700; letter-spacing: -.01em; }
   .sites .here::before { content: "/"; margin-right: .5em; color: #444; font-weight: 400; }
   /* Each whole, never broken over a line: on the narrowest phones the page's name goes under the site's. On a
      phone, a page with its name there leaves out when it was updated, which the home page still says. */
