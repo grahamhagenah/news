@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import threading
 import urllib.error
@@ -2324,13 +2325,20 @@ def clock(moment):
 
 
 # Each row's mark for its category, in the category's color: two beamed eighth notes for music, a frame of
-# film with sprocket holes down both sides for film, a framed picture of hills and a sun for art & talks. Drawn
-# once in the page; rows point to the drawing.
+# film with sprocket holes down both sides for film, a paintbrush for art & talks. Drawn once in the page;
+# rows point to the drawing.
 ICON_DRAWINGS = {
     # A notice's mark: a circle with an exclamation point.
     "notice": '<circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v3.5"/><circle cx="8" cy="11" r=".5" fill="currentColor"/>',
-    "art": '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M4.5 11l2.75-3 2 2 1.25-1.25 1.5 2.25"/>'
-           '<circle cx="10.5" cy="5.75" r="1" fill="currentColor"/>',
+    # Tabler Icons' "brush" (MIT license, version 3.50.0), its paths verbatim. Tabler draws on a 24-unit square
+    # at a stroke of 2, so it's scaled into these 16-unit ones, at the stroke the others here are drawn with.
+    # Chosen over a framed picture, which read as a photograph at a row's size, and a museum's columns, a bank.
+    "art": ('<g transform="scale(.6667)" stroke-width="2.25">'
+            '<path d="M3 21v-4a4 4 0 1 1 4 4h-4"/>'
+            '<path d="M21 3a16 16 0 0 0 -12.8 10.2"/>'
+            '<path d="M21 3a16 16 0 0 1 -10.2 12.8"/>'
+            '<path d="M10.6 9a9 9 0 0 1 4.4 4.4"/>'
+            '</g>'),
     "music": '<path d="M5.5 12.5V4l8-2v8.5"/><circle cx="3.75" cy="12.5" r="1.75" fill="currentColor"/>'
              '<circle cx="11.75" cy="10.5" r="1.75" fill="currentColor"/>',
     "film": '<rect x="2" y="2" width="12" height="12" rx="1.5"/>'
@@ -2445,7 +2453,6 @@ def listing_id(day, title, venue=""):
 # Just announced: concerts and talks first seen in the last week. Not films, whose theaters add showtimes
 # every day, which would crowd out everything else.
 NEW_KINDS = {"music", "art"}
-FRESH_SHOWN = 8  # How many the home page's banner picks its one from, a different one each visit.
 
 
 def newly_added(events, built_at):
@@ -2455,22 +2462,142 @@ def newly_added(events, built_at):
     return sorted(fresh, key=lambda item: (item["added"], [-part for part in item["date"].timetuple()[:3]]), reverse=True)
 
 
-def fresh_banner(events, built_at):
-    """The home page's Just announced line: one of the newest few, and the way to the rest. The page's script
-    picks which, so a different one shows each visit; without it, the first. The line stays when nothing's
-    turned up this week, saying so."""
-    fresh = [{"id": listing_id(item["date"], item["title"], item["venue"])[0], "title": item["title"],
-              "venue": item["venue"], "when": f"{item['date']:%b} {item['date'].day}"}
-             for item in newly_added(events, built_at)[:FRESH_SHOWN]]
+# Over the listings on the home page: the week's biggest film, and the newest few things announced. Between
+# them they say what a reader who has just arrived wants first — the thing everyone's showing, and the things
+# nobody knew about yesterday. The film's poster is the only picture the site shows; what's announced is
+# words, since a band's own photograph is as often a blur as a picture of anything.
+BIGGEST_DAYS = 7  # How far ahead to look for the biggest film.
+# How many theaters make a film the week's biggest rather than one that's merely on. Counted against the
+# city's own theaters, because a film at four of them means something different in Boston, which has
+# thirteen, from Western Mass, which has seven: a third of them, and never fewer than BIGGEST_FLOOR. Where
+# no film reaches it there's no biggest film that week, and none is shown.
+BIGGEST_SHARE = 3
+BIGGEST_FLOOR = 3
+FRESH_SHOWN = 3  # How many of the newest announcements are listed.
+# Whose picture to use, where theaters differ: a film's own art before a theater's photograph of its lobby.
+# The first of these the film has, else the first picture any theater gave it.
+PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
+                 "indy-systems.imgix.net", "img.vwassets.com", "ticketing.phoenixmovies.net")
+
+_shapes = {}
+
+
+def picture_shape(url):
+    """How wide and tall a picture is, from the first bytes of it rather than the whole: theaters give both
+    posters (two by three) and stills (sixteen by nine) for the same film, and a box of the wrong shape crops
+    the title off a poster. None when it can't be read, which is taken for a still."""
+    if url in _shapes:
+        return _shapes[url]
+    shape = None
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Range": "bytes=0-16383"})
+        with urllib.request.urlopen(request, timeout=10) as answer:
+            data = answer.read(16384)
+    except Exception:
+        data = b""
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR":
+        shape = struct.unpack(">II", data[16:24])
+    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP" and data[12:16] == b"VP8X":
+        shape = (int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1)
+    elif data[:2] == b"\xff\xd8":  # JPEG: the size is in the frame header, past however many come first.
+        at = 2
+        while at + 9 < len(data):
+            if data[at] != 0xFF:
+                at += 1
+                continue
+            marker = data[at + 1]
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                height, width = struct.unpack(">HH", data[at + 5:at + 9])
+                shape = (width, height)
+                break
+            if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+                at += 2
+                continue
+            at += 2 + struct.unpack(">H", data[at + 2:at + 4])[0]
+    _shapes[url] = shape
+    return shape
+
+
+def biggest_picture(showings):
+    """The picture to show a film by, out of the ones its theaters gave it."""
+    pictures = [item["image"] for item in showings if item.get("image")]
+    for host in PICTURE_HOSTS:
+        for picture in pictures:
+            if f"//{host}/" in picture:
+                return picture
+    return pictures[0] if pictures else ""
+
+
+def biggest_film(events, built_at, before=""):
+    """The film the most of the city's theaters have taken in the week ahead, as the day it's at the most of
+    them on — or before, the one the last build showed, for as long as it's still on and nothing has passed
+    it. A film that ties it isn't bigger, so it doesn't take its place: what's at the top of the page changes
+    when something new is bigger, not when two are level and the order they were read in shifts. Theaters
+    are counted a day at a time, so the number is true of a single evening rather than a week's worth of
+    them added up. None where no film reaches the city's bar, which is most weeks somewhere small."""
+    here = built_at.astimezone(PUBLIC_ZONE).date()
+    screens = {item["venue"] for item in events if item["category"] == "film"}
+    least = max(BIGGEST_FLOOR, round(len(screens) / BIGGEST_SHARE))
+    days = {}
+    for item in events:
+        if item["category"] == "film" and here <= item["date"] <= here + timedelta(days=BIGGEST_DAYS):
+            days.setdefault((item["date"], film_key(item["title"])), []).append(item)
+    best = {}
+    for (day, key), showings in days.items():
+        theaters = len({item["venue"] for item in showings})
+        # A film once, as the day it's at the most theaters on, the soonest of them where that's a tie.
+        if theaters >= least and (key not in best or (theaters, -day.toordinal()) > (best[key][0], -best[key][1].toordinal())):
+            best[key] = (theaters, day, showings)
+    if not best:
+        return None
+    key = min(best, key=lambda found: (-best[found][0], best[found][1]))
+    if before in best and best[before][0] >= best[key][0]:
+        key = before
+    theaters, day, showings = best[key]
+    # The same name the row below uses, chosen the same way, so the two read as the one film.
+    title = min((item["title"] for item in showings), key=lambda name: (len(name), sum(map(str.isupper, name))))
+    # No first showing: the page's script moves a row's on as each one passes, and one written into the page
+    # when it was built would be hours out of date by the evening. The row below has the times.
+    facts = [f"{theaters} theaters", "Today" if day == here else f"{day:%a, %b} {day.day}"]
+    picture = lighter(biggest_picture(showings))
+    width, height = (picture_shape(picture) if picture else None) or (16, 9)
+    said = clip(next((item["about"] for item in showings if item.get("about")), []), 150, most=1)
+    return {"key": key, "id": listing_id(day, title)[0], "title": title, "facts": " · ".join(facts),
+            "about": said[0] if said else "", "image": picture, "standing": height > width * 1.2}
+
+
+def render_lead(events, built_at, before=""):
+    """What's over the listings on the home page: the week's biggest film beside the newest few announced,
+    each a way to its row in the list below. Either on its own where there's only it; nothing where there's
+    neither. Nothing moves: the film is the biggest there is until something bigger turns up, and what's
+    announced is the newest, in the order it was."""
+    film, fresh = biggest_film(events, built_at, before), newly_added(events, built_at)[:FRESH_SHOWN]
+    parts = []
+    if film:
+        box = (76, 114) if film["standing"] else (160, 90)
+        picture = (f'<img class="biggest-picture" src="{html.escape(film["image"])}" alt="" width="{box[0]}" '
+                   f'height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if film["image"] else ""
+        parts.append(
+            f'<a class="biggest{" standing" if film["standing"] else ""}" '
+            f'href="{PUBLIC_ROOT}?{urlencode({"event": film["id"]})}">{picture}'
+            f'<span class="biggest-said"><span class="lead-tag biggest-tag">{icon("film", decorative=True)}'
+            f'Major release</span><b class="biggest-title">{html.escape(film["title"])}</b>'
+            f'<span class="biggest-facts">{html.escape(film["facts"])}</span>'
+            + (f'<span class="biggest-about">{html.escape(film["about"])}</span>' if film["about"] else "")
+            + '</span></a>')
     if fresh:
-        first = fresh[0]
-        one = (f'<a class="fresh-one" href="{PUBLIC_ROOT}?{urlencode({"event": first["id"]})}">'
-               f'<b>{html.escape(first["title"])}</b> at {html.escape(first["venue"])} · {html.escape(first["when"])}</a>')
-    else:
-        one = '<span class="fresh-one fresh-none">No new events this week</span>'
-    banner = (f'<p class="fresh"><span class="fresh-tag">{SPARK_MARK}Just announced</span>{one}'
-              f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></p>\n')
-    return banner, json.dumps(fresh, ensure_ascii=False)
+        rows = "".join(
+            f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}">'
+            f'<b>{html.escape(item["title"])}</b>'
+            f'<span>{html.escape(item["venue"])} · {item["date"]:%b} {item["date"].day}</span></a></li>'
+            for item in fresh)
+        parts.append(
+            f'<div class="fresh"><div class="fresh-head"><span class="lead-tag fresh-tag">{SPARK_MARK}Just announced</span>'
+            f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></div>'
+            f'<ul class="fresh-list">{rows}</ul></div>')
+    if not parts:
+        return "", ""
+    return f'<div class="lead{" one" if len(parts) == 1 else ""}">\n' + "\n".join(parts) + "\n</div>\n", film["key"] if film else ""
 
 
 def render_row(item):
@@ -2517,11 +2644,12 @@ def render_combined(item):
     )
 
 
-def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False, added=False):
+def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False, added=False, biggest=""):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
     page (music/, film/, talks/), holding only that kind's events, or with weekend (0 for this one, 1 for the
     next), only Friday to Sunday's, or tonight, only today's (and tomorrow's, for after midnight), or added,
-    what's turned up in the last week, by the day it did."""
+    what's turned up in the last week, by the day it did. biggest is the film the home page led with last time,
+    which it goes on leading with until a bigger one turns up."""
     root = PUBLIC_ROOT
     if public:
         shown = {source["name"] for source in sources if source.get("public", True)}
@@ -2596,7 +2724,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     places = {item["venue"]: written(VENUE_ADDRESSES[item["venue"]]) for item in events if item["venue"] in VENUE_ADDRESSES}
     # Just announced, a line over the home page's listings: one of the week's newest, which its script picks.
     home = public and not (category or tonight or added or weekend is not None)
-    banner, fresh = fresh_banner(events, built_at) if home else ("", "[]")
+    banner = render_lead(events, built_at, biggest)[0] if home else ""
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
     path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else PUBLIC_TONIGHT[0] if tonight else
             PUBLIC_NEW[0] if added else f"{PUBLIC_PAGES[category][0]}/" if category else "")
@@ -2635,15 +2763,18 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
-        + f"<script>const FRESH = {fresh}, PLACES = {json.dumps(places, ensure_ascii=False)}, "
+        + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)}, "
           f"SHARE_URL = {json.dumps(PUBLIC_URL)}, ZONE = {json.dumps(str(PUBLIC_ZONE))};</script>\n"
         + f"<script>{INDEX_JS}</script>"
     )
     if public:
         # What this page is, over its listings: the kind's, the weekend's, tonight's or Just announced's own
         # words; the home page's, what the site is, in short (the foot of every page says it in full).
-        said = f'<h1 class="tagline">{html.escape(tagline if path else PUBLIC_SHORT)}</h1>\n'
-        return public_page(path, title, said + banner + body, built_at, description=description,
+        # The home page's is short enough to go in the header, beside the site's name, which leaves the lead and
+        # the listings a line nearer the top; every other page's is a sentence, and has a line of its own.
+        said = f'<h1 class="tagline">{html.escape(tagline if path else PUBLIC_SHORT)}</h1>'
+        beside, said = (said, "") if not path else ("", said + "\n")
+        return public_page(path, title, said + banner + body, built_at, description=description, said=beside,
                            data={"@context": "https://schema.org", "@graph": [website_data()] + [event_data(item) for item in events]})
     return page("Events", body, built_at)
 
@@ -2741,10 +2872,10 @@ PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, slug in KIND_PAGES.items()}
 SHARE_CARDS = set(KIND_PAGES.values()) | {"tonight", "weekend"}
 
 
-def public_page(path, title, body, built_at=None, description=None, data=None):
+def public_page(path, title, body, built_at=None, description=None, data=None, said=""):
     """A page of the public site, at path ("", "about/", "film/"): its name, the way home, in the header,
     About and Contact in the footer; search engines welcome, told what the page is, where it lives, and (the
-    listings) its events."""
+    listings) its events. said is its line about itself, where that goes in the header beside its name."""
     root = PUBLIC_ROOT
     description = description or PUBLIC_DESCRIPTION
     links = [(PUBLIC_NAME, root, path == "")]
@@ -2775,10 +2906,13 @@ def public_page(path, title, body, built_at=None, description=None, data=None):
         '<meta name="twitter:card" content="summary_large_image">',
         f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>',
     ] + [f'<script type="application/ld+json">{json.dumps(data, ensure_ascii=False, separators=(",", ":"))}</script>'] * bool(data))
-    brand, _, city = PUBLIC_NAME.partition(" ")
+    # Just Pushpin in the header: the line under it names the place on every page ("Concerts, films, and talks
+    # around Boston"), and saying it twice in two lines is once more than it needs. The page's title, what a
+    # tab or a search result shows, keeps the city.
+    brand = PUBLIC_NAME.partition(" ")[0]
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
-                       updated=built_at, links=links, indexable=True,
-                       marked={PUBLIC_NAME: f'{PIN_MARK}{html.escape(brand)} <span class="city">{html.escape(city)}</span>'},
+                       updated=built_at, links=links, indexable=True, said=said,
+                       marked={PUBLIC_NAME: f'{PIN_MARK}{html.escape(brand)}'},
                        here=PAGE_NAMES.get(path, ""))
 
 
@@ -2867,7 +3001,7 @@ def city_texts(slug, name, place, around, *, state="Massachusetts", zone="Americ
         # What's turned up in the last week, newest first.
         ("new/", f"Just announced in {place} · {name}",
          f"Concerts and talks just added around {around}, from select venues.",
-         "Concerts and talks added in the last week."),
+         f"Concerts and talks added around {around} in the last week."),
         # The weekends, Friday to Sunday: this one (the one it is, or from Monday to Thursday the one coming)
         # and the next. Each: its address, what it's called, its title and description.
         [("weekend/", "This weekend", f"Things to do in {place} this weekend · {name}",
@@ -3415,15 +3549,15 @@ INDEX_JS = """
   // talks/) its links go to; its home page, which has every event, shows one in place instead, and puts its
   // page's address in the address bar. Here, the choice is remembered in this browser. The search keeps the events
   // with every word typed somewhere in their name, place or description (accents aside), and is kept in the
-  // address (?q=). A hundred of what's shown come first, however many days that takes; Load more, at the
-  // bottom, adds the next hundred under them, and ?page=2 keeps how many are showing, for Back and reloading.
-  // A weekend's page shows all of it.
+  // address (?q=). About a hundred of what's shown come first, in whole days, so the list never stops partway
+  // through one; Load more, at the bottom, adds the next hundred's days under them, and ?page=2 keeps how many
+  // are showing, for Back and reloading. A weekend's page shows all of it.
   const EVENTS_PER_PAGE = document.querySelector(".filter").hasAttribute("data-one-page") ? 100000 : 100; // A weekend, whole.
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
   const pager = document.querySelector(".pager");
   const more = pager.querySelector(".more");
-  let loaded = 1, shownNow = [];
+  let loaded = 1, shownNow = [], pageOfNow = new Map();
   const empty = document.querySelector(".empty");
   empty.dataset.none = empty.textContent;  // What it says with nothing narrowing it, as the page wrote it.
   const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -3476,17 +3610,34 @@ INDEX_JS = """
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
       && (!venue.value || li.dataset.sources.split("|").includes(venue.value))
       && words.every(word => searchable.get(li).includes(word)));
-    const pages = Math.max(1, Math.ceil(rows.length / EVENTS_PER_PAGE));
+    // A new page only where a day begins, when that day wouldn't fit in what's left of the hundred: it starts the
+    // next page instead of being cut in two. A day of more than a hundred has a page to itself.
+    const dayOf = new Map(rows.map(li => [li, li.closest(".day")]));
+    const sizes = new Map();
+    for (const day of dayOf.values()) sizes.set(day, (sizes.get(day) || 0) + 1);
+    const pageOf = new Map();
+    let pages = 1, onThis = 0, lastDay = null;
+    for (const li of rows) {
+      const day = dayOf.get(li);
+      if (day !== lastDay) {
+        if (onThis && onThis + sizes.get(day) > EVENTS_PER_PAGE) { pages += 1; onThis = 0; }
+        lastDay = day;
+      }
+      onThis += 1;
+      pageOf.set(li, pages);
+    }
     const page = Math.min(pages, Math.max(1, parseInt(new URLSearchParams(location.search).get("page")) || 1));
-    const onPage = new Set(rows.slice(0, page * EVENTS_PER_PAGE));
     const passing = new Set(rows);
     for (const day of document.querySelectorAll(".day")) {
       const lis = day.querySelectorAll(":scope > ul > li");
-      for (const li of lis) { li.hidden = !onPage.has(li); li.classList.toggle("passes", passing.has(li)); }
+      // Everything loaded so far shows: this page's days and every page's before it. What the kind, the venue or
+      // the search leaves out has no page, and stays hidden.
+      for (const li of lis) { li.hidden = !(pageOf.get(li) <= page); li.classList.toggle("passes", passing.has(li)); }
       day.hidden = ![...lis].some(li => !li.hidden);
     }
     loaded = page;
     shownNow = rows;
+    pageOfNow = pageOf;
     pager.hidden = page >= pages;
     // With a venue or a search narrowing it, what the page says of those; with neither, what it says of itself.
     const at = venue.value ? ` at ${venue.value}` : "";
@@ -3515,7 +3666,7 @@ INDEX_JS = """
   }
   showEvents();
   more.addEventListener("click", () => {
-    const first = shownNow[loaded * EVENTS_PER_PAGE];
+    const first = shownNow.find(li => pageOfNow.get(li) === loaded + 1);  // The next page's first day's first.
     history.replaceState(null, "", address(loaded + 1));
     showEvents();
     // With nothing left to load the button goes, so the reader carries on from the first of the new events.
@@ -3818,42 +3969,9 @@ INDEX_JS = """
     pressedIn = false;
     if (event.target === view && !began) closeEvent();
   });
-  // Just announced, at the top of the home page: the week's newest, turning over one at a time so a visit
-  // shows several, and opening its view here rather than loading the page again. It starts anywhere in them,
-  // so two visits don't run the same order.
-  {
-    const banner = document.querySelector(".fresh-one");
-    if (banner && FRESH.length > 1) {
-      const show = pick => {
-        banner.href = new URL(SHARE_URL).pathname + "?event=" + encodeURIComponent(pick.id);
-        banner.replaceChildren(Object.assign(document.createElement("b"), { textContent: pick.title }),
-                               ` at ${pick.venue} · ${pick.when}`);
-      };
-      let at = Math.floor(Math.random() * FRESH.length);
-      show(FRESH[at]);
-      // Asked for less motion, it stays as it was: the one it opened on.
-      if (!still.matches) {
-        // Held while it's under the pointer or has the keyboard, so what's about to be clicked doesn't change
-        // under the hand; held too while the page is in the background, where nobody's reading it.
-        let held = false;
-        for (const [event, on] of [["pointerenter", true], ["pointerleave", false], ["focusin", true], ["focusout", false]]) {
-          banner.closest(".fresh").addEventListener(event, () => { held = on; });
-        }
-        // One turn: out over most of a second, the next one put up while nothing is showing, then back in.
-        // The swap is on a timer of its own rather than waiting on the fade, because a page in the background
-        // stops animating and a turn waiting there would never finish. However it's interrupted, the fade
-        // ends where it began, so the banner is never left faint.
-        setInterval(() => {
-          if (held || document.hidden) return;
-          banner.animate([{ opacity: 1 }, { opacity: 0, offset: .45 }, { opacity: 1 }],
-                         { duration: 1400, easing: "ease-in-out" });
-          setTimeout(() => show(FRESH[at = (at + 1) % FRESH.length]), 620);
-        }, 7000);
-      }
-    }
-  }
+  // The film and what's announced, over the list, open their view here rather than loading the page again.
   document.addEventListener("click", event => {
-    const link = event.target.closest(".fresh a[href*='?event=']");
+    const link = event.target.closest(".lead a[href*='?event=']");
     if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const li = rowWith(new URL(link.href, location.href).searchParams.get("event"));
     if (!li) return;
@@ -3949,14 +4067,50 @@ CONTACT_CSS = """
 
 # The pin before the site's name, and the line under the header: a city's pages and pushpin.city's own share them.
 PIN_CSS = """
+  /* Wider than the newsfeed and the jobs board it shares its styles with: a row here carries a name, its times
+     and its venue on one line, and the film and what's announced sit side by side over them. */
+  main { max-width: 52rem; }
+  /* The header's words on one baseline: the name, the line beside it and when it was updated are three sizes, and
+     centered on each other their bottoms don't meet. */
+  header { align-items: baseline; }
+  /* On a phone, a narrower gutter than the newsfeed's: every row here hangs its words after its kind's mark, which
+     is a gutter of its own on the left, so the page's needn't be as wide. */
+  @media (max-width: 34rem) { body { padding-left: 1rem; padding-right: 1rem; } }
   .sites .pin { width: 1.05em; height: 1.05em; margin-right: .3em; vertical-align: -.16em; }  /* In the name's own color. */
   h1.tagline { margin: -1rem 0 1.6rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
+  /* The home page's, in the header after the site's name, on its line: left with the name, not pushed off to the
+     right with the time it was updated. Where the page shows a kind in place, the header names that ("/ Film")
+     and this goes, since the two say different things. On a phone there isn't the width, so it has a line of its
+     own under them, as every other page's does. */
+  header h1.tagline { flex: 1 1 auto; min-width: 0; margin: 0; }  /* The header's own gap is room enough. */
+  header:has(.sites .here:not([hidden])) h1.tagline { display: none; }
+  @media (max-width: 34rem) {
+    header:has(h1.tagline) { flex-wrap: wrap; row-gap: .9rem; }
+    header h1.tagline { order: 3; flex-basis: 100%; margin: 0; }
+  }
   h1.tagline + .filter { margin-top: 0; }  /* The filter's own pull-up would leave the line on top of it. */
+  /* The filter belongs to the listings it narrows, so it sits nearer them than what's above it: a full gap after
+     the film and what's announced, and under it, the room the day's heading's own margin leaves less a
+     pull-up — a negative margin, which comes off whichever day is the first one showing. */
+  .lead + .filter { margin-top: 0; }
+  .filter { margin-bottom: -1.3rem; }
+  /* On a phone the filter is two lines, and the second, the venue and the search, wants a little more under it
+     than one line of kinds does, to read as the end of the filter rather than the start of the day. */
+  @media (max-width: 34rem) { .filter { margin-bottom: -1.05rem; } }
+  /* What the page says when nothing's left to show takes that pull-up too, with no day between them; it gets back
+     the room a day's heading would have had. */
+  .filter ~ .empty { margin-top: 2.6rem; }
+  /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
+     magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, and the line under it
+     only while it's being typed in, the one place it means "type here". */
+  .search { padding-left: 1.3em; border-bottom-color: transparent;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0'/%3E%3Cpath d='M21 21l-6 -6'/%3E%3C/svg%3E") no-repeat left center / .95em; }
+  .search::placeholder { color: #666; }
+  .search:hover::placeholder { color: #999; }
+  .search:focus { border-bottom-color: #444; }
 """
 
 PUBLIC_CSS = """
-  /* Its name in the header: Pushpin as the site's, the city after it lighter. */
-  .sites .city { font-weight: 400; }
   /* The page it is, after the name: "/ Film", in white. */
   .sites .here { color: #fff; font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
   .sites .here::before { content: "/"; margin-right: .5em; color: #444; font-weight: 400; }
@@ -4061,29 +4215,74 @@ CSS = """
   .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .sold-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
-  /* Just announced, a line above the list on the home page: one of the newest, and the way to the rest. */
-  .fresh { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 2rem; padding: .5rem 0; font-size: .85rem;
-           border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
-  .fresh + .filter { margin-top: 0; }
+  /* Over the listings on the home page: the week's biggest film beside the newest few announced. Ruled off
+     above and below like the days under it, not boxed — nothing else on the site is in a box — with a rule
+     between the two. The poster is what catches the eye; the words stay the size of the rest of the page. */
+  .lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin: 0 0 2rem;
+          border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
+  .lead.one { grid-template-columns: minmax(0, 1fr); }
+  .lead > * { padding: 1rem 0; }
+  .lead > * + * { padding-left: 1.5rem; border-left: 1px solid #1c1c1c; }
+  .lead > :first-child:not(:only-child) { padding-right: 1.5rem; }
+  .lead-tag { display: block; color: #6e6e6e; font-size: .72rem; font-weight: 500; letter-spacing: .07em;
+              text-transform: uppercase; }
+  .lead-tag .icon, .lead-tag .spark-mark { width: 12px; height: 12px; margin-right: .4em; vertical-align: -1px; }
+  .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
+  /* The film's words start at the top beside its poster, so its heading is level with Just announced's. */
+  .biggest { display: flex; align-items: flex-start; gap: 1rem; color: inherit; }
+  .biggest:hover { text-decoration: none; }
+  .biggest-picture { flex: none; width: 160px; height: 90px; border-radius: 4px; object-fit: cover; background: #161616; }
+  /* A poster, which stands on its end, rather than a still from the film. */
+  .biggest.standing .biggest-picture { width: 76px; height: 114px; }
+  .biggest-said { display: grid; gap: .2rem; min-width: 0; }
+  /* Each heading in a color of its own: the film's amber, and for what's announced — concerts and talks, most
+     of it music — music's violet. */
+  .biggest-tag { color: var(--film); }
+  .fresh-tag { color: var(--music); }
+  .biggest-title { color: #fff; font-size: 1.1rem; font-weight: 500; line-height: 1.25; }
+  .biggest:hover .biggest-title { text-decoration: underline; }
+  .biggest-facts { color: #999; font-size: .85rem; }
+  .biggest-about { overflow: hidden; color: #6e6e6e; font-size: .85rem; line-height: 1.45;
+                   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  /* Just announced: its few a line each, the way the listings under it are — the name, then where and when in
+     grey after it. Where a line runs out, where and when are what's cut short, so the name always reads. The
+     way to the rest goes at the end of the heading, as it did when this was a line of its own. */
+  .fresh { min-width: 0; }
+  .fresh-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  /* No taller than the heading beside it, which would set it lower than the film's opposite. */
+  .fresh-more { flex: none; color: #888; font-size: .8rem; line-height: 1; }
+  .fresh-more:hover { color: #fff; text-decoration: none; }
+  .fresh-list { margin: .45rem 0 0; padding: 0; list-style: none; }
+  .fresh-list li + li { margin-top: .3rem; }
+  .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; white-space: nowrap; }
+  .fresh-list b, .fresh-list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* The name doesn't give up any room to where and when: sharing the squeeze at all, even a fraction of a
+     pixel of it, is enough for its last word to become an ellipsis. Only a name longer than the whole line is
+     cut short, and then where and when have none. */
+  .fresh-list b { flex: none; max-width: 100%; color: #fff; font-size: .95rem; font-weight: 500; }
+  .fresh-list span { flex: 0 1 auto; color: #999; font-size: .8rem; }
+  .fresh-list a:hover { text-decoration: none; }
+  .fresh-list a:hover b { text-decoration: underline; }
+  @media (max-width: 46rem) {
+    /* Side by side they'd each be too narrow for a name before the screen is a phone's: one over the other,
+       the rule between them lying down. */
+    .lead { grid-template-columns: minmax(0, 1fr); }
+    .lead > * + * { padding-left: 0; border-left: 0; border-top: 1px solid #1c1c1c; }
+    .lead > :first-child:not(:only-child) { padding-right: 0; }
+  }
   @media (max-width: 34rem) {
     /* A thumb's targets: the kinds a size up, with a little more to press above and below each than shows, and
-       the venue menu and search set further off under them, so a press meant for one doesn't land on the other. */
+       the venue menu and search on the line under them — near enough that the two lines read as the one filter,
+       far enough (eight pixels or so between what each answers to) that a press meant for one doesn't land on
+       the other. The filter as a whole a little nearer the listings than the film and what's announced above it,
+       and the lead's room under it a little less than on a wide screen, where there's width to spare instead. */
     .filter button, .filter a { font-size: 1.05rem; padding: .2rem 0; }
-    .finders { margin-top: 1rem; }
-  }
-  .fresh-tag { flex: none; color: #6e6e6e; font-size: .72rem; font-weight: 400; letter-spacing: .07em; text-transform: uppercase; }
-  .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
-  .fresh-one { min-width: 0; overflow: hidden; color: #999; text-overflow: ellipsis; white-space: nowrap; }
-  .fresh-one b { color: #fff; font-weight: 500; }
-  .fresh-none { color: #666; }
-  .fresh-more { flex: none; margin-left: auto; color: #888; }
-  .fresh-more:hover, .fresh-one:hover { color: #fff; text-decoration: none; }
-  .fresh-one:hover b { text-decoration: underline; }
-  @media (max-width: 34rem) {
-    /* The words over the listing and the way to the rest, which share the line under them. */
-    .fresh { display: grid; grid-template-columns: 1fr auto; gap: .1rem .6rem; }
-    .fresh-tag { grid-column: 1 / -1; }
-    .fresh-more { margin-left: 0; }
+    .finders { margin-top: .15rem; }
+    .lead { margin-bottom: 1.6rem; }
+    /* A still the width of the page over the words; a poster beside them, since the width of the page it would
+       be half the screen tall. */
+    .biggest:not(.standing) { flex-direction: column; align-items: stretch; }
+    .biggest:not(.standing) .biggest-picture { width: 100%; height: auto; aspect-ratio: 16 / 9; }
   }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
   .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }
@@ -4102,8 +4301,16 @@ CSS = """
   }
   /* A narrow window with a pointer has both: the band's room at the edge and the icon's slot after it. The
      band's padding would otherwise stand in for the slot, and the icon, still at the edge, sit on the name. */
+  /* On a phone, each row's mark in a slot a size smaller than the newsfeed's, with less room after it: a row's
+     words start that much nearer the edge and wrap that much less, and the mark, in its kind's color, still reads
+     at twelve pixels. Set by the middle of the letters, as the slot it replaces was. */
+  @media (max-width: 34rem) {
+    .day > ul > li.row { padding-left: calc(12px + .5em); }
+    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
+      width: 12px; height: 12px; top: calc(.4rem + .72em - 6px); }
+  }
   @media (hover: hover) and (pointer: fine) and (max-width: 34rem) {
-    .day > ul > li.row { padding-left: calc(.6rem + 14px + .7em); }
+    .day > ul > li.row { padding-left: calc(.6rem + 12px + .5em); }
     .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { left: .6rem; }
   }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -4402,15 +4609,26 @@ def main():
     # left of it is the listings this build keeps for the next one to fall back on, which stays at the address
     # every build looks for it at (LISTINGS_URL), and a way on to the page that replaced it.
     (OUT_DIR / "index.html").write_text(moved_on(f"{PUBLIC_SITE}boston/"))
+    # The film each city's home page leads with, which the next build keeps until a bigger one turns up. Out of
+    # its public listings, as the page has them.
+    leading = {}
+    for city in CITIES:
+        use_city(city)
+        mine, theirs, *_ = by_city(city, events, sources, failed, stale)
+        public = {source["name"] for source in theirs if source.get("public", True)}
+        film = biggest_film([item for item in mine if item["source"] in public], built_at,
+                            (previous.get("biggest") or {}).get(city.slug, ""))
+        leading[city.slug] = film["key"] if film else ""
+    use_city(BOSTON_CITY)
     record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at),
-              "first_seen": first_seen}
+              "first_seen": first_seen, "biggest": leading}
     (OUT_DIR / "listings.json").write_text(json.dumps(record, ensure_ascii=False))
     print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/listings.json, and index.html pointing at {PUBLIC_SITE}boston/")
 
     # Each city's public site, from the same listings; then the site's own root.
     for city in CITIES:
         use_city(city)
-        write_city(city, *by_city(city, events, sources, failed, stale), built_at)
+        write_city(city, *by_city(city, events, sources, failed, stale), built_at, leading[city.slug])
     use_city(BOSTON_CITY)
     shutil.copytree(ROOT / "pushpin", PUBLIC_DIR, dirs_exist_ok=True)
     # Anything a service wants to find at the site's root to know the site is ours: Google Search Console's
@@ -4451,13 +4669,14 @@ def by_city(city, events, sources, failed, stale):
             [name for name in failed if name in names], [(name, fetched) for name, fetched in stale if name in names])
 
 
-def write_city(city, events, sources, failed, stale, built_at):
-    """A city's public site, in its folder (CITY_DIR), with use_city() pointing the PUBLIC_ names at it."""
+def write_city(city, events, sources, failed, stale, built_at, biggest=""):
+    """A city's public site, in its folder (CITY_DIR), with use_city() pointing the PUBLIC_ names at it; its
+    home page led by biggest, where that's still the biggest film on."""
     CITY_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", CITY_DIR, dirs_exist_ok=True)
     shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
     shutil.copytree(ROOT / "share" / city.slug, CITY_DIR / "share", dirs_exist_ok=True)
-    (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True))
+    (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, biggest=biggest))
     (CITY_DIR / "about").mkdir(exist_ok=True)
     (CITY_DIR / "about" / "index.html").write_text(render_about(sources, built_at, events))
     # Its own contact page, before the site had one for all its cities, on to that.

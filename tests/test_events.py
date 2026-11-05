@@ -590,7 +590,10 @@ class Cities(unittest.TestCase):
         self.assertIn("the Pioneer Valley and the Berkshires", page)
         self.assertIn('href="/westernma/film/"', page)
         self.assertIn('<a href="/">All cities</a>', page)
-        self.assertIn('<span class="city">Western Mass</span>', page)
+        # Just Pushpin in the header; the line under it says where.
+        self.assertIn('</svg>Pushpin</a>', page)
+        self.assertNotIn('<span class="city">', page)
+        self.assertIn('<h1 class="tagline">Concerts, films, and talks around Western Mass.</h1>', page)
         about = build.render_about([images], datetime(2026, 9, 15, tzinfo=timezone.utc))
         self.assertIn("Who makes this?", about)
         self.assertIn("I grew up in Western Mass", about)
@@ -832,15 +835,19 @@ class JustAnnounced(unittest.TestCase):
         found = build.newly_added([older, fresh, film, soonest], self.built)
         self.assertEqual([item["title"] for item in found], ["Sooner", "A show"], "this week's, soonest first; films stay out")
 
-    def test_the_banner_and_the_page(self):
+    def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
-        banner, fresh = build.fresh_banner(events, self.built)
-        self.assertIn(f'<a class="fresh-one" href="{R}?event=2026-09-20-show-0-the-sinclair"><b>Show 0</b> at The Sinclair · Sep 20</a>', banner)
-        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a>', banner)
-        self.assertEqual(len(json.loads(fresh)), build.FRESH_SHOWN, "the few its script picks from")
-        quiet, none = build.fresh_banner([dict(self.listing(20), added="2026-09-01")], self.built)
-        self.assertIn('<span class="fresh-one fresh-none">No new events this week</span>', quiet, "the line stays, saying so")
-        self.assertEqual(none, "[]")
+        lead, film = build.render_lead(events, self.built)
+        self.assertEqual(film, "", "no film among them")
+        self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
+        self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN, "the newest few, in words")
+        self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair"><b>Show 0</b>'
+                      f'<span>The Sinclair · Sep 20</span></a></li>', lead, "a line each: its name, then where and when")
+        self.assertNotIn("<img", lead, "no pictures of what's announced")
+        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><ul class="fresh-list">', lead,
+                      "the way to the rest in the heading's line, not one of its own")
+        # Nothing new and nothing big: nothing over the list at all.
+        self.assertEqual(build.render_lead([dict(self.listing(20), added="2026-09-01")], self.built), ("", ""))
         page = build.render_index(events, [self.venue], [], [], self.built, public=True, added=True)
         self.assertIn('<section class="day" data-added><h2><span class="date">Recently added</span></h2>', page)
         self.assertEqual(page.count('<section class="day"'), 1, "one list, newest first")
@@ -850,10 +857,8 @@ class JustAnnounced(unittest.TestCase):
         home = build.render_index([], [self.venue], [], [], self.built, public=True)
         self.assertIn('data-narrowed="Nothing coming up">Nothing coming up.</p>', home)
         home = build.render_index(events, [self.venue], [], [], self.built, public=True)
-        self.assertIn('<p class="fresh">', home)
-        self.assertIn("const FRESH = [{", home)
-        self.assertNotIn('<p class="fresh">', page, "not on the page itself")
-        self.assertIn("const FRESH = [],", page)
+        self.assertIn('<div class="fresh">', home)
+        self.assertNotIn('<div class="fresh">', page, "not on the page itself")
         self.assertIn(f'<li><a href="{R}new/">Just announced</a></li>', build.public_footer(""))
         self.assertIn(f"<loc>{build.PUBLIC_URL}new/</loc>", build.render_sitemap(self.built))
 
@@ -1123,6 +1128,129 @@ class Films(unittest.TestCase):
         self.assertEqual(combined[0]["title"], "Coyote vs. Acme", "the plainer spelling")
         self.assertEqual(combined[0]["times"], [time(14)], "from its earliest showing")
         self.assertEqual(len(rows), 2)
+
+
+class HomePage(unittest.TestCase):
+    """How the home page reads: its line beside the site's name, and each day one list in the order of the day."""
+
+    built = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
+
+    def page(self, **kinds):
+        venue = dict(source("aeg", "x", "music", "The Sinclair"), public=True)
+        day = date(2026, 9, 21)
+        events = [build.event(dict(venue, category="film"), "Matinee", day, time(12)),
+                  build.event(venue, "Late Show", day, time(21)),
+                  build.event(dict(venue, category="art"), "A Talk", day, time(18)),
+                  build.event(venue, "Early Show", day, time(19))]
+        return build.render_index(events, [venue], [], [], self.built, public=True, **kinds)
+
+    def test_a_day_is_one_list_in_the_order_of_the_day(self):
+        """Every kind together, a film beside a concert beside a talk, by when each is."""
+        page = self.page()
+        section = page[page.index('<section class="day"'):page.index("</section>")]
+        self.assertEqual(section.count("<ul"), 1)
+        order = [section.index(f">{name}<") for name in ("Matinee", "A Talk", "Early Show", "Late Show")]
+        self.assertEqual(order, sorted(order))
+
+    def test_the_home_pages_line_is_in_its_header_and_a_kind_pages_under_it(self):
+        home = self.page()
+        header = home[home.index("<header>"):home.index("</header>")]
+        self.assertIn('<h1 class="tagline">Concerts, films, and talks around Boston.</h1>', header, "beside the name")
+        self.assertEqual(home.count("<h1"), 1, "still the page's one heading")
+        film = self.page(category="film")
+        self.assertNotIn("<h1", film[film.index("<header>"):film.index("</header>")], "a sentence, on a line of its own")
+        self.assertIn('<h1 class="tagline">', film)
+
+
+class Biggest(unittest.TestCase):
+    """The week's biggest film: the one the most of a city's theaters have taken."""
+
+    built = datetime(2026, 9, 20, 16, 0, tzinfo=timezone.utc)
+
+    def setUp(self):
+        # A picture's shape is read from the picture itself, which a test doesn't go and fetch.
+        shape = mock.patch.object(build, "picture_shape", return_value=(780, 1170))
+        shape.start()
+        self.addCleanup(shape.stop)
+
+    def showing(self, title, venue, days_ahead=0, hour=19, image=""):
+        return {"title": title, "date": date(2026, 9, 20) + timedelta(days=days_ahead), "times": [time(hour)],
+                "link": "https://x", "detail": "", "venue": venue, "source": venue, "category": "film",
+                "about": [], "image": image}
+
+    def biggest(self, events, before=""):
+        film = build.biggest_film(events, self.built, before)
+        return film["title"] if film else None
+
+    def test_the_film_at_the_most_theaters(self):
+        events = [self.showing("Wide Release", f"Theater {n}") for n in range(5)]
+        events += [self.showing("Smaller", f"Theater {n}") for n in range(3)]
+        film = build.biggest_film(events, self.built)
+        self.assertEqual((film["title"], film["facts"]), ("Wide Release", "5 theaters · Today"))
+        self.assertEqual(film["id"], "2026-09-20-wide-release", "its row's address on the page")
+
+    def test_it_stays_until_something_is_bigger(self):
+        """What leads the page changes when a bigger film turns up, not when another draws level with it."""
+        level = [self.showing(title, f"Theater {n}") for title in ("Old Favorite", "Newcomer") for n in range(4)]
+        self.assertEqual(self.biggest(level, before="old favorite"), "Old Favorite", "a tie keeps it")
+        self.assertEqual(self.biggest(level, before="newcomer"), "Newcomer", "either way round")
+        bigger = level + [self.showing("Newcomer", "Theater 9")]
+        self.assertEqual(self.biggest(bigger, before="old favorite"), "Newcomer", "one more theater, and it's bigger")
+        gone = [self.showing("Newcomer", f"Theater {n}") for n in range(4)]
+        self.assertEqual(self.biggest(gone, before="old favorite"), "Newcomer", "and when it's no longer on")
+
+    def test_the_bar_is_a_share_of_the_citys_own_theaters(self):
+        """Three theaters is the week's biggest in a city with seven, and nothing much in one with twelve."""
+        film = [self.showing("A Film", f"Theater {n}") for n in range(3)]
+        small = film + [self.showing(f"Other {n}", f"Theater {n + 3}") for n in range(4)]
+        large = film + [self.showing(f"Other {n}", f"Theater {n + 3}") for n in range(9)]
+        self.assertEqual(self.biggest(small), "A Film")
+        self.assertIsNone(self.biggest(large), "twelve theaters want four")
+        # Never fewer than the floor, however few theaters a city has: two of five isn't everywhere.
+        tiny = [self.showing("A Film", f"Theater {n}") for n in range(2)] + [self.showing("B", f"Theater {n}") for n in (2, 3, 4)]
+        self.assertEqual(self.biggest(tiny), "B")
+
+    def test_the_theaters_are_counted_a_day_at_a_time(self):
+        """A film at two theaters a night all week isn't bigger than one at four tonight."""
+        spread = [self.showing("All Week", f"Theater {n}", days_ahead=day) for day in range(5) for n in range(2)]
+        tonight = [self.showing("Tonight Only", f"Big {n}") for n in range(4)]
+        self.assertEqual(self.biggest(spread + tonight), "Tonight Only")
+
+    def test_its_best_day_the_soonest_of_a_tie(self):
+        events = [self.showing("Wide Release", f"Theater {n}", days_ahead=day) for day in (0, 3) for n in range(4)]
+        self.assertEqual(build.biggest_film(events, self.built)["id"], "2026-09-20-wide-release")
+
+    def test_a_quiet_week_has_none(self):
+        self.assertIsNone(self.biggest([self.showing("A Revival", "Brattle"), self.showing("A Revival", "Coolidge Corner")]))
+        self.assertIsNone(self.biggest([]))
+
+    def test_a_films_own_art_beats_a_theaters_photograph(self):
+        events = [self.showing("Wide Release", "Coolidge Corner", image="https://coolidge.org/lobby.jpg"),
+                  self.showing("Wide Release", "Lexington Venue", image="https://image.tmdb.org/t/p/w780/a.jpg")]
+        events += [self.showing("Wide Release", f"Theater {n}") for n in range(2)]
+        self.assertEqual(build.biggest_film(events, self.built)["image"], "https://image.tmdb.org/t/p/w780/a.jpg")
+
+    def test_a_poster_and_a_still_each_get_their_own_shape(self):
+        events = [self.showing("Wide Release", f"Theater {n}", image="https://x/a.jpg") for n in range(4)]
+        standing, _ = build.render_lead(events, self.built)
+        self.assertIn('class="biggest standing"', standing)
+        self.assertIn('width="76" height="114"', standing)
+        with mock.patch.object(build, "picture_shape", return_value=(1920, 1080)):
+            lying, _ = build.render_lead(events, self.built)
+        self.assertIn('class="biggest"', lying)
+        self.assertIn('width="160" height="90"', lying)
+
+    def test_the_film_beside_whats_announced(self):
+        films = [self.showing("Wide Release", f"Theater {n}", image="https://x/poster.jpg") for n in range(4)]
+        announced = [dict(build.event(source("aeg", "x", "music", "The Sinclair"), "A show", date(2026, 9, 22), time(20),
+                                      image="https://x/band.jpg"), added="2026-09-19")]
+        lead, film = build.render_lead(films + announced, self.built)
+        self.assertEqual(film, "wide release", "what the next build keeps, unless something's bigger")
+        self.assertIn('<div class="lead">', lead)
+        self.assertLess(lead.index('class="biggest'), lead.index('class="fresh"'), "the film first")
+        self.assertEqual(lead.count("<img"), 1, "the poster, and no other picture")
+        self.assertNotIn("band.jpg", lead, "not the band's photograph")
+        self.assertNotIn("<script", lead, "and nothing that turns")
 
 
 class Fallback(unittest.TestCase):

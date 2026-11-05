@@ -328,12 +328,14 @@ SEARCH_KEYS = """
 </script>"""
 
 
-def page(site, title, body, css="", head="", symbols="", updated=None, links=None, indexable=False, marked=None, here=None):
+def page(site, title, body, css="", head="", symbols="", updated=None, links=None, indexable=False, marked=None, here=None,
+         said=""):
     """A whole page: the shared head, header and styles, then this site's styles, icons and body. Its header
     links are the two sites, unless it gives its own as (label, address, whether it's this page); marked gives
     a label's own markup, for one set in two weights ("Pushpin <span>Boston</span>"). here names the page
-    after them ("Film"); an empty one is there for a script to fill in. Only a page meant for anyone (the
-    public events page) lets search engines list it."""
+    after them ("Film"); an empty one is there for a script to fill in. said is markup for the header between
+    them and the note on the right, for a page whose line about itself is short enough to sit beside its name.
+    Only a page meant for anyone (the public events page) lets search engines list it."""
     marked = marked or {}
     name = SITES[site][0] if links is None else links[0][0]
     if links is None:
@@ -367,7 +369,7 @@ def page(site, title, body, css="", head="", symbols="", updated=None, links=Non
 <body>
 {symbols}
 <main>
-<header><nav class="sites" aria-label="Sites">{links}{here_label}</nav>{note}</header>
+<header><nav class="sites" aria-label="Sites">{links}{here_label}</nav>{said}{note}</header>
 {body}
 </main>{TO_TOP}{AGES}{PREVIEWS}{SEARCH_KEYS}
 </body>
