@@ -103,7 +103,8 @@ VENUE_ADDRESSES = {
     "Harvard Film Archive": ("24 Quincy St", "Cambridge", "02138"),
     "West Newton Cinema": ("1296 Washington St", "Newton", "02465"),
     "Lexington Venue": ("1794 Massachusetts Ave", "Lexington", "02420"),
-    # The Bay Area's, which give their state, being outside Massachusetts.
+    # Pushpin Bay Area's, from before it was retired (RETIRED), which give their state, being outside
+    # Massachusetts. Kept with their readers; the city itself, and its sources, are in the history.
     "Roxie": ("3117 16th St", "San Francisco", "CA", "94103"),
     "Alamo New Mission": ("2550 Mission St", "San Francisco", "CA", "94110"),
     "The Independent": ("628 Divisadero St", "San Francisco", "CA", "94117"),
@@ -2909,20 +2910,14 @@ WESTERN_MASS = city_texts(
                                    "next month, aggregated from select theaters."}})
 
 
-BAY_AREA = city_texts(
-    "bayarea", "Pushpin Bay Area", "the Bay Area", "San Francisco, Oakland and Berkeley", state="California",
-    zone="America/Los_Angeles",
-    who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I work in the Bay Area at the University "
-        "of California, and I wanted an easier way to track what’s coming up than relying on Google or visiting "
-        "each venue’s website.",
-    kinds={"film": {"description": "Showtimes at the Roxie, the Alamo New Mission and BAMPFA, from repertory "
-                                   "screenings to new releases, for the next month, aggregated from select theaters."}})
-
-
 # What's being worked on, listed after the cities under the same state, with what to say about it.
 COMING_SOON = {"New York": ("New York City", "Coming soon.")}
 # Each city's Pushpin, at pushpin.city/<its slug>/, from sources-<its slug>.txt (Boston's, sources.txt).
-CITIES = [BOSTON_CITY, WESTERN_MASS, BAY_AREA]
+CITIES = [BOSTON_CITY, WESTERN_MASS]
+# Cities Pushpin covered once and doesn't now, each's slug and name. Their addresses are still out there, in
+# bookmarks and search results, and left alone they'd fall through to Boston's, which isn't where anyone
+# following one meant to go: each has a page at its old folder saying so, and anything under it goes there.
+RETIRED = {"bayarea": "Pushpin Bay Area"}
 
 
 def use_city(city):
@@ -3103,20 +3098,41 @@ def render_cities(cities):
                      body, CITIES_CSS)
 
 
-def render_not_found(cities):
+def render_retired(slug, name, cities):
+    """What's left at a retired city's address: that it isn't updated any more, and the way to the cities
+    that are. Kept out of search results, which should forget it rather than send anyone here."""
+    others = [f'<a href="/{city.slug}/">{html.escape(city.name.partition(" ")[2])}</a>' for city in cities]
+    listed = ", ".join(others[:-1]) + " and " + others[-1] if len(others) > 1 else "".join(others)
+    body = (f'<div class="prose">\n<p>{html.escape(name)} isn’t updated any more, so its listings and calendars '
+            f'are gone.</p>\n<p>Pushpin still covers {listed}.</p>\n'
+            f'<p><a class="home" href="/">All cities →</a></p>\n</div>\n')
+    said = f"{name} has closed."
+    # Its links as the rest of the site's in running text are: white, underlined quietly.
+    styles = ("  .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555;"
+              " text-underline-offset: .2em; }\n  .prose a:hover { text-decoration-color: #aaa; }\n")
+    return site_page(f"{slug}/", f"{name} · Pushpin", f"{name} is no longer updated.", said, body, styles).replace(
+        '<meta name="description"', '<meta name="robots" content="noindex">\n<meta name="description"', 1)
+
+
+def render_not_found(cities, retired=()):
     """pushpin.city's page for an address it doesn't have. One under a city's folder goes to that city's home
-    page, or a listing's page that's gone (it's passed), to its view, which opens the next of its series; any
-    other, from before there were cities (/music/, /about.html), to the same under Boston's."""
+    page, or a listing's page that's gone (it's passed), to its view, which opens the next of its series; one
+    under a retired city's, to the page there saying it's closed; any other, from before there were cities
+    (/music/, /about.html), to the same under Boston's."""
     slugs = json.dumps([city.slug for city in cities])
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<title>Pushpin</title>\n'
             f'<meta name="color-scheme" content="dark">\n<style>html {{ background: #000; }}</style>\n'
             '<script>\n'
             '  const path = location.pathname;\n'
+            f'  const gone = {json.dumps(list(retired))}.find(slug => path.startsWith("/" + slug + "/") || path === "/" + slug);\n'
+            '  if (gone) location.replace("/" + gone + "/");\n'
+            '  else {\n'
             f'  const city = {slugs}.find(slug => path.startsWith("/" + slug + "/"));\n'
             '  const rest = city ? path.slice(city.length + 2) : "";\n'
             '  location.replace(!city ? "/boston/" + path.slice(1) + location.search + location.hash\n'
             '    : rest.startsWith("e/") ? "/" + city + "/?event=" + rest.slice(2).split("/")[0]\n'
             '    : "/" + city + "/" + location.search + location.hash);\n'
+            '  }\n'
             '</script>\n'
             f'<p><a href="/" style="color: #fff">Pushpin</a></p>\n</html>\n')
 
@@ -4405,7 +4421,10 @@ def main():
     (PUBLIC_DIR / "contact").mkdir(exist_ok=True)
     (PUBLIC_DIR / "contact" / "index.html").write_text(render_contact())
     (PUBLIC_DIR / "sitemap.xml").write_text(render_site_sitemap(built_at))
-    (PUBLIC_DIR / "404.html").write_text(render_not_found(CITIES))
+    (PUBLIC_DIR / "404.html").write_text(render_not_found(CITIES, RETIRED))
+    for slug, name in RETIRED.items():
+        (PUBLIC_DIR / slug).mkdir(exist_ok=True)
+        (PUBLIC_DIR / slug / "index.html").write_text(render_retired(slug, name, CITIES))
     # robots.txt, which only works at the site's root: each city's sitemap.
     (PUBLIC_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n\n" + f"Sitemap: {PUBLIC_SITE}sitemap.xml\n" + "".join(
         f"Sitemap: {PUBLIC_SITE}{city.slug}/sitemap.xml\n" for city in CITIES))

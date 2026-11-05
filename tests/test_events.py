@@ -579,7 +579,7 @@ class Cities(unittest.TestCase):
         build.use_city(build.BOSTON_CITY)
 
     def test_each_city_its_own_site(self):
-        self.assertEqual([city.slug for city in build.CITIES], ["boston", "westernma", "bayarea"])
+        self.assertEqual([city.slug for city in build.CITIES], ["boston", "westernma"])
         self.assertEqual(build.BOSTON_CITY.sources, build.SOURCES_FILE)
         build.use_city(build.WESTERN_MASS)
         self.assertEqual((build.PUBLIC_URL, build.PUBLIC_ROOT, build.PUBLIC_NAME), ("https://pushpin.city/westernma/", "/westernma/", "Pushpin Western Mass"))
@@ -619,9 +619,27 @@ class Cities(unittest.TestCase):
         self.assertIn("https://formsubmit.co/", contact)
         self.assertIn('value="Pushpin: a message"', contact, "one form for every city")
         self.assertIn('value="https://pushpin.city/contact/?sent"', contact)
-        missing = build.render_not_found(build.CITIES)
-        self.assertIn('["boston", "westernma", "bayarea"]', missing)
+        missing = build.render_not_found(build.CITIES, build.RETIRED)
+        self.assertIn('["boston", "westernma"]', missing)
         self.assertIn('"/boston/" + path.slice(1)', missing, "addresses from before there were cities, Boston's")
+
+    def test_a_retired_city_says_so_rather_than_becoming_boston(self):
+        """Pushpin Bay Area's addresses are still in bookmarks and search results. Without a word about them,
+        the 404 page would take /bayarea/film/ for an address from before there were cities and send it on to
+        Boston's — a reader in San Francisco looking at Cambridge's showtimes."""
+        self.assertNotIn("bayarea", [city.slug for city in build.CITIES])
+        self.assertIn("bayarea", build.RETIRED)
+        missing = build.render_not_found(build.CITIES, build.RETIRED)
+        self.assertIn('["bayarea"].find(', missing)
+        self.assertIn('if (gone) location.replace("/" + gone + "/");', missing)
+        self.assertLess(missing.index("if (gone)"), missing.index('"/boston/" + path.slice(1)'), "before Boston gets it")
+        page = build.render_retired("bayarea", "Pushpin Bay Area", build.CITIES)
+        self.assertIn("Pushpin Bay Area isn’t updated any more", page)
+        self.assertIn('<a href="/boston/">Boston</a> and <a href="/westernma/">Western Mass</a>', page)
+        self.assertIn('<link rel="canonical" href="https://pushpin.city/bayarea/">', page)
+        self.assertIn('<meta name="robots" content="noindex">', page, "for search results to forget it")
+        # And the site's own list of cities doesn't name it.
+        self.assertNotIn("Bay Area", build.render_cities(build.CITIES))
 
 
 class Skipping(unittest.TestCase):

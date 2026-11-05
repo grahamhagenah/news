@@ -35,16 +35,9 @@ CARDS = {
         ("tonight", "Tonight in Western Mass", "Concerts, films, and talks still to come today, across the Pioneer Valley and the Berkshires.", list(COLORS), "tonight/"),
         ("weekend", "This weekend in Western Mass", "Concerts, films, and talks, Friday to Sunday, across the Pioneer Valley and the Berkshires.", list(COLORS), "weekend/"),
     ],
-    "bayarea": [
-        ("music", "Concerts in the Bay Area", "Clubs and halls across San Francisco, Oakland and Berkeley.", ["music"], "music/"),
-        ("film", "Films in the Bay Area", "Repertory screenings to new releases, at theaters around San Francisco and Oakland.", ["film"], "film/"),
-        ("talks", "Art & talks in the Bay Area", "Artist talks, exhibitions and museum nights around San Francisco and Oakland.", ["art"], "talks/"),
-        ("tonight", "Tonight in the Bay Area", "Concerts, films, and talks still to come today, across San Francisco, Oakland and Berkeley.", list(COLORS), "tonight/"),
-        ("weekend", "This weekend in the Bay Area", "Concerts, films, and talks, Friday to Sunday, across San Francisco, Oakland and Berkeley.", list(COLORS), "weekend/"),
-    ],
 }
 # pushpin.city's own: every city's.
-SITE_CARD = ("home", "Pushpin", "Concerts, films, and talks, aggregated from select venues, in Boston, Western Mass and the Bay Area.", list(COLORS), None)
+SITE_CARD = ("home", "Pushpin", "Concerts, films, and talks, aggregated from select venues, in Boston and Western Mass.", list(COLORS), None)
 
 
 def card(heading, line, kinds, path):
