@@ -2474,7 +2474,7 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 # Pushpin's name, as its mark: the word in lowercase, with the dot of its i a pin's head, a little bigger than a
 # dot and in film's amber — among the short letters, the highest point of the word but the h. A dotless i under a
 # dot of its own, so the dot can be any size and color; read by a screen reader as the name it is, not the
-# letters it's made of. In running text it's "Pushpin", as names are. Its favicon is three dots, the kinds' colors.
+# letters it's made of. In running text it's "Pushpin", as names are. Its favicon is that amber dot, alone.
 WORDMARK = ('<span class="wordmark" role="img" aria-label="Pushpin">pushp<span class="i">ı<span class="tittle">'
             '</span></span>n</span>')
 
@@ -3079,11 +3079,11 @@ def public_page(path, title, body, built_at=None, description=None, data=None, s
         body += "\n" + public_footer(path)
     address = PUBLIC_URL + path
     head = "\n".join([
-        # The three dots (events/pushpin). ?dots1, since browsers keep a site's old icon long after it changes; the
+        # The amber dot (events/pushpin). ?dot1, since browsers keep a site's old icon long after it changes; the
         # .ico keeps a plain address, being the one a search engine asks for by name and shows beside a result.
         f'<link rel="icon" href="{root}favicon.ico" sizes="48x48">',
-        f'<link rel="icon" href="{root}favicon.svg?dots1" type="image/svg+xml">',
-        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?dots1">',
+        f'<link rel="icon" href="{root}favicon.svg?dot1" type="image/svg+xml">',
+        f'<link rel="apple-touch-icon" href="{root}apple-touch-icon.png?dot1">',
         f'<link rel="canonical" href="{address}">',
         f'<meta name="description" content="{html.escape(description)}">',
         # What a link to it shows when shared.
@@ -3370,8 +3370,8 @@ def site_page(path, title, description, said, body, styles=""):
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<title>{html.escape(title)}</title>\n<meta name="description" content="{html.escape(description)}">\n'
             f'<link rel="canonical" href="{address}">\n<link rel="icon" href="/favicon.ico" sizes="48x48">\n'
-            f'<link rel="icon" href="/favicon.svg?dots1" type="image/svg+xml">\n'
-            f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?dots1">\n'
+            f'<link rel="icon" href="/favicon.svg?dot1" type="image/svg+xml">\n'
+            f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?dot1">\n'
             f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Pushpin">\n'
             f'<meta property="og:title" content="{html.escape(title)}">\n<meta property="og:description" content="{html.escape(description)}">\n'
             f'<meta property="og:url" content="{address}">\n<meta property="og:image" content="{PUBLIC_SITE}share/home.png?pin">\n'
