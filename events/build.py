@@ -2290,6 +2290,46 @@ def film_key(title):
     return re.sub(r"\W+", " ", title).casefold().strip()
 
 
+# How far a theater has to have published past a film's only showing for it to be called its only one: a theater
+# that lists a week ahead hasn't said yet whether a new release it's showing on Thursday is on again on Monday.
+ONE_NIGHT_AHEAD = 7
+# How far a theater has published is how far its listings run before a gap longer than this: a repertory house
+# dark a few weekdays a week is still publishing, where one with nothing for a fortnight and then a gala in a
+# month's time has published its schedule only as far as the fortnight.
+ONE_NIGHT_GAP = 3
+
+
+def published_to(dates):
+    """The last of a theater's days before a gap of more than ONE_NIGHT_GAP days in them."""
+    dates = sorted(dates)
+    end = dates[0]
+    for day in dates[1:]:
+        if (day - end).days > ONE_NIGHT_GAP + 1:
+            break
+        end = day
+    return end
+
+
+def one_nights(events):
+    """The films on once in all of what's listed, as their listings' addresses: one showing, at one theater, on
+    one day, and that theater's own listings running unbroken at least ONE_NIGHT_AHEAD days past it without it
+    again. From a city's whole listing, not one page's share of it, which would make tonight's only showing of a
+    film on all week look like its only one."""
+    films, days = {}, {}
+    for item in events:
+        if item["category"] == "film":
+            films.setdefault(film_key(item["title"]), []).append(item)
+            days.setdefault(item["source"], set()).add(item["date"])
+    horizon = {source: published_to(dates) for source, dates in days.items()}
+    nights = set()
+    for showings in films.values():
+        if len(showings) == 1 and len(showings[0]["times"]) <= 1:
+            item = showings[0]
+            if (horizon[item["source"]] - item["date"]).days >= ONE_NIGHT_AHEAD:
+                nights.add(listing_id(item["date"], item["title"], item["venue"])[0])
+    return nights
+
+
 def combine_films(items):
     """A day's film playing at two or more places becomes one row, with each place's times inside it."""
     films = {}
@@ -2669,13 +2709,16 @@ def render_row(item):
         return render_combined(item)
     detail = f'<span class="detail">{html.escape(item["detail"])}</span>' if item["detail"] else ""
     when = f'<span class="when">{item["date"]:%a, %b} {item["date"].day}</span>' if item.get("dated") else ""
+    # A film on once in all of what's listed (one_nights), marked as a sold-out one is: the one row of a film
+    # there won't be another chance to see.
+    once = '<span class="once-tag">One night</span>' if item.get("once") else ""
     ident, series = listing_id(item["date"], item["title"], item["venue"])
     return (
         f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
         f'{icon(item["category"])}'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a> '
-        + " ".join(part for part in (when, render_times(item["times"], sold_times(item)), detail) if part)
+        + " ".join(part for part in (when, render_times(item["times"], sold_times(item)), once, detail) if part)
         + f'{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div> '
         f'<span class="source"><span>{html.escape(item["venue"])}</span></span></li>'
     )
@@ -2706,6 +2749,25 @@ def render_combined(item):
     )
 
 
+def venue_menu(venues, towns, events):
+    """The venue menu, its venues under the towns they're in, the town with the most going on first, each led by
+    the whole of it where it has more than one ("All of Cambridge"): a night out is usually spent in one part of
+    town, and a list of venues alone doesn't say which are near each other. Venues in no known town come last."""
+    busy = Counter(towns.get(item["source"], "") for item in events)
+    grouped = {}
+    for name in venues:
+        grouped.setdefault(towns.get(name, ""), []).append(name)
+    options = '<option value="">All venues</option>'
+    for town in sorted(grouped, key=lambda town: (town == "", -busy[town], town)):
+        names = shared.as_said(grouped[town])
+        choices = ([f'<option value="town:{html.escape(town)}">All of {html.escape(town)}</option>']
+                   if town and len(names) > 1 else [])
+        choices += [f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in names]
+        options += (f'<optgroup label="{html.escape(town)}">' + "".join(choices) + "</optgroup>" if town
+                    else "".join(choices))
+    return f'<select class="pick" aria-label="Venue">{options}</select>'
+
+
 def render_index(events, sources, failed, stale, built_at, public=False, category=None, weekend=None, tonight=False, added=False, biggest=""):
     """The listings. For the public site, only its sources, with shorter previews; and with a category, its own
     page (music/, film/, talks/), holding only that kind's events, or with weekend (0 for this one, 1 for the
@@ -2718,9 +2780,19 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         # With more, where there's more of it on the listing's own page, for its view.
         events = [dict(item, about=shorter(item.get("about", [])), more=shorter(item.get("about", [])) != item.get("about", []))
                   for item in events if item["source"] in shown]
+    nights = one_nights(events)
+    events = [dict(item, once=True) if listing_id(item["date"], item["title"], item["venue"])[0] in nights else item
+              for item in events]
     # The venue filter's choices: every venue with events coming up, whatever their kind (on a kind's page, a
     # choice goes to the home page, which has them all); on a weekend's or tonight's page, those with events then.
     venues = {item["source"] for item in events}
+    # Which town each is in, for the menu to group them by, from where its listings are.
+    towns = {}
+    for item in events:
+        place = item.get("address") or VENUE_ADDRESSES.get(item["venue"])
+        if place and len(place) > 1 and place[1]:
+            towns.setdefault(item["source"], Counter())[place[1]] += 1
+    towns = {source: counted.most_common(1)[0][0] for source, counted in towns.items()}
     if public:
         if category:
             events = [item for item in events if item["category"] == category]
@@ -2838,13 +2910,15 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}<span class="finders">{when_menu}{shared.menu(venues, "All venues", "Venue")}{shared.SEARCH}</span></nav>\n'
+        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}<span class="finders">{when_menu}{venue_menu(venues, towns, events)}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
+        # Which town each of this page's venues is in, for choosing a town in the menu to show all of it.
         + f"<script>const PLACES = {json.dumps(places, ensure_ascii=False)}, "
+          f"TOWNS = {json.dumps({source: town for source, town in towns.items() if source in {item['source'] for item in events}}, ensure_ascii=False)}, "
           f"SHARE_URL = {json.dumps(PUBLIC_URL)}, ZONE = {json.dumps(str(PUBLIC_ZONE))};</script>\n"
         + f"<script>{INDEX_JS}</script>"
     )
@@ -3601,8 +3675,10 @@ INDEX_JS = """
       for (const sep of li.querySelectorAll(".sep")) {
         if (sep.previousElementSibling?.tagName !== "TIME" || sep.nextElementSibling?.tagName !== "TIME") sep.remove();
       }
-      // In a film at several places, a place with nothing left today goes too.
+      // In a film at several places, a place with nothing left today goes too — from what the venue and town
+      // filters go by as well, or choosing that theater, or its town, would keep a row with nothing there.
       for (const place of li.querySelectorAll(".showings li")) if (!place.querySelector("time")) place.remove();
+      if (li.matches(".combined")) li.dataset.sources = [...li.querySelectorAll(".showings li")].map(place => place.dataset.source).join("|");
       if (times.length && !li.querySelector("time:not(.from)")) { li.remove(); continue; }
       const from = li.querySelector("time.from");
       if (from) {
@@ -3680,11 +3756,14 @@ INDEX_JS = """
     if (page > 1) kept.set("page", page);
     return kept.toString() ? "?" + kept : location.pathname;
   };
-  // A film at several theaters, with a venue chosen, shows just that theater's times.
+  // What the venue menu has chosen: one venue, or a town ("town:Cambridge"), every venue in it.
+  const inChosen = source => !venue.value || (venue.value.startsWith("town:")
+    ? TOWNS[source] === venue.value.slice(5) : source === venue.value);
+  // A film at several theaters, with a venue chosen, shows just that theater's times; with a town, its theaters'.
   function narrow() {
     for (const li of combined) {
       const places = [...li.querySelectorAll(".showings li")];
-      for (const place of places) place.hidden = Boolean(venue.value) && place.dataset.source !== venue.value;
+      for (const place of places) place.hidden = !inChosen(place.dataset.source);
       const shown = places.filter(place => !place.hidden);
       if (!shown.length) continue;
       li.querySelector(".source > span").textContent = shown.length > 1 ? shown.length + " theaters" : shown[0].querySelector("a").textContent;
@@ -3697,7 +3776,7 @@ INDEX_JS = """
     const words = plain(search.offsetParent ? search.value : "").split(/\\s+/).filter(Boolean);
     narrow();
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
-      && (!venue.value || li.dataset.sources.split("|").includes(venue.value))
+      && li.dataset.sources.split("|").some(inChosen)
       && words.every(word => searchable.get(li).includes(word)));
     // A new page only where a day begins, when that day wouldn't fit in what's left of the hundred: it starts the
     // next page instead of being cut in two. A day of more than a hundred has a page to itself.
@@ -3729,7 +3808,7 @@ INDEX_JS = """
     pageOfNow = pageOf;
     pager.hidden = page >= pages;
     // With a venue or a search narrowing it, what the page says of those; with neither, what it says of itself.
-    const at = venue.value ? ` at ${venue.value}` : "";
+    const at = !venue.value ? "" : venue.value.startsWith("town:") ? ` in ${venue.value.slice(5)}` : ` at ${venue.value}`;
     const narrowed = empty.dataset.narrowed;
     empty.textContent = words.length ? `${narrowed}${at} matches “${search.value.trim()}”.`
       : at ? `${narrowed}${at}.` : empty.dataset.none;
@@ -4205,13 +4284,14 @@ PIN_CSS = """
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
-     magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, and the line under it
-     only while it's being typed in, the one place it means "type here". */
-  .search { padding-left: 1.3em; border-bottom-color: transparent;
+     magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
+     line is the field's whole width, out to the column's edge where the venues are, so the word isn't left
+     floating short of it; and it says "type here", brighter while something is being typed. */
+  .search { padding-left: 1.3em; border-bottom-color: #2a2a2a;
             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0'/%3E%3Cpath d='M21 21l-6 -6'/%3E%3C/svg%3E") no-repeat left center / .95em; }
   .search::placeholder { color: #666; }
   .search:hover::placeholder { color: #999; }
-  .search:focus { border-bottom-color: #444; }
+  .search:focus { border-bottom-color: #555; }
 """
 
 PUBLIC_CSS = """
@@ -4317,7 +4397,7 @@ CSS = """
   .times { flex: none; }
   /* A sold-out time, struck through; a listing with nothing left, a quiet tag after its times. */
   .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
-  .sold-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
+  .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* Over the listings on the home page: the week's biggest film beside the newest few announced. Ruled off
      above and below like the days under it, not boxed — nothing else on the site is in a box — with a rule

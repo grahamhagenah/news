@@ -1130,6 +1130,70 @@ class Films(unittest.TestCase):
         self.assertEqual(len(rows), 2)
 
 
+class OneNight(unittest.TestCase):
+    """Films there's one chance to see, in all of what's listed, and only where the listing can say so."""
+
+    built = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
+
+    def film(self, title, venue, days_ahead, times=(19,)):
+        return {"title": title, "date": date(2026, 9, 20) + timedelta(days=days_ahead), "times": [time(h) for h in times],
+                "link": "x", "detail": "", "venue": venue, "source": venue, "category": "film", "about": []}
+
+    def schedule(self, venue, through, gaps=()):
+        """The rest of a theater's listing: a film on every day through a day, but for some days dark."""
+        return [self.film(f"Long Run at {venue}", venue, day) for day in range(through + 1) if day not in gaps]
+
+    def test_a_film_on_once_at_a_theater_that_has_published_well_past_it(self):
+        events = [self.film("Bullitt", "Brattle", 2)] + self.schedule("Brattle", 14)
+        self.assertEqual(build.one_nights(events), {"2026-09-22-bullitt-brattle"})
+
+    def test_not_where_the_theater_hasnt_published_far_enough_to_know(self):
+        """A theater listing a week ahead hasn't said whether Thursday's new release is on again Monday."""
+        events = [self.film("New Release", "Kendall", 4)] + self.schedule("Kendall", 8)
+        self.assertEqual(build.one_nights(events), set())
+
+    def test_a_gala_a_month_off_doesnt_count_as_publishing_that_far(self):
+        events = [self.film("New Release", "Cinema", 2)] + self.schedule("Cinema", 6) + [self.film("Gala", "Cinema", 30)]
+        self.assertNotIn("2026-09-22-new-release-cinema", build.one_nights(events))
+        # Dark a few days a week, as a repertory house is, is still publishing.
+        events = [self.film("Bullitt", "Archive", 2)] + self.schedule("Archive", 16, gaps={5, 6, 7, 12, 13, 14})
+        self.assertIn("2026-09-22-bullitt-archive", build.one_nights(events))
+
+    def test_not_a_film_on_twice_anywhere(self):
+        twice_a_day = [self.film("Bullitt", "Brattle", 2, times=(16, 19))] + self.schedule("Brattle", 14)
+        two_theaters = [self.film("Bullitt", "Brattle", 2), self.film("Bullitt", "Coolidge", 9)] + self.schedule("Brattle", 14)
+        self.assertEqual(build.one_nights(twice_a_day), set())
+        self.assertEqual(build.one_nights(two_theaters), set())
+
+    def test_tagged_from_the_whole_listing_on_every_page(self):
+        """Tonight's page has only today's showing of a film on all week; it isn't its one night."""
+        brattle = dict(source("aeg", "x", "film", "Brattle"), public=True)
+        week = [build.event(brattle, "On All Week", date(2026, 9, 20) + timedelta(days=d), time(19)) for d in range(15)]
+        once = build.event(brattle, "Bullitt", date(2026, 9, 20), time(21))
+        tonight = build.render_index(week + [once], [brattle], [], [], self.built, public=True, tonight=True)
+        self.assertEqual(tonight.count('<span class="once-tag">One night</span>'), 1)
+        self.assertLess(tonight.index(">Bullitt<"), tonight.index("One night"))
+
+
+class VenueMenu(unittest.TestCase):
+    """The venues under the towns they're in, a town with more than one led by the whole of it."""
+
+    def test_grouped_by_town_the_busiest_first(self):
+        towns = {"The Sinclair": "Cambridge", "The Brattle": "Cambridge", "Paradise": "Boston", "Deep Cuts": "Medford"}
+        events = [{"source": name} for name in ("The Sinclair", "The Brattle", "The Brattle", "Paradise", "Deep Cuts")]
+        menu = build.venue_menu(set(towns) | {"Somewhere"}, towns, events)
+        self.assertTrue(menu.startswith('<select class="pick" aria-label="Venue"><option value="">All venues</option>'
+                                        '<optgroup label="Cambridge"><option value="town:Cambridge">All of Cambridge</option>'
+                                        '<option value="The Brattle">The Brattle</option><option value="The Sinclair">The Sinclair</option></optgroup>'))
+        self.assertIn('<optgroup label="Medford"><option value="Deep Cuts">Deep Cuts</option></optgroup>', menu,
+                      "no All of Medford, with one venue in it")
+        self.assertTrue(menu.endswith('<option value="Somewhere">Somewhere</option></select>'), "no known town, last")
+
+    def test_choosing_a_town_shows_all_of_it(self):
+        self.assertIn('venue.value.startsWith("town:")', build.INDEX_JS)
+        self.assertIn("TOWNS[source] === venue.value.slice(5)", build.INDEX_JS)
+
+
 class HomePage(unittest.TestCase):
     """How the home page reads: its line beside the site's name, and each day one list in the order of the day."""
 
