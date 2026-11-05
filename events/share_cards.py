@@ -47,11 +47,12 @@ def card(heading, line, kinds, path):
         f'stroke-linecap="round" stroke-linejoin="round">{build.ICON_DRAWINGS[kind]}</g></svg>'
         for kind in kinds
     )
-    # The site's name as it is in the header, its i's dot a pin's head: a home card's heading, the others' last line.
+    # The site's name as it is in the header, its i's dot a pin's head, and its city with it in lowercase, so the
+    # two read as one mark ("pushpin boston"): a home card's heading, the others' last line.
     home = path is None or heading == build.PUBLIC_NAME
     # A longer heading a little smaller, to keep it on one line.
     size = 92 if len(heading) <= 22 else 80 if len(heading) <= 25 else 70
-    named = lambda name: build.WORDMARK + html.escape(name.removeprefix("Pushpin"))  # noqa: E731
+    named = lambda name: build.WORDMARK + html.escape(name.removeprefix("Pushpin").lower())  # noqa: E731
     title = named(heading) if home else html.escape(heading)
     site = "" if home else f"<span>{named(build.PUBLIC_NAME)}</span> · "
     base = build.PUBLIC_SITE if path is None else build.PUBLIC_URL

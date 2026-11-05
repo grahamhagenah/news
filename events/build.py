@@ -2471,10 +2471,11 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 </div>
 </dialog>
 """
-# Pushpin's name, as its mark: the word, with the dot of its i a pin's head, a little bigger than a dot and in
-# film's amber. A dotless i under a dot of its own, so the dot can be any size and color; read by a screen
-# reader as the name it is, not the letters it's made of. Its favicon is three dots, the three kinds' colors.
-WORDMARK = ('<span class="wordmark" role="img" aria-label="Pushpin">Pushp<span class="i">ı<span class="tittle">'
+# Pushpin's name, as its mark: the word in lowercase, with the dot of its i a pin's head, a little bigger than a
+# dot and in film's amber — among the short letters, the highest point of the word but the h. A dotless i under a
+# dot of its own, so the dot can be any size and color; read by a screen reader as the name it is, not the
+# letters it's made of. In running text it's "Pushpin", as names are. Its favicon is three dots, the kinds' colors.
+WORDMARK = ('<span class="wordmark" role="img" aria-label="Pushpin">pushp<span class="i">ı<span class="tittle">'
             '</span></span>n</span>')
 
 
