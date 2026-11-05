@@ -2479,22 +2479,59 @@ FRESH_SHOWN = 3  # How many of the newest announcements are listed.
 PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
                  "indy-systems.imgix.net", "img.vwassets.com", "ticketing.phoenixmovies.net")
 
-_shapes = {}
+PICTURE_MOST = 3_000_000  # A poster bigger than this is left where it is rather than copied into the site.
+_pictures = {}
+
+
+def picture_bytes(url):
+    """The picture at url, downloaded once a build however often it's asked for; None where it won't load or is
+    too big to copy (PICTURE_MOST)."""
+    if url not in _pictures:
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(request, timeout=15) as answer:
+                data = answer.read(PICTURE_MOST + 1)
+            _pictures[url] = data if 0 < len(data) <= PICTURE_MOST else None
+        except Exception:
+            _pictures[url] = None
+    return _pictures[url]
+
+
+# The pictures the page being written shows, by their file in its city's folder, written with its pages.
+KEPT_PICTURES = {}
+
+
+def kept_picture(url):
+    """Where a page finds the picture at url: a copy in its city's folder, so it loads with the page instead of
+    after it, from a theater's server, and nobody's visit is reported to one. The copy's name is the picture's
+    address's, hashed, so a new poster is a new file a browser hasn't kept. Only pictures read as one of the three
+    kinds browsers all show; anything else, or one that won't load, stays where it is."""
+    data = picture_bytes(url)
+    kind = (picture_kind(data) if data else "") or ""
+    if not kind:
+        return url
+    name = f"pictures/{hashlib.sha1(url.encode()).hexdigest()[:16]}.{kind}"
+    KEPT_PICTURES[name] = data
+    return f"{PUBLIC_ROOT}{name}"
+
+
+def picture_kind(data):
+    """jpg, png or webp, from a picture's first bytes; "" for anything else."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return ""
 
 
 def picture_shape(url):
-    """How wide and tall a picture is, from the first bytes of it rather than the whole: theaters give both
-    posters (two by three) and stills (sixteen by nine) for the same film, and a box of the wrong shape crops
-    the title off a poster. None when it can't be read, which is taken for a still."""
-    if url in _shapes:
-        return _shapes[url]
+    """How wide and tall a picture is: theaters give both posters (two by three) and stills (sixteen by nine) for
+    the same film, and a box of the wrong shape crops the title off a poster. None when it can't be read, which is
+    taken for a still."""
+    data = (picture_bytes(url) or b"")[:16384]
     shape = None
-    try:
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Range": "bytes=0-16383"})
-        with urllib.request.urlopen(request, timeout=10) as answer:
-            data = answer.read(16384)
-    except Exception:
-        data = b""
     if data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR":
         shape = struct.unpack(">II", data[16:24])
     elif data[:4] == b"RIFF" and data[8:12] == b"WEBP" and data[12:16] == b"VP8X":
@@ -2514,7 +2551,6 @@ def picture_shape(url):
                 at += 2
                 continue
             at += 2 + struct.unpack(">H", data[at + 2:at + 4])[0]
-    _shapes[url] = shape
     return shape
 
 
@@ -2575,13 +2611,14 @@ def render_lead(events, built_at, before=""):
     parts = []
     if film:
         box = (76, 114) if film["standing"] else (160, 90)
-        picture = (f'<img class="biggest-picture" src="{html.escape(film["image"])}" alt="" width="{box[0]}" '
-                   f'height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if film["image"] else ""
+        picture = (f'<img class="biggest-picture" src="{html.escape(kept_picture(film["image"]))}" alt="" '
+                   f'width="{box[0]}" height="{box[1]}" decoding="async" referrerpolicy="no-referrer">'
+                   ) if film["image"] else ""
         parts.append(
             f'<a class="biggest{" standing" if film["standing"] else ""}" '
             f'href="{PUBLIC_ROOT}?{urlencode({"event": film["id"]})}">{picture}'
             f'<span class="biggest-said"><span class="lead-tag biggest-tag">{icon("film", decorative=True)}'
-            f'Major release</span><b class="biggest-title">{html.escape(film["title"])}</b>'
+            f'Playing everywhere</span><b class="biggest-title">{html.escape(film["title"])}</b>'
             f'<span class="biggest-facts">{html.escape(film["facts"])}</span>'
             + (f'<span class="biggest-about">{html.escape(film["about"])}</span>' if film["about"] else "")
             + '</span></a>')
@@ -2695,8 +2732,10 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
                        f'<h2><span class="relative"></span><span class="date"><span class="weekday">{day:%a}</span>, {day:%b} {day.day}</span></h2>\n')
         sections.append(heading + '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>")
 
+    # The kinds by name alone: each row's mark says its kind already, and the filter's words are plain enough
+    # without one beside them.
     buttons = '<button data-show="all">All</button>' + "".join(
-        f'<button data-show="{key}">{icon(key, decorative=True)}{label}</button>' for key, label in CATEGORIES.items()
+        f'<button data-show="{key}">{label}</button>' for key, label in CATEGORIES.items()
     )
     filter_attributes = ""
     if public and (weekend is not None or tonight or added):
@@ -2706,12 +2745,29 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     elif public:
         # Links to each kind's page, the current one marked; on the home page the script shows a kind in place.
         current = category or "all"
-        links = [("all", root, "All")] + [(key, f"{root}{PUBLIC_PAGES[key][0]}/", f"{icon(key, decorative=True)}{label}")
+        links = [("all", root, "All")] + [(key, f"{root}{PUBLIC_PAGES[key][0]}/", html.escape(label))
                                                   for key, label in CATEGORIES.items()]
         marked = ' aria-current="page"'
         buttons = "".join(f'<a data-show="{key}" href="{href}"{marked if key == current else ""}>{label}</a>'
                           for key, href, label in links)
         filter_attributes = f' data-pages data-current="{current}"'
+    # Tonight and this weekend beside the kinds, as a pair of their own: they narrow by when rather than by what,
+    # and were only in the footer, a full day of listings below where anyone was looking. The one this page is,
+    # where it's one of them, marked as a kind is.
+    # On a phone there isn't the width for them beside the kinds, so they're a menu there instead, beside the
+    # venue's, with next weekend's too, which a menu has the room for.
+    when_links = when_menu = ""
+    if public:
+        now, current = "tonight" if tonight else "weekend" if weekend == 0 else "", ' aria-current="page"'
+        when_links = '<span class="when-links">' + "".join(
+            f'<a href="{root}{path}"{current if key == now else ""}>{label}</a>'
+            for key, path, label in (("tonight", PUBLIC_TONIGHT[0], "Tonight"),
+                                     ("weekend", PUBLIC_WEEKENDS[0][0], "This weekend"))) + "</span>"
+        chosen = PUBLIC_TONIGHT[0] if tonight else PUBLIC_WEEKENDS[weekend][0] if weekend is not None else ""
+        when_menu = (f'<select class="pick when-pick{" chosen" if chosen else ""}" aria-label="When">' + "".join(
+            f'<option value="{root}{path}"{" selected" if path == chosen else ""}>{label}</option>'
+            for path, label in [("", "Any day"), (PUBLIC_TONIGHT[0], "Tonight")]
+            + [(path, name) for path, name, *_ in PUBLIC_WEEKENDS]) + "</select>")
     names = ", ".join(html.escape(source["name"]) for source in sources)
     # Notices of sources that didn't load, marked as such, last in the footer.
     mark = shared.icon("notice")
@@ -2757,7 +2813,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}<span class="finders">{shared.menu(venues, "All venues", "Venue")}{shared.SEARCH}</span></nav>\n'
+        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}<span class="finders">{when_menu}{shared.menu(venues, "All venues", "Venue")}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
@@ -3569,7 +3625,10 @@ INDEX_JS = """
   let show = kindPages ? filter.dataset.current : "all";
   if (remember) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
   // The venue menu shows one venue's events, of every kind, kept in the address too (?venue=).
-  const venue = document.querySelector(".filter .pick");
+  const venue = document.querySelector(".filter .pick:not(.when-pick)");
+  // On a phone, when (tonight, a weekend) is a menu rather than links: choosing in it goes to that page.
+  const when = document.querySelector(".filter .when-pick");
+  if (when) when.addEventListener("change", () => { location.href = when.value; });
   const combined = [...document.querySelectorAll(".combined")];
   const fromAddress = () => {
     const params = new URLSearchParams(location.search);
@@ -3585,7 +3644,7 @@ INDEX_JS = """
     return params;
   };
   const query = () => (params().toString() ? "?" + params() : "");
-  for (const a of filter.querySelectorAll("a")) a.dataset.href = a.getAttribute("href");
+  for (const a of filter.querySelectorAll("a[data-show]")) a.dataset.href = a.getAttribute("href");
   const address = page => {
     const kept = params();
     if (page > 1) kept.set("page", page);
@@ -3647,7 +3706,7 @@ INDEX_JS = """
     venue.classList.toggle("chosen", Boolean(venue.value));
     empty.hidden = rows.length > 0;
     for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
-    for (const a of filter.querySelectorAll("a")) {
+    for (const a of filter.querySelectorAll("a[data-show]")) {  // The kinds', not Tonight's or the weekend's.
       if (a.dataset.show === show) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
       a.setAttribute("href", a.dataset.href + query()); // A search goes along to the other pages.
@@ -3690,7 +3749,7 @@ INDEX_JS = """
   });
   // Back and forward between the kinds (and venues) the home page has shown.
   if (kindPages && everything) addEventListener("popstate", () => {
-    const here = [...filter.querySelectorAll("a")].find(a => new URL(a.dataset.href, location.href).pathname === location.pathname);
+    const here = [...filter.querySelectorAll("a[data-show]")].find(a => new URL(a.dataset.href, location.href).pathname === location.pathname);
     show = here ? here.dataset.show : "all";
     fromAddress();
     showEvents();
@@ -4092,6 +4151,21 @@ PIN_CSS = """
   /* The filter belongs to the listings it narrows, so it sits nearer them than what's above it: a full gap after
      the film and what's announced, and under it, the room the day's heading's own margin leaves less a
      pull-up — a negative margin, which comes off whichever day is the first one showing. */
+  /* The kinds as a choice of one, the way tabs are: the one chosen underlined, a fine line set well clear of its
+     word, and the others underlined faintly under a pointer, so it's plain they're for choosing. */
+  .filter button, .filter a { text-decoration: underline; text-decoration-thickness: 1px;
+                              text-underline-offset: .45em; text-decoration-color: transparent; }
+  .filter button[aria-pressed="true"], .filter a[aria-current="page"] { text-decoration-color: #777; }
+  @media (hover: hover) and (pointer: fine) {
+    .filter button:not([aria-pressed="true"]):hover, .filter a:not([aria-current]):hover {
+      text-decoration: underline; text-decoration-color: #3a3a3a; }
+  }
+  /* Tonight and this weekend: a pair of their own after the kinds, a hairline between, since they narrow by when
+     and the kinds by what. */
+  .when-links { display: flex; gap: inherit; padding-left: 1.1rem; border-left: 1px solid #262626; }
+  /* On a phone, a menu in their place, first on the venue and search's line; the links would take one of their own. */
+  .when-pick { display: none; }
+  @media (max-width: 34rem) { .when-links { display: none; } .when-pick { display: inline-block; } }
   .lead + .filter { margin-top: 0; }
   .filter { margin-bottom: -1.3rem; }
   /* On a phone the filter is two lines, and the second, the venue and the search, wants a little more under it
@@ -4676,7 +4750,12 @@ def write_city(city, events, sources, failed, stale, built_at, biggest=""):
     shutil.copytree(ROOT / "static", CITY_DIR, dirs_exist_ok=True)
     shutil.copytree(ROOT / "pushpin", CITY_DIR, dirs_exist_ok=True)  # Its own icons, over the events page's.
     shutil.copytree(ROOT / "share" / city.slug, CITY_DIR / "share", dirs_exist_ok=True)
+    KEPT_PICTURES.clear()
     (CITY_DIR / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, biggest=biggest))
+    # The pictures its home page shows, beside it.
+    for name, data in KEPT_PICTURES.items():
+        (CITY_DIR / name).parent.mkdir(parents=True, exist_ok=True)
+        (CITY_DIR / name).write_bytes(data)
     (CITY_DIR / "about").mkdir(exist_ok=True)
     (CITY_DIR / "about" / "index.html").write_text(render_about(sources, built_at, events))
     # Its own contact page, before the site had one for all its cities, on to that.

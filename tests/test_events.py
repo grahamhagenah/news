@@ -1152,6 +1152,26 @@ class HomePage(unittest.TestCase):
         order = [section.index(f">{name}<") for name in ("Matinee", "A Talk", "Early Show", "Late Show")]
         self.assertEqual(order, sorted(order))
 
+    def test_tonight_and_this_weekend_beside_the_kinds(self):
+        """In the filter on every page, not just the footer, and marked where the page is one of them."""
+        R = build.PUBLIC_ROOT
+        home = self.page()
+        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">This weekend</a></span>',
+                      home)
+        self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', self.page(tonight=True))
+        self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', self.page(weekend=0))
+        self.assertNotIn('aria-current="page">This weekend', self.page(weekend=1), "next weekend's isn't this one")
+
+    def test_on_a_phone_when_is_a_menu(self):
+        """The same choices, and next weekend's, as a menu beside the venue's; the one the page is, chosen."""
+        R = build.PUBLIC_ROOT
+        home = self.page()
+        self.assertIn(f'<select class="pick when-pick" aria-label="When"><option value="{R}" selected>Any day</option>', home)
+        self.assertIn(f'<option value="{R}weekend/next/">Next weekend</option>', home)
+        self.assertLess(home.index('class="pick when-pick"'), home.index('aria-label="Venue"'), "first on its line")
+        self.assertIn(f'<option value="{R}tonight/" selected>Tonight</option>', self.page(tonight=True))
+        self.assertIn('class="pick when-pick chosen"', self.page(weekend=1), "white, as a chosen venue is")
+
     def test_the_home_pages_line_is_in_its_header_and_a_kind_pages_under_it(self):
         home = self.page()
         header = home[home.index("<header>"):home.index("</header>")]
@@ -1168,10 +1188,13 @@ class Biggest(unittest.TestCase):
     built = datetime(2026, 9, 20, 16, 0, tzinfo=timezone.utc)
 
     def setUp(self):
-        # A picture's shape is read from the picture itself, which a test doesn't go and fetch.
-        shape = mock.patch.object(build, "picture_shape", return_value=(780, 1170))
-        shape.start()
-        self.addCleanup(shape.stop)
+        # A picture's shape is read from the picture itself, which a test doesn't go and fetch; nor does it fetch
+        # the picture to copy it, so the page points at the theater's.
+        for name, value in (("picture_shape", (780, 1170)), ("picture_bytes", None)):
+            patch = mock.patch.object(build, name, return_value=value)
+            patch.start()
+            self.addCleanup(patch.stop)
+        build.KEPT_PICTURES.clear()
 
     def showing(self, title, venue, days_ahead=0, hour=19, image=""):
         return {"title": title, "date": date(2026, 9, 20) + timedelta(days=days_ahead), "times": [time(hour)],
@@ -1240,6 +1263,26 @@ class Biggest(unittest.TestCase):
         self.assertIn('class="biggest"', lying)
         self.assertIn('width="160" height="90"', lying)
 
+    def test_the_poster_is_copied_into_the_site(self):
+        """So it loads with the page, not after it from a theater's server; a new poster is a new file."""
+        poster = b"\xff\xd8\xff\xe0" + b"a poster"
+        events = [self.showing("Wide Release", f"Theater {n}", image="https://x/poster.jpg") for n in range(4)]
+        with mock.patch.object(build, "picture_bytes", return_value=poster):
+            lead, _ = build.render_lead(events, self.built)
+        [(name, data)] = build.KEPT_PICTURES.items()
+        self.assertRegex(name, r"^pictures/[0-9a-f]{16}\.jpg$")
+        self.assertEqual(data, poster)
+        self.assertIn(f'src="{build.PUBLIC_ROOT}{name}"', lead)
+        self.assertNotIn("https://x/poster.jpg", lead)
+
+    def test_a_poster_that_wont_copy_stays_where_it_is(self):
+        events = [self.showing("Wide Release", f"Theater {n}", image="https://x/poster.jpg") for n in range(4)]
+        lead, _ = build.render_lead(events, self.built)  # picture_bytes gives nothing, as when it won't load.
+        self.assertIn('src="https://x/poster.jpg"', lead)
+        self.assertEqual(build.KEPT_PICTURES, {})
+        with mock.patch.object(build, "picture_bytes", return_value=b"GIF89a..."):
+            self.assertEqual(build.kept_picture("https://x/poster.gif"), "https://x/poster.gif", "not one to copy")
+
     def test_the_film_beside_whats_announced(self):
         films = [self.showing("Wide Release", f"Theater {n}", image="https://x/poster.jpg") for n in range(4)]
         announced = [dict(build.event(source("aeg", "x", "music", "The Sinclair"), "A show", date(2026, 9, 22), time(20),
@@ -1248,6 +1291,7 @@ class Biggest(unittest.TestCase):
         self.assertEqual(film, "wide release", "what the next build keeps, unless something's bigger")
         self.assertIn('<div class="lead">', lead)
         self.assertLess(lead.index('class="biggest'), lead.index('class="fresh"'), "the film first")
+        self.assertIn("Playing everywhere</span>", lead, "named for what's counted: how many theaters have it")
         self.assertEqual(lead.count("<img"), 1, "the poster, and no other picture")
         self.assertNotIn("band.jpg", lead, "not the band's photograph")
         self.assertNotIn("<script", lead, "and nothing that turns")
