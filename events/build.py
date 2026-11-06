@@ -2838,12 +2838,10 @@ def render_combined(item):
     )
 
 
-# The filter is a bar that stays at the top of the window as the listings scroll under it. It starts with the
-# pin's head from the name (WORDMARK), an amber dot, which goes back to the top; the floating arrow that did is
-# gone. On a phone the bar is one line: the kinds, then a magnifying glass that opens the search across it, and
-# a button that opens the day and venue menus under it, marked with a dot of its own while either is narrowing
-# the list. (Tabler Icons' "search", "adjustments-horizontal" and "x", MIT license, their paths verbatim.)
-TOP_DOT = '<button class="top-dot" type="button" aria-label="Back to top"><span></span></button>'
+# The filter is a bar that stays at the top of the window as the listings scroll under it. On a phone it's one
+# line: the kinds, then a magnifying glass that opens the search across it, and a button that opens the day and
+# venue menus under it, marked with an amber dot while either is narrowing the list. (Tabler Icons' "search",
+# "adjustments-horizontal" and "x", MIT license, their paths verbatim.)
 
 
 def bar_icon(*paths):
@@ -3026,7 +3024,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{TOP_DOT}{buttons}{when_links}'
+        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}'
         f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}</span>{shared.SEARCH}{BAR_TOGGLES}</nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
@@ -3899,16 +3897,19 @@ INDEX_JS = """
   // After the kind, the venue or the search changes with the bar stuck partway down the list, back up to where
   // the list starts, under the bar, so the new list is read from its top rather than from the middle.
   const mark = document.querySelector(".bar-mark");
+  const listStart = () => mark.getBoundingClientRect().top + scrollY + parseFloat(getComputedStyle(filter).marginTop);
+  // The page always a window taller than where the bar sticks, so a search down to a few listings never leaves it
+  // too short to scroll that far: the browser would pull it back up, and the bar would come down off the top.
+  // Measured again whenever the list changes, as what's over the bar can settle after the page loads.
+  const keepRoom = () => { document.documentElement.style.minHeight = Math.ceil(listStart() + innerHeight) + "px"; };
+  keepRoom();
+  addEventListener("resize", keepRoom);
+  addEventListener("load", keepRoom);
   const toList = () => {
-    const start = mark.getBoundingClientRect().top + scrollY + parseFloat(getComputedStyle(filter).marginTop);
+    keepRoom();
+    const start = listStart();
     if (scrollY > start + 1) scrollTo({ top: start });
   };
-  // The dot, back to the top; from the keyboard, focus goes back to the top too, to the site's name.
-  filter.querySelector(".top-dot").addEventListener("click", event => {
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scrollTo({ top: 0, behavior: still ? "auto" : "smooth" });
-    if (event.detail === 0) document.querySelector("header a")?.focus({ preventScroll: true });
-  });
   const params = () => {
     const params = new URLSearchParams();
     if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
@@ -3980,7 +3981,7 @@ INDEX_JS = """
       : at ? `${narrowed}${at}.` : empty.dataset.none;
     venue.classList.toggle("chosen", Boolean(venue.value));
     empty.hidden = rows.length > 0;
-    for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
+    for (const b of filter.querySelectorAll("button[data-show]")) b.setAttribute("aria-pressed", b.dataset.show === show);
     for (const a of filter.querySelectorAll("a[data-show]")) {  // The kinds', not Tonight's or the weekend's.
       if (a.dataset.show === show) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
@@ -4463,7 +4464,7 @@ PIN_CSS = """
   /* What the page says when nothing's left to show takes that pull-up too, with no day between them; it gets back
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
-  /* The filter as a bar that stays at the top of the window while the listings scroll under it (TOP_DOT), black
+  /* The filter as a bar that stays at the top of the window while the listings scroll under it (BAR_TOGGLES), black
      so they're hidden there, with the day's heading sticking under it (--bar, its height, set by the script).
      The same room around it as before: padding now, where it's black, taken back out of its margins. */
   .filter { position: sticky; top: 0; z-index: 3; padding: .55rem 0; margin-top: -1.3rem; margin-bottom: -1.85rem;
@@ -4474,17 +4475,16 @@ PIN_CSS = """
   /* A listing gone to, clear of the bar and its day's heading: on the rows alone, not the page, or focusing the
      search in the bar would scroll the page back up to where the bar sits in it, to put the field below the room. */
   .day > ul > li { scroll-margin-top: calc(var(--bar, 0px) + 2.75rem); }
-  .to-top { display: none; }  /* The dot does its work. */
-  /* The dot, the pin's head from the name: as wide as itself in the row, with more to press around it. */
-  .filter .top-dot { align-self: center; display: block; padding: .55rem; margin: -.55rem; cursor: pointer; }
-  .top-dot span { display: block; width: 9px; height: 9px; border-radius: 50%; background: #fbbf24; }
-  .top-dot:focus-visible { outline: 1px solid #444; outline-offset: -2px; border-radius: 50%; }
+  /* No scroll anchoring: as a search or a venue rewrites the list, the browser would scroll to keep whichever row
+     it had picked in place, pulling the page out from under the bar and the bar down off the top with it. What's
+     over the list is the page's own and settled, so there's nothing for anchoring to hold still. */
+  html { overflow-anchor: none; }
   /* Beside the kinds, the menus and then the search, at the end of the line; the buttons that open them on a
      phone, hidden. */
   .filter > .search { margin-left: 0; }
   .filter .toggle { display: none; }
   @media (max-width: 34rem) {
-    /* One line: the dot, the kinds, and at the end of it the search's button and the menus'. */
+    /* One line: the kinds, and at the end of it the search's button and the menus'. */
     .filter { flex-wrap: wrap; row-gap: 0; }
     /* Their full height, a little more than the kinds', so the line is as tall with the search open in place of
        the kinds (whose field is shorter) as without it, and nothing under the bar moves as it opens. */
