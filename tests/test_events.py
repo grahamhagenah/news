@@ -27,6 +27,8 @@ ROUTES = [
     ("sinclaircambridge.com/events/detail/1460677", "sinclair_show.html"),
     ("sinclaircambridge.com", "sinclair.html"),
     ("artsatthearmory.org/events.ics", "armory.ics"),
+    ("24hourmusic.com/include/widgets/events/performancelist.asp?venue=1&", "burren.json"),
+    ("berklee.edu/BPC/full-calendar-of-events-at-the-bpc", "berklee.html"),
     ("lilypadinman.com/home?format=json", "lilypad.json"),
     ("passim.org/live-music", "passim.html"),  # Its other shows' pages: no show time on them, so door times.
     ("mideastclub.com", "mideast.html"),
@@ -197,6 +199,33 @@ class Readers(unittest.TestCase):
             (date(2026, 11, 22), "Bruce Molsky", [time(14, 0)]),
         ])
         self.assertTrue(found[0]["link"].startswith("https://www.passim.org/live-music/events/"))
+
+    def test_showare_venue_shows_not_those_it_sells_for_elsewhere(self):
+        url = "https://tickets.24hourmusic.com/include/widgets/events/performancelist.asp?venue=1"
+        found = self.read("showare", url, "music", "The Burren")
+        # Not Lunasa, which it sells for the Somerville Theatre.
+        self.assertEqual([(item["date"], item["title"], item["times"]) for item in found], [
+            (date(2026, 11, 6), "Molly Pinto Madigan, Sunfisher", [time(19, 0)]),
+            (date(2026, 11, 18), "Brian O'Donovan Legacy Series: Revels Chantey Sing with David Coffin", [time(19, 30)]),
+        ])
+        first, second = found
+        self.assertEqual(first["link"], "https://tickets.24hourmusic.com/eventperformances.asp?evt=1898")
+        self.assertEqual(first["image"], "https://tickets.24hourmusic.com/uplimage/MPMSF26sw.jpg")
+        self.assertEqual(first["price"], "$29.95")
+        self.assertTrue(first["about"][0].startswith("Molly Pinto Madigan"))
+        self.assertFalse(any("<" in line or "&rsquo;" in line for item in found for line in item["about"]))
+        self.assertEqual((first["sold_out"], second["sold_out"]), (False, True))
+
+    def test_berklee_shows_with_their_times(self):
+        found = self.read("berklee", "https://www.berklee.edu/BPC/full-calendar-of-events-at-the-bpc", "music", "Berklee Performance Center")
+        self.assertEqual([(item["date"], item["title"], item["times"]) for item in found], [
+            (date(2026, 11, 6), "Warren Miller's Days Off", [time(19, 30)]),
+            (date(2026, 11, 9), "Jazz Composers Alliance Orchestra in Concert", [time(20, 0)]),
+            (date(2027, 5, 2), "Ndlovu Youth Choir", [time(15, 0)]),
+        ])
+        self.assertEqual(found[0]["link"], "https://www.berklee.edu/BPC/events/warren-millers-days-off")
+        self.assertTrue(found[0]["about"][0].startswith("This fall, drop in on Warren Miller"))
+        self.assertTrue(found[0]["image"].startswith("https://www.berklee.edu/sites/default/files/"))
 
     def test_ticketweb_venue_without_room(self):
         found = self.read("ticketweb", "https://mideastclub.com/")

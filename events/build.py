@@ -91,6 +91,8 @@ VENUE_ADDRESSES = {
     "The Lilypad": ("1353 Cambridge St", "Cambridge", "02139"),
     "Club Passim": ("47 Palmer St", "Cambridge", "02138"),
     "Arts at the Armory": ("191 Highland Ave", "Somerville", "02143"),
+    "The Burren": ("247 Elm St", "Somerville", "02144"),
+    "Berklee Performance Center": ("136 Massachusetts Ave", "Boston", "02115"),
     "MIT": ("77 Massachusetts Ave", "Cambridge", "02139"),
     "Boston Public Library": ("700 Boylston St", "Boston", "02116"),
     "MFA": ("465 Huntington Ave", "Boston", "02115"),
@@ -1075,6 +1077,53 @@ def read_passim(source):
         events.append(event(source, title, date.fromisoformat(day), start, link=field("link"), detail=field("detail"),
                             image=urljoin("https://www.passim.org/", picture) if picture else "",
                             sold_out='class="tickets sold-out"' in show))
+    return events
+
+
+def read_showare(source):
+    """A venue's shows on an accesso ShoWare ticket site (The Burren's, on 24 Hour Music's), from the list its
+    performance page loads: each show's name, start, what it says about it, its price and its picture; not its
+    tagline, a long blurb the description repeats, which would run the row to three lines. The URL is that
+    list's, naming the venue (?venue=1). Not a show it sells for somewhere else ("LUNASA @ Somerville
+    Theater!")."""
+    events, page = [], 1
+    while True:
+        found = json.loads(fetch(f"{source['url']}&action=perf&showPackages=1&page={page}"))
+        for show in found.get("performance") or []:
+            title = text(show.get("Event"))
+            if not title or re.search(r"\s@\s", title):
+                continue
+            moment = datetime.strptime(show["PerformanceDateTime"].split(", ", 1)[1], "%B %d, %Y %I:%M:%S %p")
+            site = re.match(r"https?://[^/]+", source["url"]).group(0)
+            picture = show.get("PerformanceImage") or show.get("Image1") or ""
+            events.append(event(source, title, moment.date(), moment.time(),
+                                link=f"{site}/eventperformances.asp?evt={show['EventID']}",
+                                about=about(html.unescape(show.get("Description") or "")),
+                                image=f"{site}/uplimage/{picture}" if picture else "",
+                                price=price_of(show.get("PerformanceMinPrice"), show.get("PerformanceMaxPrice")),
+                                sold_out=show.get("DisplayIcon") == "sold_out_icon"))
+        if (found.get("settings") or {}).get("endOfList", True) or not found.get("performance") or page >= 10:
+            return events
+        page += 1
+
+
+def read_berklee(source):
+    """The Berklee Performance Center's full calendar: each show's name, its dates and times (a show on two
+    nights is one entry with both), a line on it, and its poster."""
+    events = []
+    for row in fetch(source["url"]).split('<div class="views-row">')[1:]:
+        named = re.search(r'<div class="title">\s*<a href="([^"]+)"[^>]*>(.*?)</a>', row, re.S)
+        if not named:
+            continue
+        place = re.search(r'field-event-venue-title[^>]*>([^<]+)', row)
+        if place and text(place.group(1)) != source["name"]:
+            continue
+        said = re.search(r"</div>\s*(<p>.*?</p>)\s*<div class=\"fieldgroup-event-ticket", row, re.S)
+        picture = re.search(r'data-full-src="([^"]+)"', row)
+        for moment in re.findall(r'<time datetime="([^"]+)"', row):
+            day, start = at_venue(datetime.fromisoformat(moment), source.get("zone", BOSTON))
+            events.append(event(source, text(named.group(2)), day, start, link=urljoin(source["url"], named.group(1)),
+                                about=about(said.group(1)) if said else (), image=html.unescape(picture.group(1)) if picture else ""))
     return events
 
 
@@ -2221,6 +2270,8 @@ READERS = {
     "landmark": read_landmark,
     "ics": read_ics,
     "armory": read_armory,
+    "showare": read_showare,
+    "berklee": read_berklee,
     "squarespace": read_squarespace,
     "passim": read_passim,
     "tribe": read_tribe,
@@ -2787,6 +2838,31 @@ def render_combined(item):
     )
 
 
+# The filter is a bar that stays at the top of the window as the listings scroll under it. It starts with the
+# pin's head from the name (WORDMARK), an amber dot, which goes back to the top; the floating arrow that did is
+# gone. On a phone the bar is one line: the kinds, then a magnifying glass that opens the search across it, and
+# a button that opens the day and venue menus under it, marked with a dot of its own while either is narrowing
+# the list. (Tabler Icons' "search", "adjustments-horizontal" and "x", MIT license, their paths verbatim.)
+TOP_DOT = '<button class="top-dot" type="button" aria-label="Back to top"><span></span></button>'
+
+
+def bar_icon(*paths):
+    return ('<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
+            'stroke-linecap="round" stroke-linejoin="round">' + "".join(f'<path d="{d}"/>' for d in paths) + "</svg>")
+
+
+BAR_TOGGLES = (
+    '<button class="toggle search-open" type="button" aria-label="Search" aria-expanded="false">'
+    + bar_icon("M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0", "M21 21l-6 -6") + "</button>"
+    '<button class="toggle search-close" type="button" aria-label="Close search">'
+    + bar_icon("M18 6l-12 12", "M6 6l12 12") + "</button>"
+    '<button class="toggle filters-open" type="button" aria-label="Day and venue" aria-expanded="false">'
+    + bar_icon("M14 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 6l8 0", "M16 6l4 0",
+               "M8 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 12l2 0", "M10 12l10 0",
+               "M17 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 18l11 0", "M19 18l1 0") + "</button>"
+)
+
+
 def venue_menu(venues, towns, events):
     """The venue menu, its venues under the towns they're in, the town with the most going on first, each led by
     the whole of it where it has more than one ("All of Cambridge"): a night out is usually spent in one part of
@@ -2950,7 +3026,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        f'<nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}<span class="finders">{when_menu}{venue_menu(venues, towns, events)}{shared.SEARCH}</span></nav>\n'
+        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{TOP_DOT}{buttons}{when_links}'
+        f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}</span>{shared.SEARCH}{BAR_TOGGLES}</nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
@@ -3693,7 +3770,7 @@ INDEX_JS = """
   const headings = [...document.querySelectorAll(".day > h2")];
   function markPinned() {
     for (const h2 of headings) {
-      const top = h2.getBoundingClientRect().top;
+      const top = h2.getBoundingClientRect().top - (parseFloat(getComputedStyle(h2).top) || 0);
       h2.classList.toggle("pinned", h2.offsetParent !== null && top < 1 && h2.parentElement.getBoundingClientRect().bottom > 0);
     }
   }
@@ -3783,6 +3860,55 @@ INDEX_JS = """
     if (venue.selectedIndex < 0) venue.value = ""; // A venue no longer listed.
   };
   fromAddress();
+  // The bar: its height, for the day's heading to stick under it rather than behind it. On a phone, the search
+  // opens across it in place of the kinds, and closing it empties it; the day and venue menus open under it,
+  // the button marked while either narrows the list. Opened already when the address searches.
+  const openSearch = filter.querySelector(".search-open"), closeSearch = filter.querySelector(".search-close");
+  const openFilters = filter.querySelector(".filters-open");
+  // Rounded down, so the heading tucks under the bar's edge rather than leaving a hairline of the list between.
+  const barHeight = () => document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height) + "px");
+  new ResizeObserver(barHeight).observe(filter);
+  barHeight();
+  const searching = on => {
+    filter.classList.toggle("searching", on);
+    openSearch.setAttribute("aria-expanded", on);
+  };
+  const choosing = on => {
+    filter.classList.toggle("choosing", on);
+    openFilters.setAttribute("aria-expanded", on);
+  };
+  const narrowing = () => {
+    const on = Boolean(venue.value) || Boolean(when && when.classList.contains("chosen"));
+    openFilters.classList.toggle("on", on);
+    return on;
+  };
+  openSearch.addEventListener("click", () => { searching(true); search.focus({ preventScroll: true }); });
+  closeSearch.addEventListener("click", () => {
+    const had = search.value;
+    search.value = "";
+    searching(false);
+    if (had) { history.replaceState(null, "", address(1)); showEvents(); }
+    openSearch.focus();
+  });
+  search.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !search.value && filter.classList.contains("searching")) closeSearch.click();
+  });
+  openFilters.addEventListener("click", () => choosing(!filter.classList.contains("choosing")));
+  searching(Boolean(search.value));
+  choosing(narrowing());
+  // After the kind, the venue or the search changes with the bar stuck partway down the list, back up to where
+  // the list starts, under the bar, so the new list is read from its top rather than from the middle.
+  const mark = document.querySelector(".bar-mark");
+  const toList = () => {
+    const start = mark.getBoundingClientRect().top + scrollY + parseFloat(getComputedStyle(filter).marginTop);
+    if (scrollY > start + 1) scrollTo({ top: start });
+  };
+  // The dot, back to the top; from the keyboard, focus goes back to the top too, to the site's name.
+  filter.querySelector(".top-dot").addEventListener("click", event => {
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollTo({ top: 0, behavior: still ? "auto" : "smooth" });
+    if (event.detail === 0) document.querySelector("header a")?.focus({ preventScroll: true });
+  });
   const params = () => {
     const params = new URLSearchParams();
     if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
@@ -3895,12 +4021,15 @@ INDEX_JS = """
       history.replaceState(null, "", address(1)); // Back to page one.
     }
     showEvents();
+    toList();
   });
   // Back and forward between the kinds (and venues) the home page has shown.
   if (kindPages && everything) addEventListener("popstate", () => {
     const here = [...filter.querySelectorAll("a[data-show]")].find(a => new URL(a.dataset.href, location.href).pathname === location.pathname);
     show = here ? here.dataset.show : "all";
     fromAddress();
+    searching(Boolean(search.value) || filter.classList.contains("searching"));
+    narrowing();
     showEvents();
   });
   // Choosing a venue shows all its events, whatever their kind. A kind's own page has only that kind's, so
@@ -3913,11 +4042,14 @@ INDEX_JS = """
     if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
     if (kindPages) history.pushState(null, "", new URL(home.dataset.href, location.href).pathname + query());
     else history.replaceState(null, "", address(1));
+    narrowing();
     showEvents();
+    toList();
   });
   search.addEventListener("input", () => {
     history.replaceState(null, "", address(1));
     showEvents();
+    toList();
   });
 
   // A note at the foot of the window, for a moment: that a listing sent in a link has passed.
@@ -4304,7 +4436,7 @@ PIN_CSS = """
     header:has(h1.tagline) { flex-wrap: wrap; row-gap: .9rem; }
     header h1.tagline { order: 3; flex-basis: 100%; margin: 0; }
   }
-  h1.tagline + .filter { margin-top: 0; }  /* The filter's own pull-up would leave the line on top of it. */
+  h1.tagline + .bar-mark + .filter { margin-top: 0; }  /* The filter's own pull-up would leave the line on top of it. */
   /* The filter belongs to the listings it narrows, so it sits nearer them than what's above it: a full gap after
      the film and what's announced, and under it, the room the day's heading's own margin leaves less a
      pull-up — a negative margin, which comes off whichever day is the first one showing. */
@@ -4323,7 +4455,7 @@ PIN_CSS = """
   /* On a phone, a menu in their place, first on the venue and search's line; the links would take one of their own. */
   .when-pick { display: none; }
   @media (max-width: 34rem) { .when-links { display: none; } .when-pick { display: inline-block; } }
-  .lead + .filter { margin-top: 0; }
+  .lead + .bar-mark + .filter { margin-top: 0; }
   .filter { margin-bottom: -1.3rem; }
   /* On a phone the filter is two lines, and the second, the venue and the search, wants a little more under it
      than one line of kinds does, to read as the end of the filter rather than the start of the day. */
@@ -4331,6 +4463,51 @@ PIN_CSS = """
   /* What the page says when nothing's left to show takes that pull-up too, with no day between them; it gets back
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
+  /* The filter as a bar that stays at the top of the window while the listings scroll under it (TOP_DOT), black
+     so they're hidden there, with the day's heading sticking under it (--bar, its height, set by the script).
+     The same room around it as before: padding now, where it's black, taken back out of its margins. */
+  .filter { position: sticky; top: 0; z-index: 3; padding: .55rem 0; margin-top: -1.3rem; margin-bottom: -1.85rem;
+            background: #000; }
+  h1.tagline + .bar-mark + .filter, .lead + .bar-mark + .filter { margin-top: -.55rem; }
+  @media (max-width: 34rem) { .filter { margin-bottom: -1.6rem; } }
+  .day > h2 { top: var(--bar, 0px); }
+  /* A listing gone to, clear of the bar and its day's heading: on the rows alone, not the page, or focusing the
+     search in the bar would scroll the page back up to where the bar sits in it, to put the field below the room. */
+  .day > ul > li { scroll-margin-top: calc(var(--bar, 0px) + 2.75rem); }
+  .to-top { display: none; }  /* The dot does its work. */
+  /* The dot, the pin's head from the name: as wide as itself in the row, with more to press around it. */
+  .filter .top-dot { align-self: center; display: block; padding: .55rem; margin: -.55rem; cursor: pointer; }
+  .top-dot span { display: block; width: 9px; height: 9px; border-radius: 50%; background: #fbbf24; }
+  .top-dot:focus-visible { outline: 1px solid #444; outline-offset: -2px; border-radius: 50%; }
+  /* Beside the kinds, the menus and then the search, at the end of the line; the buttons that open them on a
+     phone, hidden. */
+  .filter > .search { margin-left: 0; }
+  .filter .toggle { display: none; }
+  @media (max-width: 34rem) {
+    /* One line: the dot, the kinds, and at the end of it the search's button and the menus'. */
+    .filter { flex-wrap: wrap; row-gap: 0; }
+    /* Their full height, a little more than the kinds', so the line is as tall with the search open in place of
+       the kinds (whose field is shorter) as without it, and nothing under the bar moves as it opens. */
+    .filter .toggle { display: grid; place-items: center; align-self: center; position: relative; width: 2rem;
+                      height: 2rem; margin: 0 -.4rem 0 0; padding: 0; color: #888; }
+    .filter .toggle svg { width: 19px; height: 19px; }
+    .filter .toggle:hover { color: #ddd; }
+    .filter .toggle[aria-expanded="true"] { color: #fff; }
+    .filter .search-open { margin-left: auto; }
+    .filter .search-close, .filter > .search { display: none; }
+    /* Searching: the field across the line in place of the kinds, closed by the ✕ after it. */
+    .filter.searching > a[data-show], .filter.searching > button[data-show], .filter.searching .when-links,
+    .filter.searching .search-open, .filter.searching .filters-open { display: none; }
+    .filter.searching > .search { display: block; align-self: center; flex: 1 1 0; width: 0; min-width: 0; margin: 0;
+                                  font-size: 1rem; }
+    .filter.searching .search-close { display: grid; }
+    /* The day and venue menus, opened on a line of their own under it. */
+    .filter .finders { display: none; order: 9; margin: .7rem 0 .1rem; }
+    .filter.choosing .finders { display: flex; }
+    /* Marked while one of them narrows the list, closed or open. */
+    .filters-open.on::after { content: ""; position: absolute; top: .3rem; right: .2rem; width: 6px; height: 6px;
+                              border-radius: 50%; background: #fbbf24; }
+  }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
      line is the field's whole width, out to the column's edge where the venues are, so the word isn't left

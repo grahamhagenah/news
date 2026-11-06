@@ -36,6 +36,9 @@
 #              build. Films and live shows are sorted by what the site files each under.
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings
+#   showare    a venue's shows on an accesso ShoWare ticket site, from the list its performance page loads,
+#              ending ?venue=<its id> (The Burren, on 24 Hour Music's; the id is in that site's venue listing)
+#   berklee    the Berklee Performance Center's full calendar page
 #   squarespace  a Squarespace site's events page, from the data it gives with ?format=json (The Lilypad)
 #   passim     Club Passim's live music page, whose calendar is in its script
 #   tribe      a WordPress site's The Events Calendar API, /wp-json/tribe/events/v1/events, optionally with
@@ -62,6 +65,8 @@ tribe      https://therockwell.org/wp-json/tribe/events/v1/events?categories=mus
 squarespace  https://www.lilypadinman.com/home   music   The Lilypad
 passim     https://www.passim.org/live-music/   music   Club Passim
 armory     https://artsatthearmory.org/events.ics   music   Arts at the Armory
+showare    https://tickets.24hourmusic.com/include/widgets/events/performancelist.asp?venue=1   music   The Burren
+berklee    https://www.berklee.edu/BPC/full-calendar-of-events-at-the-bpc   music   Berklee Performance Center
 
 # Art & talks
 mit        https://calendar.mit.edu/api/2/events   art   MIT
