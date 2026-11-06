@@ -3947,9 +3947,8 @@ INDEX_JS = """
     const start = listStart();
     if (scrollY > start + 1) scrollTo({ top: start });
   };
-  // Once the bar is stuck over the list, the edge under it (its line and fade). Checked as the page scrolls, right
-  // then rather than at the next frame, so the line and the search's own never show together, and whenever the
-  // list changes.
+  // Once the bar is stuck over the list, the shadow under it. Checked as the page scrolls, and whenever the list
+  // changes.
   const markStuck = () => filter.classList.toggle("stuck",
     mark.getBoundingClientRect().top + parseFloat(getComputedStyle(filter).marginTop) < 0);
   addEventListener("scroll", markStuck, { passive: true });
@@ -4538,15 +4537,14 @@ PIN_CSS = """
   }
   .top-dot span { display: block; width: 9px; height: 9px; border-radius: 50%; background: #fbbf24; }
   .top-dot:focus-visible { outline: 1px solid #444; outline-offset: -2px; border-radius: 50%; }
-  /* Once it's stuck over the list, its edge: a line under it (solid, or what goes under would show through it),
-     and a fade from right under it, so the listings dim as they go under rather than being cut off at a line
-     alone: easing out, darkest at the line, so a day's faint line going under is all but gone before it can sit
-     beside the bar's as a second, and lifting slowly from there. Out as far as a lit row's band reaches; on a
-     phone, the width of the screen. The script tells when it's stuck. */
+  /* Once it's stuck over the list, its edge: no line, a shadow, so the listings dim as they go under rather than
+     being cut off. Easing out, darkest at the bar and lifting slowly from there. It comes in gently as the bar
+     sticks, rather than appearing all at once. Out as far as a lit row's band reaches; on a phone, the width of
+     the screen. The script tells when it's stuck. */
   .filter::after { content: ""; position: absolute; top: 100%; left: -.6rem; right: -.6rem; height: 22px;
-                   background: linear-gradient(#2e2e2e 1px, rgba(0, 0, 0, .75) 1px, rgba(0, 0, 0, .5) 5px,
-                                               rgba(0, 0, 0, .27) 10px, rgba(0, 0, 0, .1) 16px, transparent);
-                   pointer-events: none; opacity: 0; }
+                   background: linear-gradient(rgba(0, 0, 0, .75), rgba(0, 0, 0, .5) 4px, rgba(0, 0, 0, .27) 9px,
+                                               rgba(0, 0, 0, .1) 15px, transparent);
+                   pointer-events: none; opacity: 0; transition: opacity .3s; }
   .filter.stuck::after { opacity: 1; }
   @media (max-width: 34rem) { .filter::after { left: -1rem; right: -1rem; } }
   /* A listing gone to, clear of the bar (--bar, its height, set by the script): on the rows alone, not the page, or
@@ -4595,10 +4593,6 @@ PIN_CSS = """
   .search::placeholder { color: #666; }
   .search:hover::placeholder { color: #999; }
   .search:focus { border-bottom-color: #555; }
-  /* Once the bar is stuck, with its own line just under, the field's goes, typing or not: two lines a few pixels
-     apart read as a mistake. The bar's line says where the field is well enough, and its glass and word stay.
-     The one swaps for the other at once, with no fade, which would show both for a moment. */
-  .filter.stuck .search, .filter.stuck .search:focus { border-bottom-color: transparent; }
 """
 
 PUBLIC_CSS = """
