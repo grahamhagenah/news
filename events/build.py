@@ -3819,6 +3819,50 @@ INDEX_JS = """
     const extra = times.querySelectorAll("time").length - 3;
     if (extra > 0) times.insertAdjacentHTML("beforeend", `<span class="more-times"> +${extra}</span>`);
   }
+  // On a phone, a row's "with …" (who else is on the bill) gives way before the row would run to a third line:
+  // the names from the end, counted as the times are ("with Mark Erelli, Rose Cousins +2"), and if even the first
+  // is too many, all of it. A detail that isn't a list is cut a word at a time ("…"). Where the row is three lines
+  // without any of it, the name is what's long, and the detail stays whole. The view has it all. Measured as
+  // rows show, since a hidden one has no size, and again at a new width.
+  const phone = matchMedia("(max-width: 34rem)");
+  function fitDetails() {
+    const width = phone.matches ? innerWidth : 0;
+    for (const li of document.querySelectorAll(".day > ul > li.row")) {
+      const detail = li.querySelector(".headline > .detail");
+      if (!detail || li.dataset.fitted === String(width) || !li.offsetParent) continue;
+      li.dataset.fitted = width;
+      const full = detail.dataset.full ??= detail.textContent;
+      detail.textContent = full;
+      detail.hidden = false;
+      if (!width) continue;
+      const title = li.querySelector(".title"), source = li.querySelector(".source");
+      const lineHeight = parseFloat(getComputedStyle(title).lineHeight);
+      const fits = () => [...source.getClientRects()].pop().bottom - title.getClientRects()[0].top < 2.5 * lineHeight;
+      if (fits()) continue;
+      const shorter = [];
+      const names = (full.match(/^with (.+)$/)?.[1] || "").split(/,\\s*/);
+      if (names.length > 1) {
+        // "A, B and C" or "A, B & C": the last two are two names. With a comma before the "and", it's already apart.
+        const last = names.pop();
+        names.push(...(/^(and|&) /.test(last) ? [last.replace(/^(and|&) /, "")] : last.split(/ (?:and|&) /)));
+        for (let keep = names.length - 1; keep >= 1; keep--) shorter.push(`with ${names.slice(0, keep).join(", ")} +${names.length - keep}`);
+      } else {
+        const words = full.split(" ");
+        // Not inside brackets: "Ada Arwen & Micah John…", not "… (The John…".
+        for (let keep = words.length - 1; keep >= 2; keep--) {
+          const cut = words.slice(0, keep).join(" ");
+          if (!cut.includes("(") || cut.includes(")")) shorter.push(cut.replace(/[,;:–—-]+$/, "") + "…");
+        }
+      }
+      if (shorter.some(text => { detail.textContent = text; return fits(); })) continue;
+      detail.hidden = true;
+      if (fits()) continue;
+      detail.textContent = full;
+      detail.hidden = false;
+    }
+  }
+  let fitting = 0;
+  addEventListener("resize", () => { cancelAnimationFrame(fitting); fitting = requestAnimationFrame(fitDetails); });
   // A listing with nothing left says so after its times: every time it has struck through, or none, and marked
   // sold out altogether.
   for (const li of document.querySelectorAll(".day > ul > li")) {
@@ -4012,6 +4056,7 @@ INDEX_JS = """
       if (show === "all") name.setAttribute("aria-current", "page");
       else name.removeAttribute("aria-current");
     }
+    fitDetails();
   }
   showEvents();
   more.addEventListener("click", () => {
@@ -4158,7 +4203,8 @@ INDEX_JS = """
     const sold = li.classList.contains("sold-out") ? "Sold out" : struck ? (struck > 1 ? "Some showings sold out" : "One showing sold out") : "";
     part("facts").replaceChildren(...[sold, li.dataset.price, li.dataset.ages].filter(Boolean).map(fact =>
       Object.assign(document.createElement("span"), { className: "event-fact" + (fact === sold ? " sold" : ""), textContent: fact })));
-    part("detail").textContent = li.querySelector(".detail")?.textContent || "";
+    const detail = li.querySelector(".detail");
+    part("detail").textContent = detail?.dataset.full || detail?.textContent || "";
     part("note").textContent = note;
     // Where it is, the same way whether it's at one place or a film at several: each place, a link to its page
     // (for tickets), with its times, each adding that showing to a calendar.
