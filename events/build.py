@@ -3765,21 +3765,6 @@ INDEX_JS = """
     if (date === today || date === tomorrow) when.textContent = date === today ? "Today" : "Tomorrow";
   }
 
-  // A day's heading pinned under the bar gets the edge under it (its line and fade): the one at the top whose day
-  // is still on screen. Checked as the page scrolls, once a frame at most, and whenever the list changes.
-  const headings = [...document.querySelectorAll(".day > h2")];
-  function markPinned() {
-    for (const h2 of headings) {
-      const top = h2.getBoundingClientRect().top - (parseFloat(getComputedStyle(h2).top) || 0);
-      h2.classList.toggle("pinned", h2.offsetParent !== null && top < 1 && h2.parentElement.getBoundingClientRect().bottom > 0);
-    }
-  }
-  let pinning = false;
-  addEventListener("scroll", () => {
-    if (!pinning) requestAnimationFrame(() => { pinning = false; markPinned(); });
-    pinning = true;
-  }, { passive: true });
-
   // Today lists only what's still to come: showings drop off once they've started, and an event goes
   // once its last one has. Events without a time stay all day.
   const now = new Date().toLocaleTimeString("en-GB", { timeZone: ZONE, hour: "2-digit", minute: "2-digit" });
@@ -3915,7 +3900,7 @@ INDEX_JS = """
   // the button marked while either narrows the list. Opened already when the address searches.
   const openSearch = filter.querySelector(".search-open"), closeSearch = filter.querySelector(".search-close");
   const openFilters = filter.querySelector(".filters-open");
-  // Rounded down, so the heading tucks under the bar's edge rather than leaving a hairline of the list between.
+  // The bar's height, which a listing gone to is kept clear of.
   const barHeight = () => document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height) + "px");
   new ResizeObserver(barHeight).observe(filter);
   barHeight();
@@ -3962,6 +3947,12 @@ INDEX_JS = """
     const start = listStart();
     if (scrollY > start + 1) scrollTo({ top: start });
   };
+  // Once the bar is stuck over the list, the edge under it (its line and fade). Checked as the page scrolls, right
+  // then rather than at the next frame, so the line and the search's own never show together, and whenever the
+  // list changes.
+  const markStuck = () => filter.classList.toggle("stuck",
+    mark.getBoundingClientRect().top + parseFloat(getComputedStyle(filter).marginTop) < 0);
+  addEventListener("scroll", markStuck, { passive: true });
   // The dot, back to the top; from the keyboard, focus goes back to the top too, to the site's name.
   filter.querySelector(".top-dot").addEventListener("click", event => {
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -4046,7 +4037,7 @@ INDEX_JS = """
       a.setAttribute("href", a.dataset.href + query()); // A search goes along to the other pages.
     }
     document.querySelector("main").classList.add("paged");
-    markPinned();
+    markStuck();
     // The home page, showing a kind in place, names it in the header, as that kind's own page does.
     const here = document.querySelector(".sites .here");
     if (here && kindPages && everything) {
@@ -4527,7 +4518,7 @@ PIN_CSS = """
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
   /* The filter as a bar that stays at the top of the window while the listings scroll under it (BAR_TOGGLES), black
-     so they're hidden there, with the day's heading sticking under it (--bar, its height, set by the script).
+     so they're hidden there. The days' headings scroll with the list, so it's the one thing held at the top.
      The same room around it as before: padding now, where it's black, taken back out of its margins. */
   .filter { position: sticky; top: 0; z-index: 3; padding: .55rem 0; margin-top: -1.3rem; margin-bottom: -1.85rem;
             background: #000; }
@@ -4547,10 +4538,21 @@ PIN_CSS = """
   }
   .top-dot span { display: block; width: 9px; height: 9px; border-radius: 50%; background: #fbbf24; }
   .top-dot:focus-visible { outline: 1px solid #444; outline-offset: -2px; border-radius: 50%; }
-  .day > h2 { top: var(--bar, 0px); }
-  /* A listing gone to, clear of the bar and its day's heading: on the rows alone, not the page, or focusing the
-     search in the bar would scroll the page back up to where the bar sits in it, to put the field below the room. */
-  .day > ul > li { scroll-margin-top: calc(var(--bar, 0px) + 2.75rem); }
+  /* Once it's stuck over the list, its edge: a line under it (solid, or what goes under would show through it),
+     and a fade from right under it, so the listings dim as they go under rather than being cut off at a line
+     alone: easing out, darkest at the line, so a day's faint line going under is all but gone before it can sit
+     beside the bar's as a second, and lifting slowly from there. Out as far as a lit row's band reaches; on a
+     phone, the width of the screen. The script tells when it's stuck. */
+  .filter::after { content: ""; position: absolute; top: 100%; left: -.6rem; right: -.6rem; height: 22px;
+                   background: linear-gradient(#2e2e2e 1px, rgba(0, 0, 0, .75) 1px, rgba(0, 0, 0, .5) 5px,
+                                               rgba(0, 0, 0, .27) 10px, rgba(0, 0, 0, .1) 16px, transparent);
+                   pointer-events: none; opacity: 0; }
+  .filter.stuck::after { opacity: 1; }
+  @media (max-width: 34rem) { .filter::after { left: -1rem; right: -1rem; } }
+  /* A listing gone to, clear of the bar (--bar, its height, set by the script): on the rows alone, not the page, or
+     focusing the search in the bar would scroll the page back up to where the bar sits in it, to put the field
+     below the room. */
+  .day > ul > li { scroll-margin-top: calc(var(--bar, 0px) + .75rem); }
   /* No scroll anchoring: as a search or a venue rewrites the list, the browser would scroll to keep whichever row
      it had picked in place, pulling the page out from under the bar and the bar down off the top with it. What's
      over the list is the page's own and settled, so there's nothing for anchoring to hold still. */
@@ -4593,6 +4595,10 @@ PIN_CSS = """
   .search::placeholder { color: #666; }
   .search:hover::placeholder { color: #999; }
   .search:focus { border-bottom-color: #555; }
+  /* Once the bar is stuck, with its own line just under, the field's goes, typing or not: two lines a few pixels
+     apart read as a mistake. The bar's line says where the field is well enough, and its glass and word stay.
+     The one swaps for the other at once, with no fade, which would show both for a moment. */
+  .filter.stuck .search, .filter.stuck .search:focus { border-bottom-color: transparent; }
 """
 
 PUBLIC_CSS = """
@@ -4665,28 +4671,18 @@ CSS = """
   [data-show="film"], [data-category="film"] { --dot: var(--film); }
   [data-show="art"], [data-category="art"] { --dot: var(--art); }
   h2 { margin: 2.25rem 0 .5rem; color: #777; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-  /* A day's heading stays at the top of the window while its events scroll under it, until the next day's
-     pushes it up and takes its place. The space around it is padding, where it's black, so the events passing
-     under are hidden there too; the same space as before, in all. */
-  .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000; }
-  /* In the bar's own voice, not the small capitals other headings have: the kinds' size and weight, in their
-     gray, with the day itself in white as the kind chosen is. Pinned under the bar, the two read as one header. */
-  .day > h2 { color: #666; font-size: .8rem; font-weight: 400; letter-spacing: 0; text-transform: none; }
-  /* While it's pinned under the bar, the edge of the two: a line under it (solid, or what goes under would show
-     through it), and a short fade below that, so the listings dim as they go under rather than being cut off at
-     a line alone. Out as far as a lit row's band reaches; on a phone, the width of the screen. The script tells
-     when it's pinned. */
-  .day > h2::after { content: ""; position: absolute; top: 100%; left: -.6rem; right: -.6rem; height: 16px;
-                     background: linear-gradient(#2e2e2e 1px, rgba(0, 0, 0, .8) 1px, transparent);
-                     pointer-events: none; opacity: 0; transition: opacity .15s; }
-  .day > h2.pinned::after { opacity: 1; }
-  @media (max-width: 34rem) { .day > h2::after { left: -1rem; right: -1rem; } }
-  /* On a phone, slimmer too, under the bar: the room above it moved out of its padding into its margin, so
-     the days are as far apart as before. */
+  /* A day's heading, in the bar's own voice, not the small capitals other headings have: the kinds' size and
+     weight, in their gray, with the day itself in white as the kind chosen is. */
+  .day > h2 { margin: 1.6rem 0 0; padding: .65rem 0 .5rem; color: #666; font-size: .8rem; font-weight: 400;
+              letter-spacing: 0; text-transform: none; }
   @media (max-width: 34rem) { .day > h2 { margin-top: 1.8rem; padding: .25rem 0 .3rem; } }
-  /* On a phone, the kinds' size there, and in from the edge as they are, after the dot, which lines it up with
-     the names under it too. A wide screen has no dot, so the kinds, the day and its marks start at the edge. */
-  @media (max-width: 34rem) { .day > h2 { padding-left: calc(9px + .75rem); font-size: 1.05rem; } }
+  /* Under it, a faint line the width of the list, the site's hairline, so where one day ends and the next starts
+     is plain at a glance, and a little room between it and the first row. */
+  .day > h2 { margin-bottom: .35rem; border-bottom: 1px solid #1c1c1c; }
+  @media (max-width: 34rem) { .day > h2 { padding-bottom: .45rem; } }
+  /* On a phone, the kinds' size there. At the edge, with the dot and the rows' marks, so it reads as heading the
+     rows under it rather than as one of them. */
+  @media (max-width: 34rem) { .day > h2 { font-size: 1.05rem; } }
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
@@ -4808,9 +4804,8 @@ CSS = """
     .day > ul > li.row { margin: 0 -.6rem; padding-left: .6rem; padding-right: .6rem; border-radius: 6px;
                          transition: background-color .12s; }
     .day > ul > li.row:hover { background: #0e0e0e; }
-    /* The bar and a day's heading, black as far out as the band reaches, so a row lit as it passes under them
-       doesn't show at their ends. */
-    .filter::before, .day > h2::before { content: ""; position: absolute; z-index: -1; inset: 0 -.6rem; background: #000; }
+    /* The bar, black as far out as the band reaches, so a row lit as it passes under it doesn't show at its ends. */
+    .filter::before { content: ""; position: absolute; z-index: -1; inset: 0 -.6rem; background: #000; }
     /* The whole band is the one target, so the name answers wherever on it the pointer is — between the
        times and the venue as much as on the name itself. */
     .day > ul > li.row:hover .title { text-decoration: underline; }
