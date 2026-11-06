@@ -2839,9 +2839,11 @@ def render_combined(item):
 
 
 # The filter is a bar that stays at the top of the window as the listings scroll under it. On a phone it's one
-# line: the kinds, then a magnifying glass that opens the search across it, and a button that opens the day and
-# venue menus under it, marked with an amber dot while either is narrowing the list. (Tabler Icons' "search",
-# "adjustments-horizontal" and "x", MIT license, their paths verbatim.)
+# line: the pin's head from the name (WORDMARK), an amber dot, which goes back to the top in place of the
+# floating arrow; the kinds; then a magnifying glass that opens the search across it, and a button that opens the
+# day and venue menus under it, marked with an amber dot of its own while either is narrowing the list. (Tabler
+# Icons' "search", "adjustments-horizontal" and "x", MIT license, their paths verbatim.)
+TOP_DOT = '<button class="top-dot" type="button" aria-label="Back to top"><span></span></button>'
 
 
 def bar_icon(*paths):
@@ -3024,7 +3026,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}'
+        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{TOP_DOT}{buttons}{when_links}'
         f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}</span>{shared.SEARCH}{BAR_TOGGLES}</nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
@@ -3763,7 +3765,7 @@ INDEX_JS = """
     if (date === today || date === tomorrow) when.textContent = date === today ? "Today" : "Tomorrow";
   }
 
-  // A day's heading pinned to the top of the window gets a faint line under it: the one at the top whose day
+  // A day's heading pinned under the bar gets the edge under it (its line and fade): the one at the top whose day
   // is still on screen. Checked as the page scrolls, once a frame at most, and whenever the list changes.
   const headings = [...document.querySelectorAll(".day > h2")];
   function markPinned() {
@@ -3810,6 +3812,12 @@ INDEX_JS = """
     const byNext = (a, b) => next(a) < next(b) ? -1 : next(a) > next(b) ? 1 : 0;
     for (const list of todays.querySelectorAll(":scope > ul, .showings")) [...list.children].sort(byNext).forEach(el => list.append(el));
     if (!todays.querySelector("li")) todays.remove();
+  }
+  // On a phone a row shows its first three times, then how many more ("+2"), so a film playing all day is two
+  // lines rather than three; its view has them all. Counted after today's have dropped off.
+  for (const times of document.querySelectorAll(".day .headline > .times")) {
+    const extra = times.querySelectorAll("time").length - 3;
+    if (extra > 0) times.insertAdjacentHTML("beforeend", `<span class="more-times"> +${extra}</span>`);
   }
   // A listing with nothing left says so after its times: every time it has struck through, or none, and marked
   // sold out altogether.
@@ -3910,6 +3918,12 @@ INDEX_JS = """
     const start = listStart();
     if (scrollY > start + 1) scrollTo({ top: start });
   };
+  // The dot, back to the top; from the keyboard, focus goes back to the top too, to the site's name.
+  filter.querySelector(".top-dot").addEventListener("click", event => {
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollTo({ top: 0, behavior: still ? "auto" : "smooth" });
+    if (event.detail === 0) document.querySelector("header a")?.focus({ preventScroll: true });
+  });
   const params = () => {
     const params = new URLSearchParams();
     if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
@@ -4472,7 +4486,21 @@ PIN_CSS = """
   .filter { position: sticky; top: 0; z-index: 3; padding: .55rem 0; margin-top: -1.3rem; margin-bottom: -1.85rem;
             background: #000; }
   h1.tagline + .bar-mark + .filter, .lead + .bar-mark + .filter { margin-top: -.55rem; }
-  @media (max-width: 34rem) { .filter { margin-bottom: -1.6rem; } }
+  /* On a phone, a slimmer bar, which is always there over a small screen: less padding, the same room around
+     it where it isn't stuck. */
+  @media (max-width: 34rem) {
+    .filter { padding: .3rem 0; margin-bottom: -1.35rem; }
+    h1.tagline + .bar-mark + .filter, .lead + .bar-mark + .filter { margin-top: -.3rem; }
+  }
+  /* The dot, on a phone only, where it does the floating arrow's work and the arrow goes: as wide as itself in
+     the row, with more to press around it. A wide screen keeps the arrow, and its bar starts with the kinds. */
+  .filter .top-dot { display: none; }
+  @media (max-width: 34rem) {
+    .to-top { display: none; }
+    .filter .top-dot { align-self: center; display: block; padding: .55rem; margin: -.55rem; cursor: pointer; }
+  }
+  .top-dot span { display: block; width: 9px; height: 9px; border-radius: 50%; background: #fbbf24; }
+  .top-dot:focus-visible { outline: 1px solid #444; outline-offset: -2px; border-radius: 50%; }
   .day > h2 { top: var(--bar, 0px); }
   /* A listing gone to, clear of the bar and its day's heading: on the rows alone, not the page, or focusing the
      search in the bar would scroll the page back up to where the bar sits in it, to put the field below the room. */
@@ -4486,12 +4514,12 @@ PIN_CSS = """
   .filter > .search { margin-left: 0; }
   .filter .toggle { display: none; }
   @media (max-width: 34rem) {
-    /* One line: the kinds, and at the end of it the search's button and the menus'. */
-    .filter { flex-wrap: wrap; row-gap: 0; }
+    /* One line: the dot, the kinds, and at the end of it the search's button and the menus'. */
+    .filter { flex-wrap: wrap; row-gap: 0; column-gap: .75rem; }  /* Room for it all down to a 340-pixel screen. */
     /* Their full height, a little more than the kinds', so the line is as tall with the search open in place of
        the kinds (whose field is shorter) as without it, and nothing under the bar moves as it opens. */
-    .filter .toggle { display: grid; place-items: center; align-self: center; position: relative; width: 2rem;
-                      height: 2rem; margin: 0 -.4rem 0 0; padding: 0; color: #888; }
+    .filter .toggle { display: grid; place-items: center; align-self: center; position: relative; width: 1.8rem;
+                      height: 2rem; margin: 0 -.35rem 0 0; padding: 0; color: #888; }
     .filter .toggle svg { width: 19px; height: 19px; }
     .filter .toggle:hover { color: #ddd; }
     .filter .toggle[aria-expanded="true"] { color: #fff; }
@@ -4594,11 +4622,25 @@ CSS = """
   /* A day's heading stays at the top of the window while its events scroll under it, until the next day's
      pushes it up and takes its place. The space around it is padding, where it's black, so the events passing
      under are hidden there too; the same space as before, in all. */
-  .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000;
-              transition: box-shadow .15s; }
-  /* While it's pinned there, a faint line under it (the same as above the footer), marking where the events
-     go under; the script tells when it's pinned. */
-  .day > h2.pinned { box-shadow: 0 1px 0 rgba(255, 255, 255, .09); }
+  .day > h2 { position: sticky; top: 0; z-index: 1; margin: 1.6rem 0 0; padding: .65rem 0 .5rem; background: #000; }
+  /* In the bar's own voice, not the small capitals other headings have: the kinds' size and weight, in their
+     gray, with the day itself in white as the kind chosen is. Pinned under the bar, the two read as one header. */
+  .day > h2 { color: #666; font-size: .8rem; font-weight: 400; letter-spacing: 0; text-transform: none; }
+  /* While it's pinned under the bar, the edge of the two: a line under it (solid, or what goes under would show
+     through it), and a short fade below that, so the listings dim as they go under rather than being cut off at
+     a line alone. Out as far as a lit row's band reaches; on a phone, the width of the screen. The script tells
+     when it's pinned. */
+  .day > h2::after { content: ""; position: absolute; top: 100%; left: -.6rem; right: -.6rem; height: 16px;
+                     background: linear-gradient(#2e2e2e 1px, rgba(0, 0, 0, .8) 1px, transparent);
+                     pointer-events: none; opacity: 0; transition: opacity .15s; }
+  .day > h2.pinned::after { opacity: 1; }
+  @media (max-width: 34rem) { .day > h2::after { left: -1rem; right: -1rem; } }
+  /* On a phone, slimmer too, under the bar: the room above it moved out of its padding into its margin, so
+     the days are as far apart as before. */
+  @media (max-width: 34rem) { .day > h2 { margin-top: 1.8rem; padding: .25rem 0 .3rem; } }
+  /* On a phone, the kinds' size there, and in from the edge as they are, after the dot, which lines it up with
+     the names under it too. A wide screen has no dot, so the kinds, the day and its marks start at the edge. */
+  @media (max-width: 34rem) { .day > h2 { padding-left: calc(9px + .75rem); font-size: 1.05rem; } }
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
@@ -4624,6 +4666,11 @@ CSS = """
   .times { flex: none; }
   /* A sold-out time, struck through; a listing with nothing left, a quiet tag after its times. */
   .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
+  .more-times { display: none; }
+  @media (max-width: 34rem) {
+    .headline > .times time:nth-of-type(n+4), .headline > .times .sep:nth-of-type(n+3) { display: none; }
+    .more-times { display: inline; }
+  }
   .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* Over the listings on the home page: the week's biggest film beside the newest few announced. Ruled off
