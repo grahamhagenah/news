@@ -4713,6 +4713,9 @@ CSS = """
     .day > ul > li.row { margin: 0 -.6rem; padding-left: .6rem; padding-right: .6rem; border-radius: 6px;
                          transition: background-color .12s; }
     .day > ul > li.row:hover { background: #0e0e0e; }
+    /* The bar and a day's heading, black as far out as the band reaches, so a row lit as it passes under them
+       doesn't show at their ends. */
+    .filter::before, .day > h2::before { content: ""; position: absolute; z-index: -1; inset: 0 -.6rem; background: #000; }
     /* The whole band is the one target, so the name answers wherever on it the pointer is — between the
        times and the venue as much as on the name itself. */
     .day > ul > li.row:hover .title { text-decoration: underline; }
