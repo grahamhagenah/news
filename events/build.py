@@ -4429,10 +4429,12 @@ PIN_CSS = """
   h1.tagline { margin: -.5rem 0 1.6rem; color: #888; font-size: .9rem; font-weight: normal; line-height: 1.45; }
   /* The home page's, in the header after the site's name, on its line: left with the name, not pushed off to the
      right with the time it was updated. Where the page shows a kind in place, the header names that ("/ Film")
-     and this goes, since the two say different things. On a phone there isn't the width, so it has a line of its
-     own under them, as every other page's does. */
+     and on a wide screen this goes, since the two say different things. On a phone there isn't the width, so
+     it has a line of its own under them, as every other page's does. */
   header h1.tagline { flex: 1 1 auto; min-width: 0; margin: 0; }  /* The header's own gap is room enough. */
-  header:has(.sites .here:not([hidden])) h1.tagline { display: none; }
+  @media not all and (max-width: 34rem) { header:has(.sites .here:not([hidden])) h1.tagline { display: none; } }
+  /* On a phone it stays, on its line under the name, whichever kind is showing: taking that line away when
+     a kind is chosen would pull the filter and the listings up under the finger that chose it. */
   @media (max-width: 34rem) {
     header:has(h1.tagline) { flex-wrap: wrap; row-gap: .9rem; }
     header h1.tagline { order: 3; flex-basis: 100%; margin: 0; }
