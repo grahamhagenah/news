@@ -177,7 +177,8 @@ def boston(body):
                 ("Approved", long_date(iso_date(row["last_board_approved_date"]))),
                 ("Review", str(row["project__record_type"]).replace("Project", "project review")),
                 ("Floor area", f'{number(row["gross_square_footage"]):,} sq ft' if number(row["gross_square_footage"]) else ""),
-                ("Cost", money(number(row["total_development_cost"]))),
+                # Boston's data stopped carrying the cost in Nov 2026; shown again if it comes back.
+                ("Cost", money(number(row.get("total_development_cost", "")))),
             ),
         })
     return projects

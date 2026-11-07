@@ -163,7 +163,12 @@ def parse_xml(body):
     try:
         root = ET.fromstring(body)
     except ET.ParseError:
-        return None
+        # A bare & (in an image's address, say, as Rest of World's feed has) isn't allowed in XML; most feed
+        # readers forgive it, so this does too.
+        try:
+            root = ET.fromstring(re.sub(rb"&(?!#?\w+;)", b"&amp;", body))
+        except ET.ParseError:
+            return None
     return root if local_name(root.tag) in ("rss", "feed", "RDF") else None
 
 

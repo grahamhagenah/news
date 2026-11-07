@@ -152,6 +152,14 @@ class Reading(unittest.TestCase):
         self.assertEqual(page.count(" data-reddit"), len(feed["posts"]))
         self.assertIn('data-video="Y44jT-qoCEs" data-reddit', page, "and still plays here")
 
+    def test_bare_ampersands(self):
+        body = (b'<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>'
+                b'<title>Rest of World</title><item><title>A story &amp; more</title><link>https://example.com/a</link>'
+                b'<media:content url="https://example.com/a.jpg?width=380&dpr=2"/></item></channel></rss>')
+        root = build.parse_xml(body)
+        self.assertIsNotNone(root)
+        self.assertEqual(build.child_text(build.children(root, "channel")[0], "title"), "Rest of World")
+
     def test_youtube_api_when_a_channel_feed_fails(self):
         feed_url = "https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A"
         asked = []
