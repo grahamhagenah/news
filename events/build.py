@@ -2841,9 +2841,10 @@ def render_combined(item):
 
 # The filter is a bar that stays at the top of the window as the listings scroll under it. On a phone it's one
 # line: the pin's head from the name (WORDMARK), an amber dot, which goes back to the top in place of the
-# floating arrow; the kinds; then a magnifying glass that opens the search across it, and a button that opens the
-# day and venue menus under it, marked with an amber dot of its own while either is narrowing the list. (Tabler
-# Icons' "search", "adjustments-horizontal" and "x", MIT license, their paths verbatim.)
+# floating arrow; the kinds; then a map pin that opens the day and venue menus under it, marked with an amber
+# dot of its own while either is narrowing the list, and last a magnifying glass that opens the search across
+# it, whose ✕ takes its place at the end of the line. (Tabler Icons' "map-pin", "search" and "x", MIT license,
+# their paths verbatim.)
 TOP_DOT = '<button class="top-dot" type="button" aria-label="Back to top"><span></span></button>'
 
 
@@ -2853,14 +2854,13 @@ def bar_icon(*paths):
 
 
 BAR_TOGGLES = (
+    '<button class="toggle filters-open" type="button" aria-label="Day and venue" aria-expanded="false">'
+    + bar_icon("M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0",
+               "M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z") + "</button>"
     '<button class="toggle search-open" type="button" aria-label="Search" aria-expanded="false">'
     + bar_icon("M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0", "M21 21l-6 -6") + "</button>"
     '<button class="toggle search-close" type="button" aria-label="Close search">'
     + bar_icon("M18 6l-12 12", "M6 6l12 12") + "</button>"
-    '<button class="toggle filters-open" type="button" aria-label="Day and venue" aria-expanded="false">'
-    + bar_icon("M14 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 6l8 0", "M16 6l4 0",
-               "M8 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 12l2 0", "M10 12l10 0",
-               "M17 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 18l11 0", "M19 18l1 0") + "</button>"
 )
 
 
@@ -4568,7 +4568,7 @@ PIN_CSS = """
   .filter > .search { margin-left: 0; }
   .filter .toggle { display: none; }
   @media (max-width: 34rem) {
-    /* One line: the dot, the kinds, and at the end of it the search's button and the menus'. */
+    /* One line: the dot, the kinds, and at the end of it the menus' button and the search's, where its ✕ goes. */
     .filter { flex-wrap: wrap; row-gap: 0; column-gap: .75rem; }  /* Room for it all down to a 340-pixel screen. */
     /* Their full height, a little more than the kinds', so the line is as tall with the search open in place of
        the kinds (whose field is shorter) as without it, and nothing under the bar moves as it opens. */
@@ -4577,7 +4577,7 @@ PIN_CSS = """
     .filter .toggle svg { width: 19px; height: 19px; }
     .filter .toggle:hover { color: #ddd; }
     .filter .toggle[aria-expanded="true"] { color: #fff; }
-    .filter .search-open { margin-left: auto; }
+    .filter .filters-open { margin-left: auto; }
     .filter .search-close, .filter > .search { display: none; }
     /* Searching: the field across the line in place of the kinds, closed by the ✕ after it. */
     .filter.searching > a[data-show], .filter.searching > button[data-show], .filter.searching .when-links,
