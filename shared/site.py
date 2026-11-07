@@ -16,7 +16,7 @@ from datetime import datetime
 # The pages, in the order the header names them.
 SITES = {
     "news": ("Newsfeed", "https://news.grahamhagenah.com/"),
-    "events": ("Events", os.environ.get("EVENTS_URL", "").strip() or "https://pushpin.city/boston/"),
+    "events": ("Events", os.environ.get("EVENTS_URL", "").strip() or "https://pushpin.city/"),
     "jobs": ("Jobs", os.environ.get("JOBS_URL", "").strip() or "https://grahamhagenah.github.io/jobs/"),
 }
 

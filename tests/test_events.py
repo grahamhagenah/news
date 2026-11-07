@@ -618,7 +618,7 @@ class Cities(unittest.TestCase):
         self.assertIn("<title>Pushpin Western Mass · Concerts, films and talks in Western Mass</title>", page)
         self.assertIn("the Pioneer Valley and the Berkshires", page)
         self.assertIn('href="/westernma/film/"', page)
-        self.assertIn('<a href="/">All cities</a>', page)
+        self.assertIn('<a href="/cities/">All cities</a>', page)
         # Just Pushpin in the header; the line under it says where.
         self.assertIn(f'aria-current="page">{build.WORDMARK}</a>', page)
         self.assertIn('aria-label="Pushpin"', build.WORDMARK, "read as the name, not as Pushp-dotless-i-n")
@@ -630,7 +630,8 @@ class Cities(unittest.TestCase):
         self.assertNotIn("I live in Somerville", about)
         self.assertIn("venues across the Pioneer Valley and the Berkshires", about)
         build.use_city(build.BOSTON_CITY)
-        self.assertEqual(build.PUBLIC_URL, "https://pushpin.city/boston/")
+        self.assertEqual(build.PUBLIC_URL, "https://pushpin.city/", "Boston's at the root")
+        self.assertEqual(build.CITY_DIR, build.PUBLIC_DIR)
 
     def test_sources_by_city(self):
         sinclair, images = source("axs", "x", "music", "The Sinclair"), source("indy", "y", "film", "Images Cinema")
@@ -641,9 +642,10 @@ class Cities(unittest.TestCase):
 
     def test_the_sites_own_pages(self):
         home = build.render_cities(build.CITIES)
-        self.assertIn('<a href="/boston/">Boston</a>', home)
+        self.assertIn('<a href="/">Boston</a>', home)
+        self.assertIn('<link rel="canonical" href="https://pushpin.city/cities/">', home)
         self.assertIn('<a href="/westernma/">Western Mass</a>', home)
-        self.assertIn("share/home.png", home)
+        self.assertIn("share/site/home.png", home, "its own card, not Boston's, which is at share/ now")
         self.assertIn("<h2>Massachusetts</h2>", home, "its cities under the state they're in")
         self.assertIn('<h2>New York</h2>', home)
         self.assertIn('<span class="soon">New York City</span><p>Coming soon.</p>', home, "one being worked on, not a link")
@@ -653,8 +655,9 @@ class Cities(unittest.TestCase):
         self.assertIn('value="Pushpin: a message"', contact, "one form for every city")
         self.assertIn('value="https://pushpin.city/contact/?sent"', contact)
         missing = build.render_not_found(build.CITIES, build.RETIRED)
-        self.assertIn('["boston", "westernma"]', missing)
-        self.assertIn('"/boston/" + path.slice(1)', missing, "addresses from before there were cities, Boston's")
+        self.assertIn('["westernma"]', missing, "Boston's pages are at the root, in no folder")
+        self.assertIn('/^\\/boston(\\/|$)/.test(path)', missing, "addresses from when Boston's were under /boston/")
+        self.assertIn('(moved ? "/" + rest : home)', missing, "go to the same page at the root")
 
     def test_a_retired_city_says_so_rather_than_becoming_boston(self):
         """Pushpin Bay Area's addresses are still in bookmarks and search results. Without a word about them,
@@ -665,10 +668,11 @@ class Cities(unittest.TestCase):
         missing = build.render_not_found(build.CITIES, build.RETIRED)
         self.assertIn('["bayarea"].find(', missing)
         self.assertIn('if (gone) location.replace("/" + gone + "/");', missing)
-        self.assertLess(missing.index("if (gone)"), missing.index('"/boston/" + path.slice(1)'), "before Boston gets it")
+        self.assertLess(missing.index("if (gone)"), missing.index("const moved"), "before Boston gets it")
         page = build.render_retired("bayarea", "Pushpin Bay Area", build.CITIES)
         self.assertIn("Pushpin Bay Area isn’t updated any more", page)
-        self.assertIn('<a href="/boston/">Boston</a> and <a href="/westernma/">Western Mass</a>', page)
+        self.assertIn('<a href="/">Boston</a> and <a href="/westernma/">Western Mass</a>', page)
+        self.assertIn('<a class="home" href="/cities/">All cities →</a>', page)
         self.assertIn('<link rel="canonical" href="https://pushpin.city/bayarea/">', page)
         self.assertIn('<meta name="robots" content="noindex">', page, "for search results to forget it")
         # And the site's own list of cities doesn't name it.
@@ -718,7 +722,7 @@ class Calendars(unittest.TestCase):
         feeds = build.calendar_feeds([sinclair, hidden], items, datetime(2026, 9, 13, tzinfo=timezone.utc))
         self.assertEqual(set(feeds), {"calendar/music.ics", "calendar/film.ics", "calendar/talks.ics", "calendar/the-sinclair.ics"})
         self.assertNotIn("SUMMARY:B", feeds["calendar/music.ics"], "not a source kept off the public site")
-        self.assertEqual(build.calendar_address("calendar/music.ics"), "webcal://pushpin.city/boston/calendar/music.ics")
+        self.assertEqual(build.calendar_address("calendar/music.ics"), "webcal://pushpin.city/calendar/music.ics")
         self.assertIn("calendar.google.com", build.calendar_address("calendar/music.ics", google=True))
 
     def test_each_listing_opens_its_own_view(self):
@@ -1755,7 +1759,8 @@ class Page(unittest.TestCase):
             self.assertIn(f"<loc>{build.PUBLIC_URL}{path}</loc>", sitemap)
         self.assertNotIn("contact/", sitemap, "the site's own, in its own sitemap")
         site = build.render_site_sitemap(built)
-        self.assertIn(f"<loc>{build.PUBLIC_SITE}</loc>", site)
+        self.assertIn(f"<loc>{build.PUBLIC_SITE}cities/</loc>", site)
+        self.assertNotIn(f"<loc>{build.PUBLIC_SITE}</loc>", site, "the root is Boston's, in its sitemap")
         self.assertIn(f"<loc>{build.PUBLIC_SITE}contact/</loc>", site)
 
     def test_notices_come_last_with_their_mark(self):

@@ -42,7 +42,8 @@ CATEGORIES = {"music": "Music", "film": "Film", "art": "Art & talks"}
 # sources fine to republish (a line in sources.txt ending in public=no stays on this page only). Pushpin has
 # a site for each city (CITIES), whose words are its City's (city_texts); the PUBLIC_ names below are the
 # city whose pages are being written, which use_city() points at each in turn.
-# Pushpin's site, at pushpin.city, with each city's listings at a path of their own: Boston's at /boston/.
+# Pushpin's site, at pushpin.city: Boston's listings at its root, and each other city's at a path of its own
+# (/westernma/). Boston's were at /boston/ until Nov 2026; the 404 page sends those addresses on.
 # PUBLIC_DIR is the whole site, as published; a city's pages are in its own folder (CITY_DIR).
 PUBLIC_SITE = "https://pushpin.city/"
 PUBLIC_DIR = ROOT.parent / "dist" / "public"
@@ -3120,7 +3121,7 @@ def public_footer(path, notes="", names=""):
          + [("Just announced", PUBLIC_NEW[0])]),
         ("When", [("Tonight", PUBLIC_TONIGHT[0])] + [(name, weekend_path) for weekend_path, name, *_ in PUBLIC_WEEKENDS]),
         (PUBLIC_NAME, [("About", "about/"), ("Calendars", "about/#calendars"), ("Contact", "/contact/")]
-         + [("All cities", "/")] * (len(CITIES) > 1)),  # pushpin.city itself, which lists them.
+         + [("All cities", "/cities/")] * (len(CITIES) > 1)),  # The site's list of them.
     ]
     marked = ' aria-current="page"'
     lists = "".join(
@@ -3139,7 +3140,7 @@ def public_footer(path, notes="", names=""):
 # Each page's name, after the site's in the header ("Pushpin Boston / Film"); the home page has none.
 PAGE_NAMES = ({f"{slug}/": CATEGORIES[key] for key, slug in KIND_PAGES.items()}
               | {"tonight/": "Tonight", "new/": "Just announced", "weekend/": "This weekend",
-                 "weekend/next/": "Next weekend", "about/": "About", "contact/": "Contact"})
+                 "weekend/next/": "Next weekend", "about/": "About", "contact/": "Contact", "cities/": "Cities"})
 # The pages with a share card of their own (events/share); the rest show the home page's.
 SHARE_CARDS = set(KIND_PAGES.values()) | {"tonight", "weekend"}
 
@@ -3242,6 +3243,11 @@ class City:
     def sources(self):
         return SOURCES_FILE if self.slug == "boston" else ROOT / f"sources-{self.slug}.txt"
 
+    @property
+    def path(self):
+        """Where its pages are on pushpin.city: Boston's at the root (""), the others' in a folder ("westernma/")."""
+        return "" if self.slug == "boston" else f"{self.slug}/"
+
 
 def city_texts(slug, name, place, around, *, state="Massachusetts", zone="America/New_York", preposition="in",
                who=None, faqs=None, kinds=None):
@@ -3318,7 +3324,8 @@ WESTERN_MASS = city_texts(
 
 # What's being worked on, listed after the cities under the same state, with what to say about it.
 COMING_SOON = {"New York": ("New York City", "Coming soon.")}
-# Each city's Pushpin, at pushpin.city/<its slug>/, from sources-<its slug>.txt (Boston's, sources.txt).
+# Each city's Pushpin, at pushpin.city/<its slug>/ (Boston's at the root), from sources-<its slug>.txt (Boston's,
+# sources.txt).
 CITIES = [BOSTON_CITY, WESTERN_MASS]
 # Cities Pushpin covered once and doesn't now, each's slug and name. Their addresses are still out there, in
 # bookmarks and search results, and left alone they'd fall through to Boston's, which isn't where anyone
@@ -3336,9 +3343,9 @@ def use_city(city):
     PUBLIC_TONIGHT, PUBLIC_NEW = city.tonight, city.new
     PUBLIC_WEEKENDS, PUBLIC_PAGES, FAQS = city.weekends, city.pages, city.faqs
     PUBLIC_ZONE = city.clock  # Which day it is there: what "tonight" and "this weekend" mean on its pages.
-    PUBLIC_URL = f"{PUBLIC_SITE}{city.slug}/"
+    PUBLIC_URL = f"{PUBLIC_SITE}{city.path}"
     PUBLIC_ROOT = urlsplit(PUBLIC_URL).path
-    CITY_DIR = PUBLIC_DIR / city.slug
+    CITY_DIR = PUBLIC_DIR / city.path
 
 
 use_city(BOSTON_CITY)  # The names above start at Boston's, until a build points them at each city in turn.
@@ -3451,7 +3458,7 @@ def site_page(path, title, description, said, body, styles=""):
             f'<link rel="apple-touch-icon" href="/apple-touch-icon.png?dot1">\n'
             f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Pushpin">\n'
             f'<meta property="og:title" content="{html.escape(title)}">\n<meta property="og:description" content="{html.escape(description)}">\n'
-            f'<meta property="og:url" content="{address}">\n<meta property="og:image" content="{PUBLIC_SITE}share/home.png?pin">\n'
+            f'<meta property="og:url" content="{address}">\n<meta property="og:image" content="{PUBLIC_SITE}share/site/home.png?pin">\n'
             f'<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n'
             f'<meta name="twitter:card" content="summary_large_image">\n<meta name="color-scheme" content="dark">\n'
             f'<script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>\n'
@@ -3482,13 +3489,13 @@ CITIES_CSS = ('  section { margin-bottom: 2rem; }\n'
 
 
 def render_cities(cities):
-    """pushpin.city itself: each city's Pushpin, a link to it with what it covers, under the state it's in;
+    """pushpin.city/cities/: each city's Pushpin, a link to it with what it covers, under the state it's in;
     then the ones being worked on, and a way to ask for another."""
     states = {}
     for city in cities:
         # Where it covers, not what it is: the line above says that already, once.
         covers = city.around[0].upper() + city.around[1:]
-        states.setdefault(city.state, []).append((city.name.partition(" ")[2], covers, f"/{city.slug}/"))
+        states.setdefault(city.state, []).append((city.name.partition(" ")[2], covers, f"/{city.path}"))
     for state, (name, note) in COMING_SOON.items():
         states.setdefault(state, []).append((name, note, ""))
     body = "".join(
@@ -3499,7 +3506,7 @@ def render_cities(cities):
         for state, theirs in states.items())
     body += '<p class="ask">Want your city on Pushpin? <a href="/contact/">Let us know</a>, and tell us the venues worth following.</p>\n'
     description = f"Concerts, films, and talks, aggregated from select venues: {', '.join(city.name.partition(' ')[2] for city in cities)}."
-    return site_page("", "Pushpin", description,
+    return site_page("cities/", "Cities · Pushpin", description,
                      "Concerts, films, and talks, aggregated from select venues. No algorithms, no ads, no accounts.",
                      body, CITIES_CSS)
 
@@ -3507,11 +3514,11 @@ def render_cities(cities):
 def render_retired(slug, name, cities):
     """What's left at a retired city's address: that it isn't updated any more, and the way to the cities
     that are. Kept out of search results, which should forget it rather than send anyone here."""
-    others = [f'<a href="/{city.slug}/">{html.escape(city.name.partition(" ")[2])}</a>' for city in cities]
+    others = [f'<a href="/{city.path}">{html.escape(city.name.partition(" ")[2])}</a>' for city in cities]
     listed = ", ".join(others[:-1]) + " and " + others[-1] if len(others) > 1 else "".join(others)
     body = (f'<div class="prose">\n<p>{html.escape(name)} isn’t updated any more, so its listings and calendars '
             f'are gone.</p>\n<p>Pushpin still covers {listed}.</p>\n'
-            f'<p><a class="home" href="/">All cities →</a></p>\n</div>\n')
+            f'<p><a class="home" href="/cities/">All cities →</a></p>\n</div>\n')
     said = f"{name} has closed."
     # Its links as the rest of the site's in running text are: white, underlined quietly.
     styles = ("  .prose a { color: #fff; text-decoration: underline; text-decoration-color: #555;"
@@ -3521,11 +3528,11 @@ def render_retired(slug, name, cities):
 
 
 def render_not_found(cities, retired=()):
-    """pushpin.city's page for an address it doesn't have. One under a city's folder goes to that city's home
-    page, or a listing's page that's gone (it's passed), to its view, which opens the next of its series; one
-    under a retired city's, to the page there saying it's closed; any other, from before there were cities
-    (/music/, /about.html), to the same under Boston's."""
-    slugs = json.dumps([city.slug for city in cities])
+    """pushpin.city's page for an address it doesn't have. One under a retired city's folder goes to the page
+    there saying it's closed. One from when Boston's pages were under /boston/ goes to the same page at the
+    root. Any other goes to its city's home page (Boston's, at the root, for one outside every folder), or, a
+    listing's page that's gone (it's passed), to its view, which opens the next of its series."""
+    slugs = json.dumps([city.slug for city in cities if city.path])
     return (f'<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<title>Pushpin</title>\n'
             f'<meta name="color-scheme" content="dark">\n<style>html {{ background: #000; }}</style>\n'
             '<script>\n'
@@ -3534,10 +3541,11 @@ def render_not_found(cities, retired=()):
             '  if (gone) location.replace("/" + gone + "/");\n'
             '  else {\n'
             f'  const city = {slugs}.find(slug => path.startsWith("/" + slug + "/"));\n'
-            '  const rest = city ? path.slice(city.length + 2) : "";\n'
-            '  location.replace(!city ? "/boston/" + path.slice(1) + location.search + location.hash\n'
-            '    : rest.startsWith("e/") ? "/" + city + "/?event=" + rest.slice(2).split("/")[0]\n'
-            '    : "/" + city + "/" + location.search + location.hash);\n'
+            '  const moved = !city && /^\\/boston(\\/|$)/.test(path);\n'
+            '  const rest = city ? path.slice(city.length + 2) : path.replace(/^\\/(boston\\/?)?/, "");\n'
+            '  const home = city ? "/" + city + "/" : "/";\n'
+            '  location.replace(rest.startsWith("e/") ? home + "?event=" + rest.slice(2).split("/")[0]\n'
+            '    : (moved ? "/" + rest : home) + location.search + location.hash);\n'
             '  }\n'
             '</script>\n'
             f'<p><a href="/" style="color: #fff">Pushpin</a></p>\n</html>\n')
@@ -3696,8 +3704,8 @@ def sitemap(pages, built_at):
 
 
 def render_site_sitemap(built_at):
-    """The site's own pages: its cities, and the form they share."""
-    return sitemap([(PUBLIC_SITE, "weekly", "0.9"), (f"{PUBLIC_SITE}contact/", "yearly", "0.3")], built_at)
+    """The site's own pages: its cities, and the form they share. (sitemap.xml at the root is Boston's.)"""
+    return sitemap([(f"{PUBLIC_SITE}cities/", "weekly", "0.7"), (f"{PUBLIC_SITE}contact/", "yearly", "0.3")], built_at)
 
 
 def render_sitemap(built_at):
@@ -4605,6 +4613,9 @@ PUBLIC_CSS = """
   .sites a, .sites .here { white-space: nowrap; }
   @media (max-width: 34rem) { header:has(.here:not([hidden])) .header-note { display: none; } }
   .sites a[aria-current] .city { color: #8c8c8c; }
+  /* The name, on a page that's one of its kinds: a step back from the page's own name, still plainly the site's. */
+  .sites a:not([aria-current]), .sites a:not([aria-current]):visited { color: #aaa; }
+  .sites a:not([aria-current]):hover { color: #fff; }
 """ + PIN_CSS + """
   /* What the page is, in a line over its listings; and what the site is, in full at the foot of every page,
      where a repeat visitor won't have to read it. */
@@ -5116,7 +5127,7 @@ def main():
     # This page was Boston's before Pushpin had a site of its own, and said the same things twice after; what's
     # left of it is the listings this build keeps for the next one to fall back on, which stays at the address
     # every build looks for it at (LISTINGS_URL), and a way on to the page that replaced it.
-    (OUT_DIR / "index.html").write_text(moved_on(f"{PUBLIC_SITE}boston/"))
+    (OUT_DIR / "index.html").write_text(moved_on(PUBLIC_SITE))
     # The film each city's home page leads with, which the next build keeps until a bigger one turns up. Out of
     # its public listings, as the page has them.
     leading = {}
@@ -5133,7 +5144,7 @@ def main():
     record = {"built": built_at.isoformat(), "sources": listings, "failing": still_failing(errors, previous, built_at),
               "first_seen": first_seen, "biggest": leading, "film_days": days_seen}
     (OUT_DIR / "listings.json").write_text(json.dumps(record, ensure_ascii=False))
-    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/listings.json, and index.html pointing at {PUBLIC_SITE}boston/")
+    print(f"Wrote {OUT_DIR.relative_to(ROOT.parent)}/listings.json, and index.html pointing at {PUBLIC_SITE}")
 
     # Each city's public site, from the same listings; then the site's own root.
     for city in CITIES:
@@ -5144,19 +5155,20 @@ def main():
     # Anything a service wants to find at the site's root to know the site is ours: Google Search Console's
     # googleXXXX.html, say. Dropped in events/verify, published as it is.
     shutil.copytree(ROOT / "verify", PUBLIC_DIR, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".gitkeep"))
-    shutil.copytree(ROOT / "share" / "site", PUBLIC_DIR / "share", dirs_exist_ok=True)
-    (PUBLIC_DIR / "index.html").write_text(render_cities(CITIES))
+    shutil.copytree(ROOT / "share" / "site", PUBLIC_DIR / "share" / "site", dirs_exist_ok=True)
+    (PUBLIC_DIR / "cities").mkdir(exist_ok=True)
+    (PUBLIC_DIR / "cities" / "index.html").write_text(render_cities(CITIES))
     (PUBLIC_DIR / "contact").mkdir(exist_ok=True)
     (PUBLIC_DIR / "contact" / "index.html").write_text(render_contact())
-    (PUBLIC_DIR / "sitemap.xml").write_text(render_site_sitemap(built_at))
+    (PUBLIC_DIR / "sitemap-site.xml").write_text(render_site_sitemap(built_at))
     (PUBLIC_DIR / "404.html").write_text(render_not_found(CITIES, RETIRED))
     for slug, name in RETIRED.items():
         (PUBLIC_DIR / slug).mkdir(exist_ok=True)
         (PUBLIC_DIR / slug / "index.html").write_text(render_retired(slug, name, CITIES))
     # robots.txt, which only works at the site's root: each city's sitemap.
-    (PUBLIC_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n\n" + f"Sitemap: {PUBLIC_SITE}sitemap.xml\n" + "".join(
-        f"Sitemap: {PUBLIC_SITE}{city.slug}/sitemap.xml\n" for city in CITIES))
-    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: the cities, contact/, sitemap.xml, robots.txt and 404.html")
+    (PUBLIC_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n\n" + f"Sitemap: {PUBLIC_SITE}sitemap-site.xml\n" + "".join(
+        f"Sitemap: {PUBLIC_SITE}{city.path}sitemap.xml\n" for city in CITIES))
+    print(f"Wrote {PUBLIC_DIR.relative_to(ROOT.parent)}: cities/, contact/, sitemap-site.xml, robots.txt and 404.html")
 
 
 def moved_on(address):
@@ -5194,12 +5206,17 @@ def write_city(city, events, sources, failed, stale, built_at, biggest="", days_
         (CITY_DIR / name).write_bytes(data)
     (CITY_DIR / "about").mkdir(exist_ok=True)
     (CITY_DIR / "about" / "index.html").write_text(render_about(sources, built_at, events))
-    # Its own contact page, before the site had one for all its cities, on to that.
-    (CITY_DIR / "contact").mkdir(exist_ok=True)
-    (CITY_DIR / "contact" / "index.html").write_text(render_redirect(f"{PUBLIC_SITE}contact/"))
+    # Its own contact page, before the site had one for all its cities, on to that. (Boston's, at the root, is that.)
+    if city.path:
+        (CITY_DIR / "contact").mkdir(exist_ok=True)
+        (CITY_DIR / "contact" / "index.html").write_text(render_redirect(f"{PUBLIC_SITE}contact/"))
     if city is BOSTON_CITY:  # Where they were first, as about.html and contact.html, on to where they are.
         (CITY_DIR / "about.html").write_text(render_redirect(f"{PUBLIC_URL}about/"))
         (CITY_DIR / "contact.html").write_text(render_redirect(f"{PUBLIC_SITE}contact/"))
+        # And its home page from when it was at /boston/, which holds its old calendars now (below), so isn't
+        # an address the 404 page would get to send on.
+        (PUBLIC_DIR / "boston").mkdir(exist_ok=True)
+        (PUBLIC_DIR / "boston" / "index.html").write_text(render_redirect(PUBLIC_URL))
     for category, (slug, *_) in PUBLIC_PAGES.items():
         (CITY_DIR / slug).mkdir(exist_ok=True)
         (CITY_DIR / slug / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, category=category, days_seen=days_seen))
@@ -5218,6 +5235,11 @@ def write_city(city, events, sources, failed, stale, built_at, biggest="", days_
     (CITY_DIR / "calendar").mkdir(exist_ok=True)
     for path, feed in calendar_feeds(sources, events, built_at).items():
         (CITY_DIR / path).write_bytes(feed.encode())  # As written: its lines end \r\n, as the format asks.
+        # Boston's calendars were under /boston/ until Nov 2026, and a calendar app subscribed there can't
+        # follow the 404 page on to the root, so they're written there too.
+        if city is BOSTON_CITY:
+            (PUBLIC_DIR / "boston" / path).parent.mkdir(parents=True, exist_ok=True)
+            (PUBLIC_DIR / "boston" / path).write_bytes(feed.encode())
     print(f"Wrote {CITY_DIR.relative_to(ROOT.parent)}: index.html, {', '.join(slug + '/' for slug, *_ in PUBLIC_PAGES.values())}, tonight/, new/, weekend/, weekend/next/, "
           f"about/, contact/ and sitemap.xml, with {len(events)} listings")
 
