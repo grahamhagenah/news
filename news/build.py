@@ -9,6 +9,9 @@ import os
 import re
 import shutil
 import sys
+import threading
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -95,9 +98,47 @@ def read_sites():
     return [parse_site(line) for line in FEEDS_FILE.read_text().splitlines() if is_site_line(line)]
 
 
+# Reddit answers one request a minute from an address without an API key, and turns away the rest with a
+# 429 saying how many seconds until the next minute. So its feeds load one at a time, each waiting out the
+# minute when it has to (a few times at most, as others on the same address may be asking too). And each
+# build loads only the REDDIT_PER_BUILD subreddits loaded longest ago, showing the rest as they were.
+REDDIT_TURNS = 3
+REDDIT_PER_BUILD = 2
+REDDIT_LOCK = threading.Lock()
+
+
 def fetch(url, attempts=3, timeout=20):
     """The address the request ended at, and the body."""
-    return shared.fetch(url, USER_AGENT, attempts, timeout)
+    if not REDDIT.match(url):
+        return shared.fetch(url, USER_AGENT, attempts, timeout)
+    with REDDIT_LOCK:
+        for turn in range(REDDIT_TURNS + 1):
+            try:
+                return shared.fetch(url, USER_AGENT, attempts, timeout)
+            except urllib.error.HTTPError as error:
+                wait = error.headers.get("x-ratelimit-reset", "") if error.headers else ""
+                if error.code != 429 or turn == REDDIT_TURNS or not wait.replace(".", "", 1).isdigit() or float(wait) > 60:
+                    raise
+                time.sleep(float(wait) + 1)
+
+
+def reddit_turns(sites, previous):
+    """The Reddit feeds to load this build: any not loaded before, and the REDDIT_PER_BUILD loaded longest ago
+    (one that failed last time keeps its old time, so it's tried again first)."""
+    kept = previous.get("feeds", {})
+    reddit = [site for site in sites if REDDIT.match(site["url"])]
+    new = [site["url"] for site in reddit if site["url"] not in kept]
+    loaded = sorted((site for site in reddit if site["url"] in kept), key=lambda site: kept[site["url"]]["fetched"])
+    return set(new) | {site["url"] for site in loaded[:REDDIT_PER_BUILD]}
+
+
+def as_before(site, kept, now):
+    """A feed shown as the last build had it, with its posts still aging out, and when it was loaded."""
+    cutoff = now - timedelta(days=site["days"])
+    posts = [restored(post) for post in kept["posts"]]
+    return {"name": kept["name"], "url": site["url"], "feed_url": site["url"], "apple": site["apple"], "tag": site["tag"],
+            "posts": [post for post in posts if not post["date"] or post["date"] >= cutoff][: site["limit"]],
+            "fetched": datetime.fromisoformat(kept["fetched"])}
 
 
 class FeedLinkFinder(HTMLParser):
@@ -217,6 +258,28 @@ def entry_comments(entry, link, feed_url):
     return url, count
 
 
+# A Reddit feed's entry links to the post's thread, and its content is a small table: a thumbnail, who
+# submitted it, then [link] (the article, image or video the post shares, or the thread again) and [comments].
+# A post's own text, when it has any, sits between the SC_OFF and SC_ON markers.
+REDDIT = re.compile(r"https?://([\w-]+\.)*(reddit\.com|redd\.it)/")
+REDDIT_THREAD = re.compile(r"https?://(www\.|old\.)?reddit\.com/|https?://v\.redd\.it/")
+REDDIT_LINK = re.compile(r'<a href="([^"]+)">\[link\]</a>')
+REDDIT_TEXT = re.compile(r"<!-- SC_OFF -->(.*?)<!-- SC_ON -->", re.S)
+
+
+def reddit_post(content, thread):
+    """A Reddit post as (link, comments, summary): the article, image or video it shares, with its thread as
+    the comments, so reading it needn't mean going to Reddit. A post that is only text, a gallery, a Reddit
+    video or a crosspost links to its thread. The summary is the post's own text, if it has any."""
+    shared_link = REDDIT_LINK.search(content)
+    target = urljoin(thread, html.unescape(shared_link.group(1))) if shared_link else thread
+    text = REDDIT_TEXT.search(content)
+    summary = excerpt(text.group(1)) if text else []
+    if REDDIT_THREAD.match(target):
+        return thread, None, summary
+    return without_tracking(target), thread, summary
+
+
 def entry_audio(entry):
     """The episode's audio file, when the post is a podcast episode."""
     # RSS <enclosure>, Media RSS <media:content medium="audio">, or Atom <link rel="enclosure">.
@@ -334,6 +397,10 @@ def read_feed(site):
             video = YOUTUBE_VIDEO.match(link)
             summary = excerpt(child_text(entry, "encoded", "content", "description", "summary") or media_description(entry))
             comments, comment_count = entry_comments(entry, link, feed_url)
+            reddit = bool(REDDIT.match(feed_url))
+            if reddit:
+                link, comments, summary = reddit_post(child_text(entry, "content"), link)
+                video = YOUTUBE_VIDEO.match(link)
             posts.append({
                 "title": title,
                 "link": link,
@@ -344,6 +411,7 @@ def read_feed(site):
                 "audio": audio,
                 "podcast": audio is not None,
                 "video": video.group(1) if video else None,  # A YouTube video's id, for playing it here.
+                "reddit": reddit,  # A subreddit's post, which has a mark and a filter of its own.
                 "tag": site["tag"],
                 "music": None,  # Apple Music, for music=album or music=song lines; see link_to_apple_music.
             })
@@ -577,6 +645,7 @@ def render_json(posts, built_at):
                     "comments": post["comments"],
                     "podcast": post["podcast"],
                     "video": post.get("video"),
+                    "reddit": bool(post.get("reddit")),
                     "tag": post.get("tag") or None,
                     "music": post.get("music"),
                 }
@@ -598,7 +667,8 @@ RSS_FEEDS = {
 
 
 def is_article(post):
-    return not post["podcast"] and not post.get("video")
+    """Not an episode or a video, nor a Reddit thread or image, which read badly offline."""
+    return not post["podcast"] and not post.get("video") and not REDDIT.match(post["link"])
 
 
 def render_rss(posts, built_at, path="feed.xml"):
@@ -643,7 +713,7 @@ def render_rss(posts, built_at, path="feed.xml"):
 
 
 # Each post's mark, before its source: a page of text for an article, headphones for a podcast episode, a
-# screen with a play button for a video.
+# screen with a play button for a video, and a speech bubble for a post from a subreddit.
 # Drawn once in the page; rows point to the drawing. Unread, it takes its kind's color; read, it goes gray.
 ICON_DRAWINGS = {
     "article": '<rect x="3" y="1.75" width="10" height="12.5" rx="1.5"/><path d="M5.75 5.5h4.5M5.75 8h4.5M5.75 10.5h2.75"/>',
@@ -651,6 +721,11 @@ ICON_DRAWINGS = {
                '<rect x="1.5" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>'
                '<rect x="11.25" y="9.5" width="3.25" height="5" rx="1.25" fill="currentColor" stroke="none"/>',
     "video": '<rect x="1.5" y="2.75" width="13" height="10.5" rx="2"/><path d="M6.5 5.75v4.5L10.25 8z" fill="currentColor"/>',
+    "reddit": '<path d="M3.25 2.5h9.5a1.75 1.75 0 0 1 1.75 1.75v5.5a1.75 1.75 0 0 1-1.75 1.75H7.5L4.5 14v-2.5H3.25'
+              'A1.75 1.75 0 0 1 1.5 9.75v-5.5A1.75 1.75 0 0 1 3.25 2.5z"/>'
+              '<circle cx="5.5" cy="7" r=".9" fill="currentColor" stroke="none"/>'
+              '<circle cx="8" cy="7" r=".9" fill="currentColor" stroke="none"/>'
+              '<circle cx="10.5" cy="7" r=".9" fill="currentColor" stroke="none"/>',
 }
 ICON_SYMBOLS = shared.icon_symbols(ICON_DRAWINGS)
 
@@ -680,9 +755,11 @@ def render_index(feeds, posts, failed, stale, built_at):
     items = []
     for post in posts:
         when = render_time(post["date"]) if post["date"] else ""
-        kind = "podcast" if post["podcast"] else "video" if post.get("video") else "article"
+        # A subreddit's post is Reddit's whatever it shares; a video it shares still plays here.
+        kind = "reddit" if post.get("reddit") else "podcast" if post["podcast"] else "video" if post.get("video") else "article"
         mark = icon(kind)
         marked = " data-podcast" if post["podcast"] else f' data-video="{post["video"]}"' if post.get("video") else ""
+        marked += " data-reddit" if post.get("reddit") else ""
         preview = shared.preview(post["title"], post["summary"])
         tag = render_tag(post.get("tag"))
         comments = ""
@@ -717,7 +794,8 @@ def render_index(feeds, posts, failed, stale, built_at):
 
     # Only worth offering when there's something to choose between, and only the kinds there are.
     kinds = [("podcasts", "podcast", "Podcasts", any(post["podcast"] for post in posts)),
-             ("videos", "video", "Videos", any(post.get("video") for post in posts))]
+             ("videos", "video", "Videos", any(post.get("video") and not post.get("reddit") for post in posts)),
+             ("reddit", "reddit", "Reddit", any(post.get("reddit") for post in posts))]
     show_filter = (
         '<nav class="filter" aria-label="Show"><button data-show="all">All</button>'
         f'<button data-show="articles">{icon("article", decorative=True)}Articles</button>'
@@ -980,7 +1058,8 @@ INDEX_JS = """
     return params.toString() ? "?" + params : location.pathname;
   };
 
-  const kind = li => li.hasAttribute("data-podcast") ? "podcasts" : li.dataset.video ? "videos" : "articles";
+  const kind = li => li.hasAttribute("data-reddit") ? "reddit" : li.hasAttribute("data-podcast") ? "podcasts"
+    : li.dataset.video ? "videos" : "articles";
 
   function showPosts() {
     const words = plain(query()).split(/\\s+/).filter(Boolean);
@@ -997,7 +1076,7 @@ INDEX_JS = """
     pager.hidden = page >= pages;
     empty.textContent = words.length ? `Nothing ${source ? "from " + source : "here"} matches “${query()}”.`
       : source ? `Nothing from ${source} right now.`
-      : { podcasts: "No podcast episodes right now.", videos: "No videos right now." }[show] || "No articles right now.";
+      : { podcasts: "No podcast episodes right now.", videos: "No videos right now.", reddit: "No Reddit posts right now." }[show] || "No articles right now.";
     if (from) from.classList.toggle("chosen", Boolean(source));
     empty.hidden = shown.length > 0;
     if (filter) for (const b of filter.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.show === show);
@@ -1211,14 +1290,15 @@ HEAD = """<link rel="icon" href="favicon.svg" type="image/svg+xml">
 # The newsfeed's own styles, on top of the ones it shares with the events page (shared/site.py).
 CSS = """
   /* Unread marks, and the filter's matching marks: green for articles, violet for podcast episodes, coral for
-     videos. */
-  :root { --article: #34d399; --podcast: #a78bfa; --video: #fb7185; }
+     videos, amber for Reddit posts. */
+  :root { --article: #34d399; --podcast: #a78bfa; --video: #fb7185; --reddit: #fbbf24; }
   h1 { margin: 3rem 0 .75rem; color: #777; font-size: .75rem; font-weight: 600;
        letter-spacing: .08em; text-transform: uppercase; }
   h1:first-child, header + h1 { margin-top: 0; }
   .filter .icon { color: var(--article); }
   .filter [data-show="podcasts"] .icon { color: var(--podcast); }
   .filter [data-show="videos"] .icon { color: var(--video); }
+  .filter [data-show="reddit"] .icon { color: var(--reddit); }
   li { padding: .4rem 0; }
   ol { padding-left: 1.25rem; }
   ol li { padding: .3rem 0; }
@@ -1236,6 +1316,7 @@ CSS = """
   .unread > .icon { color: var(--article); }
   .row[data-podcast].unread > .icon { color: var(--podcast); }
   .row[data-video].unread > .icon { color: var(--video); }
+  .row[data-reddit].unread > .icon { color: var(--reddit); }
   @media (max-width: 34rem) {
     /* A phone's line: the headline, how long ago, its comments, and who it's from. */
     .headline > time, .headline > .comments, .headline > .tag { margin-left: 0; }
@@ -1379,7 +1460,7 @@ def gather(sites, feeds, previous, built_at):
         if not error and not feed["posts"] and recent:
             error = "returned no posts"
         if not error:
-            feed["fetched"] = built_at
+            feed["fetched"] = feed.get("fetched") or built_at
             gathered.append(feed)
             continue
         name = (kept or {}).get("name") or feed["name"]
@@ -1404,10 +1485,20 @@ still_failing = shared.still_failing
 
 def main():
     sites = read_sites()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        feeds = list(pool.map(load, sites))
+    previous = previous_build()
+    turns, now = reddit_turns(sites, previous), datetime.now(timezone.utc)
 
-    missing = [post for feed in feeds for post in feed["posts"] if not post["summary"]]
+    def load_or_keep(site):
+        if REDDIT.match(site["url"]) and site["url"] not in turns:
+            return as_before(site, previous["feeds"][site["url"]], now)
+        return load(site)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        feeds = list(pool.map(load_or_keep, sites))
+
+    # Not for a Reddit thread or image, which have no summary to give and would only add to Reddit's count of
+    # this build's requests.
+    missing = [post for feed in feeds for post in feed["posts"] if not post["summary"] and not REDDIT.match(post["link"])]
     with ThreadPoolExecutor(max_workers=16) as pool:
         for post, summary in zip(missing, pool.map(lambda post: page_summary(post["link"]), missing)):
             post["summary"] = summary
@@ -1418,7 +1509,6 @@ def main():
             print(f"✓ {feed['name']}: {len(feed['posts'])} posts, {previews} with previews, from {feed['feed_url']}")
 
     built_at = datetime.now(timezone.utc)
-    previous = previous_build()
     fill_page_titles(sites, feeds, previous)
     link_to_apple_music(sites, feeds, previous, built_at)
     feeds, failed, stale, errors = gather(sites, feeds, previous, built_at)

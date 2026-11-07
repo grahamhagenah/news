@@ -34,6 +34,7 @@ ROUTES = {
     "https://pitchfork.com/feed/feed-album-reviews/rss": "pitchfork_reviews.xml",
     "https://pitchfork.com/feed/reviews/best/albums/rss": "pitchfork_bnm.xml",
     "https://pitchfork.com/reviews/albums/actress-radical-frame/": "pitchfork_review.html",
+    "https://www.reddit.com/r/boston/top/.rss?t=day": "reddit_boston.xml",
 }
 
 
@@ -46,6 +47,56 @@ def sample(url, **kwargs):
 def site(url, days=36500, **options):
     """A feeds.txt line. Days reach far back, so the samples' posts don't age out of the tests."""
     return dict(build.parse_site(url), days=days, **options)
+
+
+class RedditLimit(unittest.TestCase):
+    """Reddit's one request a minute."""
+
+    def test_reddit_waits_its_turn(self):
+        answers = []
+
+        def answer(url, *args):
+            answers.append(url)
+            if len(answers) < 3:
+                raise build.urllib.error.HTTPError(url, 429, "Too Many Requests", {"x-ratelimit-reset": "25"}, None)
+            return sample(url)
+
+        url = "https://www.reddit.com/r/boston/top/.rss?t=day"
+        with mock.patch.object(build.shared, "fetch", answer), mock.patch.object(build.time, "sleep") as sleep:
+            self.assertEqual(build.fetch(url)[0], url)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [26, 26])
+
+    def test_only_reddit_waits(self):
+        def answer(url, *args):
+            raise build.urllib.error.HTTPError(url, 429, "Too Many Requests", {"x-ratelimit-reset": "25"}, None)
+
+        with mock.patch.object(build.shared, "fetch", answer), mock.patch.object(build.time, "sleep") as sleep:
+            with self.assertRaises(build.urllib.error.HTTPError):
+                build.fetch("https://kottke.org/")
+        sleep.assert_not_called()
+
+
+class RedditTurns(unittest.TestCase):
+    """Each build loads only a couple of subreddits, the ones loaded longest ago, and shows the rest as before."""
+
+    def test_new_and_oldest_load(self):
+        sites = [site(f"https://www.reddit.com/r/{name}/top/.rss?t=day") for name in ("a", "b", "c", "d")] + [site("https://kottke.org/")]
+        previous = {"feeds": {sites[0]["url"]: {"fetched": "2026-11-07T10:00:00+00:00"},
+                              sites[1]["url"]: {"fetched": "2026-11-07T08:00:00+00:00"},
+                              sites[2]["url"]: {"fetched": "2026-11-07T09:00:00+00:00"}}}
+        self.assertEqual(build.reddit_turns(sites, previous), {sites[1]["url"], sites[2]["url"], sites[3]["url"]})
+
+    def test_as_before(self):
+        now = datetime(2026, 11, 7, 12, tzinfo=timezone.utc)
+        kept = {"name": "r/a", "fetched": "2026-11-07T10:00:00+00:00",
+                "posts": [{"title": "Fresh", "link": "https://example.com/1", "date": "2026-11-07T09:00:00+00:00", "reddit": True},
+                          {"title": "Old", "link": "https://example.com/2", "date": "2026-10-01T09:00:00+00:00", "reddit": True}]}
+        feed = build.as_before(build.parse_site("https://www.reddit.com/r/a/top/.rss?t=day"), kept, now)
+        self.assertEqual([post["title"] for post in feed["posts"]], ["Fresh"])
+        self.assertEqual(feed["fetched"], datetime(2026, 11, 7, 10, tzinfo=timezone.utc), "keeps when it was loaded")
+        gathered, failed, stale, errors = build.gather([build.parse_site(feed["url"])], [feed], {"feeds": {feed["url"]: kept}}, now)
+        self.assertEqual(gathered[0]["fetched"], feed["fetched"])
+        self.assertEqual((failed, stale, errors), ([], [], {}))
 
 
 class Reading(unittest.TestCase):
@@ -77,6 +128,29 @@ class Reading(unittest.TestCase):
         self.assertTrue(all("news.ycombinator.com" in post["comments"] for post in feed["posts"]))
         self.assertTrue(all(isinstance(post["comment_count"], int) for post in feed["posts"]))
         self.assertFalse(any(line.startswith(("Points:", "Article URL")) for post in feed["posts"] for line in post["summary"]))
+
+    def test_reddit_posts_link_past_reddit(self):
+        feed = self.read("https://www.reddit.com/r/boston/top/.rss?t=day")
+        posts = {post["title"][:20]: post for post in feed["posts"]}
+        article = posts["Mass. voters narrowl"]
+        self.assertTrue(article["link"].startswith("https://www.bostonglobe.com/"), "an article goes to the article")
+        self.assertIn("reddit.com/r/boston/comments/", article["comments"], "with its thread as the comments")
+        self.assertEqual(article["summary"], [], "no 'submitted by' or [link] [comments] as a summary")
+        image = posts["Sunsets in boston ar"]
+        self.assertTrue(image["link"].startswith("https://i.redd.it/"), "an image is the image itself")
+        text = posts["Turn your headlights"]
+        self.assertIn("reddit.com/r/boston/comments/", text["link"], "a post that's only text is its thread")
+        self.assertIsNone(text["comments"], "already one click away")
+        self.assertTrue(text["summary"], "with its text as the summary")
+        gallery = posts["It's always the ones"]
+        self.assertIn("/comments/", gallery["link"], "a gallery is its thread, not Reddit's gallery viewer")
+        self.assertEqual(posts["Phil Eng defies City"]["video"], "Y44jT-qoCEs", "a YouTube video plays here")
+        self.assertTrue(all(post["reddit"] for post in feed["posts"]))
+        page = build.render_index([feed], build.all_posts([feed]), [], [], datetime.now(timezone.utc))
+        self.assertIn('<button data-show="reddit">', page, "a filter of their own")
+        self.assertNotIn('<button data-show="videos">', page, "a video shared on Reddit is a Reddit post")
+        self.assertEqual(page.count(" data-reddit"), len(feed["posts"]))
+        self.assertIn('data-video="Y44jT-qoCEs" data-reddit', page, "and still plays here")
 
     def test_youtube_api_when_a_channel_feed_fails(self):
         feed_url = "https://www.youtube.com/feeds/videos.xml?channel_id=UC4eYXhJI4-7wSWc8UNRwD4A"
