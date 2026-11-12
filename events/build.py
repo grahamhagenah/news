@@ -3922,7 +3922,12 @@ INDEX_JS = """
   fromAddress();
   // The bar: its height, for the day's heading to stick under it rather than behind it.
   // The bar's height, which a listing gone to is kept clear of.
-  const barHeight = () => document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height) + "px");
+  const barHeight = () => {
+    document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height) + "px");
+    // A day's heading's too, which sticks under the bar, and which the search lies along on a phone.
+    const heading = [...document.querySelectorAll(".day > h2")].find(h2 => h2.offsetParent);
+    if (heading) document.documentElement.style.setProperty("--head", heading.getBoundingClientRect().height + "px");
+  };
   new ResizeObserver(barHeight).observe(filter);
   barHeight();
   // After the kind, the venue or the search changes with the bar stuck partway down the list, back up to where
@@ -3941,10 +3946,26 @@ INDEX_JS = """
     const start = listStart();
     if (scrollY > start + 1) scrollTo({ top: start });
   };
-  // Once the bar is stuck over the list, the shadow under it. Checked as the page scrolls, and whenever the list
-  // changes.
-  const markStuck = () => filter.classList.toggle("stuck",
-    mark.getBoundingClientRect().top + parseFloat(getComputedStyle(filter).marginTop) < 0);
+  // Once the bar is stuck over the list, the shadow under it; or, with a day's heading stuck under the bar, under
+  // that. Checked as the page scrolls, and whenever the list changes.
+  const markStuck = () => {
+    filter.classList.toggle("stuck", mark.getBoundingClientRect().top + parseFloat(getComputedStyle(filter).marginTop) < 0);
+    const under = filter.getBoundingClientRect().bottom;
+    let pinned = false;
+    for (const h2 of document.querySelectorAll(".day > h2")) {
+      const box = h2.getBoundingClientRect();
+      // Held where it sticks, with its day still going on under it.
+      const at = parseFloat(getComputedStyle(h2).top) || 0;
+      const on = filter.classList.contains("stuck") && h2.offsetParent !== null && Math.abs(box.top - at) < 1.5
+        && h2.parentElement.getBoundingClientRect().bottom > box.bottom + 1;
+      h2.classList.toggle("pinned", on);
+      pinned ||= on;
+    }
+    filter.classList.toggle("headed", pinned);
+    // Past the end of the list, where there's no day's heading for the search to lie along on a phone.
+    const days = [...document.querySelectorAll(".day")].filter(day => day.offsetParent);
+    filter.classList.toggle("past", filter.classList.contains("stuck") && days.length > 0 && days.at(-1).getBoundingClientRect().bottom < under);
+  };
   addEventListener("scroll", markStuck, { passive: true });
   // The dot, back to the top; from the keyboard, focus goes back to the top too, to the site's name.
   filter.querySelector(".top-dot").addEventListener("click", event => {
@@ -4599,7 +4620,7 @@ PIN_CSS = """
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
   /* The filter as a bar that stays at the top of the window while the listings scroll under it, black
-     so they're hidden there. The days' headings scroll with the list, so it's the one thing held at the top.
+     so they're hidden there. Each day's heading stays under it while its day is passing.
      The same room around it as before: padding now, where it's black, taken back out of its margins. */
   .filter { position: sticky; top: 0; z-index: 3; padding: .55rem 0; margin-top: -1.3rem; margin-bottom: -1.85rem;
             background: #000; }
@@ -4627,12 +4648,12 @@ PIN_CSS = """
                    background: linear-gradient(rgba(0, 0, 0, .75), rgba(0, 0, 0, .5) 4px, rgba(0, 0, 0, .27) 9px,
                                                rgba(0, 0, 0, .1) 15px, transparent);
                    pointer-events: none; opacity: 0; transition: opacity .3s; }
-  .filter.stuck::after { opacity: 1; }
+  .filter.stuck:not(.headed)::after { opacity: 1; }
   @media (max-width: 34rem) { .filter::after { left: -1rem; right: -1rem; } }
   /* A listing gone to, clear of the bar (--bar, its height, set by the script): on the rows alone, not the page, or
      focusing the search in the bar would scroll the page back up to where the bar sits in it, to put the field
      below the room. */
-  .day > ul > li { scroll-margin-top: calc(var(--bar, 0px) + .75rem); }
+  .day > ul > li { scroll-margin-top: calc(var(--bar, 0px) + var(--head, 0px) + .75rem); }
   /* No scroll anchoring: as a search or a venue rewrites the list, the browser would scroll to keep whichever row
      it had picked in place, pulling the page out from under the bar and the bar down off the top with it. What's
      over the list is the page's own and settled, so there's nothing for anchoring to hold still. */
@@ -4653,9 +4674,18 @@ PIN_CSS = """
     .filter .finders .pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E"); }
     .filter .finders .when-pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
     .filter .finders .pick:focus-visible { outline-offset: -2px; }
-    /* The search, always open: on a line of its own under the kinds, the whole width of it. */
-    .filter > .search { order: 10; flex: 1 0 100%; width: 100%; min-width: 0; margin: .7rem 0 .1rem;
-                        font-size: 1rem; }
+    /* The search, always open, along the line of the day's heading under the bar, at its right and aligned to
+       it, the magnifying glass at the edge: over the first
+       day's while the page is at the top, which sits right under the bar, and over whichever day's is held
+       there as the list scrolls. The heading's own line is its underline. */
+    .filter > .search { position: absolute; top: 100%; right: 0; width: 40%; height: calc(var(--head, 2.2rem) - 2px);
+                        box-sizing: border-box; margin: 0; padding: .25rem 1.3em .45rem 0; border: 0; font-size: 1rem;
+                        text-align: right; background-color: #000; background-position: right calc(50% - .1rem); }
+    /* Its whole height but the heading's line, which runs on under it. Gone once the list has passed. */
+    .filter.past > .search:not(:focus) { visibility: hidden; }
+    /* With nothing to show, no heading: what the page says goes under the search's line rather than behind it. */
+    .filter ~ .empty { margin-top: calc(1.8rem + var(--head, 2.3rem) + .4rem); }
+    .filter { margin-bottom: -1.8rem; }
   }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
@@ -4753,6 +4783,19 @@ CSS = """
   /* On a phone, the kinds' size there. At the edge, with the dot and the rows' marks, so it reads as heading the
      rows under it rather than as one of them. */
   @media (max-width: 34rem) { .day > h2 { font-size: 1.05rem; } }
+  /* Each day's heading held under the bar while its day is passing, black so the rows go under it, until the
+     next day's pushes it up and away. Once it's held, the bar's shadow is its (the script marks it pinned). */
+  .day > h2 { position: sticky; top: var(--bar, 0px); z-index: 2; background: #000; }
+  .day > h2::after { content: ""; position: absolute; top: 100%; left: -.6rem; right: -.6rem; height: 22px;
+                     background: linear-gradient(rgba(0, 0, 0, .75), rgba(0, 0, 0, .5) 4px, rgba(0, 0, 0, .27) 9px,
+                                                 rgba(0, 0, 0, .1) 15px, transparent);
+                     pointer-events: none; opacity: 0; transition: opacity .3s; }
+  .day > h2.pinned::after { opacity: 1; }
+  @media (max-width: 34rem) {
+    .day > h2::after { left: -1rem; right: -1rem; }
+    /* Black out to the screen's edges, as the bar is, so nothing shows past its ends. */
+    .day > h2 { box-shadow: -1rem 0 #000, 1rem 0 #000; }
+  }
   /* Until the script picks the page, show the first two days, about a page, so the whole month never flashes up. */
   main:not(.paged) .day:nth-of-type(n+3) { display: none; }
   .relative:not(:empty) { color: #fff; margin-right: .6em; }
@@ -5059,7 +5102,9 @@ CSS = """
   .showings { margin: .35rem 0 .2rem calc(10rem + 1.25rem); }
   .showings li { display: flex; align-items: baseline; gap: .6em; padding: .15rem 0; font-size: .9em; }
   .showings a { flex: none; color: #ccc; }
-  .showings .times { margin-left: 0; white-space: normal; }
+  /* A place's times wrap under one another, however many it has: they'd otherwise run off the side of a
+     phone, which the page can then be scrolled sideways to. */
+  .showings .times { flex: 0 1 auto; min-width: 0; margin-left: 0; white-space: normal; }
   @media (max-width: 34rem) {
     .combined summary { grid-template-columns: 1fr; gap: 0; }
     .showings { margin-left: 0; }
