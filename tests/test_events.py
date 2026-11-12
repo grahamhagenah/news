@@ -943,7 +943,15 @@ class SharedLinks(unittest.TestCase):
                  build.event(hidden, "Theirs", day)]
         items[0]["times"] += [time(18, 45)]
         pages = build.event_pages([coolidge, alamo, hidden], items)
-        self.assertEqual(set(pages), {"e/2026-09-15-akira-4k-restoration-coolidge-corner/index.html", "e/2026-09-15-hope/index.html"})
+        self.assertEqual(set(pages), {"e/2026-09-15-akira-4k-restoration-coolidge-corner/index.html", "e/2026-09-15-hope/index.html",
+                                      # And beside each, a calendar file for each showing, by place and time.
+                                      "e/2026-09-15-akira-4k-restoration-coolidge-corner/coolidge-corner-1530.ics",
+                                      "e/2026-09-15-akira-4k-restoration-coolidge-corner/coolidge-corner-1845.ics",
+                                      "e/2026-09-15-hope/coolidge-corner-1245.ics", "e/2026-09-15-hope/alamo-drafthouse-1415.ics"})
+        showing = pages["e/2026-09-15-hope/alamo-drafthouse-1415.ics"]
+        self.assertTrue(showing.startswith("BEGIN:VCALENDAR\r\n") and showing.count("BEGIN:VEVENT") == 1)
+        self.assertIn("DTSTART:20260915T181500Z\r\nDTEND:20260915T201500Z\r\n", showing, "2:15pm in Boston, for two hours")
+        self.assertIn("SUMMARY:Hope\r\nLOCATION:Alamo Drafthouse", showing)
         akira = pages["e/2026-09-15-akira-4k-restoration-coolidge-corner/index.html"]
         self.assertIn('<meta property="og:title" content="Showtimes for Akira (4K Restoration) at Coolidge Corner · Tue, Sep 15">', akira)
         self.assertIn('<meta property="og:title" content="Showtimes for Hope · Tue, Sep 15">', pages["e/2026-09-15-hope/index.html"])

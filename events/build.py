@@ -3663,9 +3663,37 @@ def share_title(item, day):
     return f"{name}{at} · {when}" + (f", {clock(item['times'][0])}" if len(item["times"]) == 1 else "")
 
 
+def showing_file(venue, moment=None):
+    """A showing's calendar file's name, in its listing's folder: the venue's, and its time where it has one
+    (coolidge-corner-1620.ics). The page's script names it the same way, to add that showing to a calendar."""
+    return f"{calendar_slug(venue)}{f'-{moment:%H%M}' if moment else ''}.ics"
+
+
+def render_showing(item, day, moment=None):
+    """One showing as a calendar file, for adding it to a calendar from its listing's view on an iPhone or iPad,
+    whose Safari opens a calendar file at an address with Calendar's own sheet for adding it, and won't open one
+    the page makes itself. As the feeds have it: two hours from its time, or all day without one. Its stamp is
+    its day's, so the file is the same from build to build."""
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//Pushpin//{PUBLIC_NAME}//EN", "CALSCALE:GREGORIAN",
+             "METHOD:PUBLISH", "BEGIN:VEVENT",
+             f"UID:{hashlib.sha1('|'.join([item['venue'], item['title'], day.isoformat(), f'{moment:%H%M}' if moment else '']).encode()).hexdigest()}@pushpin.city",
+             f"DTSTAMP:{day:%Y%m%d}T000000Z"]
+    if moment:
+        start = datetime.combine(day, moment, zone_of(item)).astimezone(timezone.utc)
+        lines += [f"DTSTART:{start:%Y%m%dT%H%M%SZ}", f"DTEND:{start + timedelta(hours=2):%Y%m%dT%H%M%SZ}"]
+    else:
+        lines += [f"DTSTART;VALUE=DATE:{day:%Y%m%d}", f"DTEND;VALUE=DATE:{day + timedelta(days=1):%Y%m%d}"]
+    place = item.get("address") or VENUE_ADDRESSES.get(item["venue"])
+    lines += [f"SUMMARY:{ics_text(item['title'])}",
+              f"LOCATION:{ics_text(item['venue'] + (', ' + written(place) if place else ''))}",
+              f"DESCRIPTION:{ics_text(item['link'])}", f"URL:{item['link']}", "END:VEVENT", "END:VCALENDAR"]
+    return "\r\n".join(ics_fold(line) for line in lines) + "\r\n"
+
+
 def event_pages(sources, events):
     """Each listing's page (render_event_page), by its path under the city's folder, for the public site's
-    listings, as its pages show them: a film at several theaters as one."""
+    listings, as its pages show them: a film at several theaters as one. Beside each, a calendar file for each of
+    its showings (render_showing): each time at each of its places, or the day, for one with no time."""
     public = {source["name"] for source in sources if source.get("public", True)}
     days = {}
     for item in events:
@@ -3676,6 +3704,9 @@ def event_pages(sources, events):
         for item in combine_films(items):
             ident = listing_id(day, item["title"], "" if "showings" in item else item["venue"])[0]
             pages[f"e/{ident}/index.html"] = render_event_page(item, day)
+            for place in item.get("showings", [item]):
+                for moment in place["times"] or [None]:
+                    pages[f"e/{ident}/{showing_file(place['venue'], moment)}"] = render_showing(place, day, moment)
     return pages
 
 
@@ -4428,8 +4459,13 @@ INDEX_JS = """
       "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", ...when,
       "SUMMARY:" + calendarText(title), "LOCATION:" + calendarText(where), "URL:" + showing.link,
       "DESCRIPTION:" + calendarText(showing.link), "END:VEVENT", "END:VCALENDAR"].join("\\r\\n");
+    // An iPhone or iPad: the showing's own calendar file, which each build writes beside the listing's page
+    // (showing_file), at its address. Safari won't open one the page makes, from a data: or blob: address.
     const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (apple) { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics); return; }
+    if (apple) {
+      location.href = SHARE_URL + "e/" + li.dataset.id + "/" + calendarSlug(showing.venue) + (showing.time ? "-" + showing.time.replace(":", "") : "") + ".ics";
+      return;
+    }
     const a = Object.assign(document.createElement("a"), {
       href: URL.createObjectURL(new Blob([ics], { type: "text/calendar" })),
       download: (title.replace(/[^\\w\\s-]+/g, "").trim().slice(0, 60) || "event") + ".ics",
@@ -4437,7 +4473,8 @@ INDEX_JS = """
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   }
-  const calendarSlug = text => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  // A venue's name as the build names its files (calendar_slug).
+  const calendarSlug = text => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   // Several showings (a film's times, at one place or a few): the button opens the device's own menu of them,
   // by place, the way the venue menu does, and the one picked is added. Its first choice only says what it's
   // for, so that any showing picked is a change.
@@ -5266,10 +5303,10 @@ def write_city(city, events, sources, failed, stale, built_at, biggest="", days_
         (CITY_DIR / path).mkdir(parents=True, exist_ok=True)
         (CITY_DIR / path / "index.html").write_text(render_index(events, sources, failed, stale, built_at, public=True, weekend=ahead, days_seen=days_seen))
     (CITY_DIR / "sitemap.xml").write_text(render_sitemap(built_at))
-    # Each listing's own page, for the preview a shared link to it shows.
+    # Each listing's own page, for the preview a shared link to it shows, and its showings' calendar files.
     for path, page in event_pages(sources, events).items():
         (CITY_DIR / path).parent.mkdir(parents=True, exist_ok=True)
-        (CITY_DIR / path).write_text(page)
+        (CITY_DIR / path).write_bytes(page.encode())  # As written: a calendar file's lines end \r\n.
     (CITY_DIR / "calendar").mkdir(exist_ok=True)
     for path, feed in calendar_feeds(sources, events, built_at).items():
         (CITY_DIR / path).write_bytes(feed.encode())  # As written: its lines end \r\n, as the format asks.
