@@ -2489,12 +2489,15 @@ def tabler(paths, css_class):
 
 
 # A listing's copy-link button's icon (Tabler's "link").
-LINK_MARK = tabler(["M9 15l6 -6", "M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464",
-                    "M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"], "link-mark")
+SHARE_MARK = tabler(["M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1", "M12 14v-11",
+                     "M9 6l3 -3l3 3"], "share-mark")
 # Before Just announced, Tabler's "sparkles".
 SPARK_MARK = tabler(["M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
                      "M16 6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
                      "M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"], "spark-mark")
+# Its add-to-calendar button's, Tabler's "calendar-plus".
+CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5", "M16 3v4", "M8 3v4",
+                        "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
 # And its "check", which takes the link icon's place once the link is copied.
 CHECK_MARK = tabler(["M5 12l5 5l10 -10"], "check-mark")
 # The way through the list from inside a listing's view, Tabler's "chevron-left" and "chevron-right".
@@ -2503,7 +2506,7 @@ CLOSE_MARK = ('<svg class="close-mark" viewBox="0 0 16 16" aria-hidden="true"><p
               'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
 # A listing's own view, opened by clicking it: its picture, when, its price and ages, each place it's at, a
 # link to its page (tickets), with its times, what it's about, the address, its other
-# dates, and a way to copy its link. The script fills it in from the listing.
+# dates, a way to add it to a calendar, and a way to copy its link. The script fills it in from the listing.
 EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <div class="event-tools"><div class="event-steps"><button class="event-back" type="button" aria-label="Previous listing">{STEP_MARKS["back"]}</button><button class="event-on" type="button" aria-label="Next listing">{STEP_MARKS["on"]}</button></div><button class="event-close" type="button" aria-label="Close">{CLOSE_MARK}</button></div>
 <p class="event-said" role="status" aria-live="polite" aria-atomic="true"></p>
@@ -2519,7 +2522,7 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <button class="event-more" type="button" hidden aria-expanded="false">Read more</button>
 <p class="event-place"></p>
 <p class="event-also"></p>
-<div class="event-foot"><button class="event-copy" type="button">{LINK_MARK}{CHECK_MARK}<span aria-live="polite">Copy link</span></button></div>
+<div class="event-foot"><span class="event-adder"><button class="event-add" type="button">{CALENDAR_MARK}<span>Add to calendar</span></button><select class="event-showing" aria-label="Add a showing to your calendar" hidden></select></span><button class="event-share" type="button">{SHARE_MARK}{CHECK_MARK}<span aria-live="polite">Share</span></button></div>
 </div>
 </dialog>
 """
@@ -2784,7 +2787,8 @@ def render_lead(events, built_at, before=""):
             f'<span>{html.escape(item["venue"])} · {item["date"]:%b} {item["date"].day}</span></a></li>'
             for item in fresh)
         parts.append(
-            f'<div class="fresh"><div class="fresh-head"><span class="lead-tag fresh-tag">{SPARK_MARK}Just announced</span>'
+            f'<div class="fresh"><div class="fresh-head"><a class="lead-tag fresh-tag" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">'
+            f'{SPARK_MARK}Just announced</a>'
             f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></div>'
             f'<ul class="fresh-list">{rows}</ul></div>')
     if not parts:
@@ -2841,27 +2845,9 @@ def render_combined(item):
 
 # The filter is a bar that stays at the top of the window as the listings scroll under it. On a phone it's one
 # line: the pin's head from the name (WORDMARK), an amber dot, which goes back to the top in place of the
-# floating arrow; the kinds; then a map pin that opens the day and venue menus under it, marked with an amber
-# dot of its own while either is narrowing the list, and last a magnifying glass that opens the search across
-# it, whose ✕ takes its place at the end of the line. (Tabler Icons' "map-pin", "search" and "x", MIT license,
-# their paths verbatim.)
+# floating arrow; the kinds; then the day and venue menus as icons. The search is always open, on a line of its
+# own under it.
 TOP_DOT = '<button class="top-dot" type="button" aria-label="Back to top"><span></span></button>'
-
-
-def bar_icon(*paths):
-    return ('<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
-            'stroke-linecap="round" stroke-linejoin="round">' + "".join(f'<path d="{d}"/>' for d in paths) + "</svg>")
-
-
-BAR_TOGGLES = (
-    '<button class="toggle filters-open" type="button" aria-label="Day and venue" aria-expanded="false">'
-    + bar_icon("M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0",
-               "M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z") + "</button>"
-    '<button class="toggle search-open" type="button" aria-label="Search" aria-expanded="false">'
-    + bar_icon("M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0", "M21 21l-6 -6") + "</button>"
-    '<button class="toggle search-close" type="button" aria-label="Close search">'
-    + bar_icon("M18 6l-12 12", "M6 6l12 12") + "</button>"
-)
 
 
 def venue_menu(venues, towns, events):
@@ -3028,7 +3014,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
         f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{TOP_DOT}{buttons}{when_links}'
-        f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}</span>{shared.SEARCH}{BAR_TOGGLES}</nav>\n'
+        f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}</span>{shared.SEARCH}</nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
@@ -3903,42 +3889,11 @@ INDEX_JS = """
     if (venue.selectedIndex < 0) venue.value = ""; // A venue no longer listed.
   };
   fromAddress();
-  // The bar: its height, for the day's heading to stick under it rather than behind it. On a phone, the search
-  // opens across it in place of the kinds, and closing it empties it; the day and venue menus open under it,
-  // the button marked while either narrows the list. Opened already when the address searches.
-  const openSearch = filter.querySelector(".search-open"), closeSearch = filter.querySelector(".search-close");
-  const openFilters = filter.querySelector(".filters-open");
+  // The bar: its height, for the day's heading to stick under it rather than behind it.
   // The bar's height, which a listing gone to is kept clear of.
   const barHeight = () => document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height) + "px");
   new ResizeObserver(barHeight).observe(filter);
   barHeight();
-  const searching = on => {
-    filter.classList.toggle("searching", on);
-    openSearch.setAttribute("aria-expanded", on);
-  };
-  const choosing = on => {
-    filter.classList.toggle("choosing", on);
-    openFilters.setAttribute("aria-expanded", on);
-  };
-  const narrowing = () => {
-    const on = Boolean(venue.value) || Boolean(when && when.classList.contains("chosen"));
-    openFilters.classList.toggle("on", on);
-    return on;
-  };
-  openSearch.addEventListener("click", () => { searching(true); search.focus({ preventScroll: true }); });
-  closeSearch.addEventListener("click", () => {
-    const had = search.value;
-    search.value = "";
-    searching(false);
-    if (had) { history.replaceState(null, "", address(1)); showEvents(); }
-    openSearch.focus();
-  });
-  search.addEventListener("keydown", event => {
-    if (event.key === "Escape" && !search.value && filter.classList.contains("searching")) closeSearch.click();
-  });
-  openFilters.addEventListener("click", () => choosing(!filter.classList.contains("choosing")));
-  searching(Boolean(search.value));
-  choosing(narrowing());
   // After the kind, the venue or the search changes with the bar stuck partway down the list, back up to where
   // the list starts, under the bar, so the new list is read from its top rather than from the middle.
   const mark = document.querySelector(".bar-mark");
@@ -4086,8 +4041,6 @@ INDEX_JS = """
     const here = [...filter.querySelectorAll("a[data-show]")].find(a => new URL(a.dataset.href, location.href).pathname === location.pathname);
     show = here ? here.dataset.show : "all";
     fromAddress();
-    searching(Boolean(search.value) || filter.classList.contains("searching"));
-    narrowing();
     showEvents();
   });
   // Choosing a venue shows all its events, whatever their kind. A kind's own page has only that kind's, so
@@ -4100,7 +4053,6 @@ INDEX_JS = """
     if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
     if (kindPages) history.pushState(null, "", new URL(home.dataset.href, location.href).pathname + query());
     else history.replaceState(null, "", address(1));
-    narrowing();
     showEvents();
     toList();
   });
@@ -4120,7 +4072,7 @@ INDEX_JS = """
   };
 
   // A listing opens its own view: when; each place it's at, a link to its page, for tickets, with its times; what it's about; the address and a map; its other dates; and a way
-  // to copy its link. The view has an address of its own (?event=…), so Back closes it and a shared link opens it.
+  // to share its link. The view has an address of its own (?event=…), so Back closes it and a shared link opens it.
   // The listing's name is still a link to the venue's page: a click with a modifier key, or a middle click,
   // goes straight there.
   const view = document.querySelector("dialog.event");
@@ -4137,7 +4089,7 @@ INDEX_JS = """
     if (id) url.searchParams.set("event", id); else url.searchParams.delete("event");
     return url.pathname + url.search;
   };
-  let shown = null, pushed = false;
+  let shown = null, pushed = false, showings = [];
   for (const opener of document.querySelectorAll(".day a.title, .combined summary")) opener.setAttribute("aria-haspopup", "dialog");
   // Its times, as the listing has them.
   const timeLabels = times => group([...times].map(t => {
@@ -4211,12 +4163,17 @@ INDEX_JS = """
           .map(place => ({ name: place.querySelector("a").textContent, href: place.querySelector("a").href, source: place.dataset.source,
                            times: place.querySelectorAll("time[data-time]") }))
       : [{ name: venue, href: li.querySelector("a.title").href, source: li.dataset.sources, times: li.querySelectorAll("time[data-time]:not(.from)") }];
+    // Each showing, for adding one to a calendar: its time, which is what's picked where there are several,
+    // and where it is. Not one that's sold out. A listing with no time is a day's, at its one place.
+    showings = [];
     part("places").replaceChildren(...places.map(place => {
       const item = document.createElement("li");
       const a = Object.assign(document.createElement("a"), { href: place.href, textContent: place.name + " ↗",
         title: (li.dataset.category === "art" ? "Details at " : "Tickets at ") + place.name });
       a.dataset.source = place.source;
       item.append(a, timeLabels(place.times));
+      for (const t of place.times) if (!t.classList.contains("sold"))
+        showings.push({ time: t.dataset.time, label: t.textContent, venue: place.name, link: place.href, source: place.source });
       return item;
     }));
     // What it's about: the row's excerpt at once, then all of it, from its own page, where there's more.
@@ -4234,7 +4191,9 @@ INDEX_JS = """
       history.replaceState(null, "", withEvent(others[i].dataset.id));
       openEvent(others[i], false);
     });
-    copySays("Copy link");
+    if (!places.some(place => place.times.length)) showings = [{ time: "", venue: places[0].name, link: places[0].href, source: places[0].source }];
+    shareSays("Share");
+    showingMenu(places.length > 1);
     part("body").scrollTop = 0;
   }
   // The listings either side of the one shown: what the filters and the search allow, across the days, in the
@@ -4402,11 +4361,13 @@ INDEX_JS = """
     }
   }
 
-  // Copy the listing's link: its own page, which gives the link its preview (the name, when and where, and
-  // its picture) wherever it's pasted. The button says so for a moment, with a check for its icon. Where the
-  // clipboard can't be written to directly (some apps' own browsers), a selected copy of the link is copied.
-  function copySays(label, state = "") {
-    const button = part("copy");
+  // Share the listing's link: its own page, which gives the link its preview (the name, when and where, and
+  // its picture) wherever it goes. The device's own share sheet, where there is one, with the link and a title
+  // alone: words sent along with it go as a message of their own, and the link can lose its preview. Elsewhere
+  // the link is copied, and the button says so for a moment, with a check for its icon. Where the clipboard
+  // can't be written to directly (some apps' own browsers), a selected copy of the link is copied.
+  function shareSays(label, state = "") {
+    const button = part("share");
     clearTimeout(button.timer);
     button.classList.toggle("copied", state === "copied");
     button.lastElementChild.textContent = label;
@@ -4420,15 +4381,91 @@ INDEX_JS = """
     field.remove();
     if (!done) throw new Error("not copied");
   }
-  part("copy").addEventListener("click", async () => {
-    const li = shown, button = part("copy");
-    const url = SHARE_URL + "e/" + li.dataset.id + "/";
-    tally("share/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), li.querySelector(".title").textContent.trim());
+  part("share").addEventListener("click", async () => {
+    const li = shown, button = part("share");
+    const url = SHARE_URL + "e/" + li.dataset.id + "/", title = li.querySelector(".title").textContent.trim();
+    tally("share/" + (li.classList.contains("combined") ? "several theaters" : li.dataset.sources), title);
+    if (navigator.share) {
+      try { await navigator.share({ title, url }); return; }
+      catch (error) { if (error.name === "AbortError") return; } // Closed without sharing; anything else, copied.
+    }
     try {
       try { await navigator.clipboard.writeText(url); } catch (error) { copyText(url); }
-      copySays("Link copied", "copied");
-    } catch (error) { copySays("Couldn’t copy it"); }
-    button.timer = setTimeout(() => copySays("Copy link"), 2500);
+      shareSays("Link copied", "copied");
+    } catch (error) { shareSays("Couldn’t copy it"); }
+    button.timer = setTimeout(() => shareSays("Share"), 2500);
+  });
+
+  // Add to calendar: the listing's showing, or, where it has several (a film's times, at one place or a few),
+  // the one picked from a list of them under the button. On an iPhone or iPad, Calendar's own sheet for adding
+  // it; on Android, Google Calendar's page with it filled in; elsewhere a file any calendar app opens. It runs
+  // two hours, since most listings give only when things start; one with no time is the whole day. In the
+  // city's own clock, wherever the reader is.
+  const pad = n => String(n).padStart(2, "0");
+  const stamp = (day, time, hours = 0) => {
+    const [h, m] = time.split(":").map(Number);
+    const d = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10), h + hours, m));
+    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00`;
+  };
+  const dayAfter = day => new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10) + 1)).toISOString().slice(0, 10).replace(/-/g, "");
+  const calendarText = text => text.replace(/[\\\\;,]/g, "\\\\$&").replace(/\\n/g, "\\\\n");
+  function addToCalendar(li, showing) {
+    const title = li.querySelector(".title").textContent.trim();
+    const day = li.dataset.id.slice(0, 10);
+    const address = (!li.classList.contains("combined") && li.dataset.address) || PLACES[showing.venue] || "";
+    const where = [showing.venue, address].filter(Boolean).join(", ");
+    const [start, end] = showing.time ? [stamp(day, showing.time), stamp(day, showing.time, 2)] : [day.replace(/-/g, ""), dayAfter(day)];
+    tally("calendar/" + showing.source, title);
+    if (/Android/i.test(navigator.userAgent)) {
+      const details = { action: "TEMPLATE", text: title, dates: `${start}/${end}`, ctz: ZONE, location: where, details: showing.link };
+      open("https://calendar.google.com/calendar/render?" + new URLSearchParams(details), "_blank", "noopener");
+      return;
+    }
+    const when = showing.time ? [`DTSTART;TZID=${ZONE}:${start}`, `DTEND;TZID=${ZONE}:${end}`]
+                              : [`DTSTART;VALUE=DATE:${start}`, `DTEND;VALUE=DATE:${end}`];
+    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//" + location.hostname + "//EN", "BEGIN:VEVENT",
+      `UID:${start}-${calendarSlug(title + " " + showing.venue)}@${location.hostname}`,
+      "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", ...when,
+      "SUMMARY:" + calendarText(title), "LOCATION:" + calendarText(where), "URL:" + showing.link,
+      "DESCRIPTION:" + calendarText(showing.link), "END:VEVENT", "END:VCALENDAR"].join("\\r\\n");
+    const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (apple) { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics); return; }
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(new Blob([ics], { type: "text/calendar" })),
+      download: (title.replace(/[^\\w\\s-]+/g, "").trim().slice(0, 60) || "event") + ".ics",
+    });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+  const calendarSlug = text => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  // Several showings (a film's times, at one place or a few): the button opens the device's own menu of them,
+  // by place, the way the venue menu does, and the one picked is added. Its first choice only says what it's
+  // for, so that any showing picked is a change.
+  function showingMenu(byPlace) {
+    const menu = part("showing");
+    menu.hidden = showings.length < 2;
+    part("add").tabIndex = menu.hidden ? 0 : -1;
+    if (menu.hidden) return menu.replaceChildren();
+    const option = (text, value) => Object.assign(document.createElement("option"), { textContent: text, value });
+    const first = Object.assign(option("Add which showing?", ""), { disabled: true, selected: true });
+    const groups = new Map();
+    for (const [i, showing] of showings.entries()) {
+      if (!groups.has(showing.venue)) groups.set(showing.venue, []);
+      groups.get(showing.venue).push(option(showing.label, i));
+    }
+    menu.replaceChildren(first, ...(byPlace
+      ? [...groups].map(([venue, options]) => {
+          const group = Object.assign(document.createElement("optgroup"), { label: venue });
+          group.append(...options);
+          return group;
+        })
+      : [...groups.values()].flat()));
+  }
+  part("add").addEventListener("click", () => { if (showings.length === 1) addToCalendar(shown, showings[0]); });
+  part("showing").addEventListener("change", event => {
+    const menu = event.target;
+    if (menu.value !== "") addToCalendar(shown, showings[+menu.value]);
+    menu.selectedIndex = 0;
   });
 
   // A listing followed to its venue's page, counted as the venue's: from its view, or straight from its name
@@ -4524,7 +4561,7 @@ PIN_CSS = """
   /* What the page says when nothing's left to show takes that pull-up too, with no day between them; it gets back
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
-  /* The filter as a bar that stays at the top of the window while the listings scroll under it (BAR_TOGGLES), black
+  /* The filter as a bar that stays at the top of the window while the listings scroll under it, black
      so they're hidden there. The days' headings scroll with the list, so it's the one thing held at the top.
      The same room around it as before: padding now, where it's black, taken back out of its margins. */
   .filter { position: sticky; top: 0; z-index: 3; padding: .55rem 0; margin-top: -1.3rem; margin-bottom: -1.85rem;
@@ -4563,34 +4600,25 @@ PIN_CSS = """
      it had picked in place, pulling the page out from under the bar and the bar down off the top with it. What's
      over the list is the page's own and settled, so there's nothing for anchoring to hold still. */
   html { overflow-anchor: none; }
-  /* Beside the kinds, the menus and then the search, at the end of the line; the buttons that open them on a
-     phone, hidden. */
+  /* Beside the kinds, the menus and then the search, at the end of the line. */
   .filter > .search { margin-left: 0; }
-  .filter .toggle { display: none; }
   @media (max-width: 34rem) {
-    /* One line: the dot, the kinds, and at the end of it the menus' button and the search's, where its ✕ goes. */
+    /* One line: the dot, the kinds, and at the end of it the day and venue menus; the search on a line of its
+       own under it. */
     .filter { flex-wrap: wrap; row-gap: 0; column-gap: .75rem; }  /* Room for it all down to a 340-pixel screen. */
-    /* Their full height, a little more than the kinds', so the line is as tall with the search open in place of
-       the kinds (whose field is shorter) as without it, and nothing under the bar moves as it opens. */
-    .filter .toggle { display: grid; place-items: center; align-self: center; position: relative; width: 1.8rem;
-                      height: 2rem; margin: 0 -.35rem 0 0; padding: 0; color: #888; }
-    .filter .toggle svg { width: 19px; height: 19px; }
-    .filter .toggle:hover { color: #ddd; }
-    .filter .toggle[aria-expanded="true"] { color: #fff; }
-    .filter .filters-open { margin-left: auto; }
-    .filter .search-close, .filter > .search { display: none; }
-    /* Searching: the field across the line in place of the kinds, closed by the ✕ after it. */
-    .filter.searching > a[data-show], .filter.searching > button[data-show], .filter.searching .when-links,
-    .filter.searching .search-open, .filter.searching .filters-open { display: none; }
-    .filter.searching > .search { display: block; align-self: center; flex: 1 1 0; width: 0; min-width: 0; margin: 0;
-                                  font-size: 1rem; }
-    .filter.searching .search-close { display: grid; }
-    /* The day and venue menus, opened on a line of their own under it. */
-    .filter .finders { display: none; order: 9; margin: .7rem 0 .1rem; }
-    .filter.choosing .finders { display: flex; }
-    /* Marked while one of them narrows the list, closed or open. */
-    .filters-open.on::after { content: ""; position: absolute; top: .3rem; right: .2rem; width: 6px; height: 6px;
-                              border-radius: 50%; background: #fbbf24; }
+    /* The menus as icons, a calendar for the day and a pin for the venue (Tabler Icons' "calendar" and
+       "map-pin", MIT license, their paths verbatim), which open the phone's own list of choices. Their full
+       height, a little more than the kinds', with more to press around them; amber while they narrow the list. */
+    .filter .finders { flex-basis: auto; align-self: center; gap: .3rem; margin: 0 -.35rem 0 auto; }
+    .filter .finders .pick { flex: none; width: 1.8rem; max-width: none; height: 2rem; padding: 0; color: transparent;
+                             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 19px; font-size: 1rem; }
+    .filter .finders .when-pick { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
+    .filter .finders .pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E"); }
+    .filter .finders .when-pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
+    .filter .finders .pick:focus-visible { outline-offset: -2px; }
+    /* The search, always open: on a line of its own under the kinds, the whole width of it. */
+    .filter > .search { order: 10; flex: 1 0 100%; width: 100%; min-width: 0; margin: .7rem 0 .1rem;
+                        font-size: 1rem; }
   }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
@@ -4766,6 +4794,9 @@ CSS = """
   /* No taller than the heading beside it, which would set it lower than the film's opposite. */
   .fresh-more { flex: none; color: #888; font-size: .8rem; line-height: 1; }
   .fresh-more:hover { color: #fff; text-decoration: none; }
+  /* The heading goes to the rest too; on a phone, where See all would crowd the line, it's the only way there. */
+  .fresh-tag:hover { text-decoration: none; }
+  @media (max-width: 34rem) { .fresh-more { display: none; } }
   .fresh-list { margin: .45rem 0 0; padding: 0; list-style: none; }
   .fresh-list li + li { margin-top: .3rem; }
   .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; white-space: nowrap; }
@@ -4862,7 +4893,7 @@ CSS = """
   .event-steps { display: flex; gap: .2rem; }
   /* A press that drifts is a press, not the start of a selection: dragging off a button used to take the
      picture and half the panel into a highlight. */
-  .event-tools, .event-copy, .event-more, .event-image, .event-foot { user-select: none; -webkit-user-select: none; }
+  .event-tools, .event-share, .event-add, .event-more, .event-image, .event-foot { user-select: none; -webkit-user-select: none; }
   .event-tools button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0;
                         border-radius: 50%; background: none; color: #888; cursor: pointer;
                         transition: background-color .15s, color .15s; }
@@ -4938,14 +4969,21 @@ CSS = """
   .event-place a, .event-also a { color: #ccc; text-decoration: underline; text-decoration-color: #555; text-underline-offset: .2em; }
   /* Last, at the foot of the view: the padding keeps it clear of the text above, the auto margin drops it to the
      bottom when a short listing leaves room. */
-  .event-foot { margin-top: auto; padding-top: 1.2rem; }
-  .event-copy { display: inline-flex; align-items: center; gap: .35rem;
+  .event-foot { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: auto; padding-top: 1.2rem; }
+  .event-share, .event-add { display: inline-flex; align-items: center; gap: .35rem;
                 padding: .4rem .9rem; border: 1px solid #333;
                 border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; }
-  .event-copy:hover, .event-copy:focus-visible, .event-copy.copied { border-color: #888; color: #fff; outline: none; }
-  .link-mark, .check-mark { width: 15px; height: 15px; }
-  .event-copy .check-mark, .event-copy.copied .link-mark { display: none; }
-  .event-copy.copied .check-mark { display: block; color: #4ade80; }
+  .event-share:hover, .event-share:focus-visible, .event-share.copied, .event-add:hover, .event-add:focus-visible,
+  .event-adder:has(.event-showing:hover) .event-add, .event-adder:has(.event-showing:focus-visible) .event-add { border-color: #888; color: #fff; }
+  .share-mark, .check-mark, .calendar-mark { width: 15px; height: 15px; }
+  /* A listing with several showings: the menu of them over the button, unseen, so a press on the button opens it.
+     At 16px, since iPhones zoom in on a smaller one when it's tapped. */
+  .event-adder { position: relative; display: inline-flex; }
+  .event-showing { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 1rem; cursor: pointer;
+                   -webkit-appearance: none; appearance: none; }
+  .event-showing option, .event-showing optgroup { background: #000; color: #fff; }
+  .event-share .check-mark, .event-share.copied .share-mark { display: none; }
+  .event-share.copied .check-mark { display: block; color: #4ade80; }
   @media (max-width: 34rem) {
     /* A sheet up from the bottom, as tall as it needs: a phone's screen is the frame that steadies it. */
     dialog.event { width: 100%; max-width: 100%; height: auto; max-height: 88dvh; margin: auto 0 0;
