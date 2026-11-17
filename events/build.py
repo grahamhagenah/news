@@ -2932,7 +2932,11 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             rows = combine_films(days[day])
             rows.sort(key=lambda item: (bool(item["times"]), item["times"][:1], item["title"].casefold()))
             heading = (f'<section class="day" data-date="{day.isoformat()}">'
-                       f'<h2><span class="relative"></span><span class="date"><span class="weekday">{day:%a}</span>, {day:%b} {day.day}</span></h2>\n')
+                       # In full, "Thursday, November 19": a day's heading has a line of its own. Short on the
+                       # narrowest phones, where "Tomorrow Wednesday, September 30" would wrap.
+                       f'<h2><span class="relative"></span><span class="date"><span class="weekday">'
+                       f'<span class="long">{day:%A}</span><span class="short">{day:%a}</span></span>, '
+                       f'<span class="long">{day:%B}</span><span class="short">{day:%b}</span> {day.day}</span></h2>\n')
         sections.append(heading + '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>")
 
     # The kinds by name alone: each row's mark says its kind already, and the filter's words are plain enough
@@ -4855,6 +4859,9 @@ CSS = """
   /* The day of the week in white, as Today and Tomorrow are; after those, it's in gray with the date. */
   .weekday { color: #fff; }
   .relative:not(:empty) + .date .weekday { color: inherit; }
+  /* The day and month in full, or short ("Wed, Sep 30") on the narrowest phones, where in full they'd wrap. */
+  .date .short { display: none; }
+  @media (max-width: 22.5rem) { .date .long { display: none; } .date .short { display: inline; } }
   /* A source that didn't load, at the foot of the page, marked by a small circled exclamation point. */
   .notice { display: flex; align-items: baseline; gap: .45em; }
   .notice .icon { flex: none; align-self: center; width: 11px; height: 11px; color: #777; }
