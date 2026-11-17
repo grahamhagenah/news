@@ -3014,7 +3014,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
         f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{TOP_DOT}{buttons}{when_links}'
-        f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}</span>{shared.SEARCH}</nav>\n'
+        f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
@@ -3924,7 +3924,7 @@ INDEX_JS = """
   // The bar's height, which a listing gone to is kept clear of.
   const barHeight = () => {
     document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height) + "px");
-    // A day's heading's too, which sticks under the bar, and which the search lies along on a phone.
+    // A day's heading's too, which sticks under the bar.
     const heading = [...document.querySelectorAll(".day > h2")].find(h2 => h2.offsetParent);
     if (heading) document.documentElement.style.setProperty("--head", heading.getBoundingClientRect().height + "px");
   };
@@ -4659,33 +4659,13 @@ PIN_CSS = """
      over the list is the page's own and settled, so there's nothing for anchoring to hold still. */
   html { overflow-anchor: none; }
   /* Beside the kinds, the menus and then the search, at the end of the line. */
-  .filter > .search { margin-left: 0; }
   @media (max-width: 34rem) {
-    /* One line: the dot, the kinds, and at the end of it the day and venue menus; the search on a line of its
-       own under it. */
-    .filter { flex-wrap: wrap; row-gap: 0; column-gap: .75rem; }  /* Room for it all down to a 340-pixel screen. */
-    /* The menus as icons, a calendar for the day and a pin for the venue (Tabler Icons' "calendar" and
-       "map-pin", MIT license, their paths verbatim), which open the phone's own list of choices. Their full
-       height, a little more than the kinds', with more to press around them; amber while they narrow the list. */
-    .filter .finders { flex-basis: auto; align-self: center; gap: .3rem; margin: 0 -.35rem 0 auto; }
-    .filter .finders .pick { flex: none; width: 1.8rem; max-width: none; height: 2rem; padding: 0; color: transparent;
-                             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 19px; font-size: 1rem; }
-    .filter .finders .when-pick { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
-    .filter .finders .pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E"); }
-    .filter .finders .when-pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
-    .filter .finders .pick:focus-visible { outline-offset: -2px; }
-    /* The search, always open, along the line of the day's heading under the bar, at its right and aligned to
-       it, the magnifying glass at the edge: over the first
-       day's while the page is at the top, which sits right under the bar, and over whichever day's is held
-       there as the list scrolls. The heading's own line is its underline. */
-    .filter > .search { position: absolute; top: 100%; right: 0; width: 40%; height: calc(var(--head, 2.2rem) - 2px);
-                        box-sizing: border-box; margin: 0; padding: .25rem 1.3em .45rem 0; border: 0; font-size: 1rem;
-                        text-align: right; background-color: #000; background-position: right calc(50% - .1rem); }
-    /* Its whole height but the heading's line, which runs on under it. Gone once the list has passed. */
-    .filter.past > .search:not(:focus) { visibility: hidden; }
-    /* With nothing to show, no heading: what the page says goes under the search's line rather than behind it. */
-    .filter ~ .empty { margin-top: calc(1.8rem + var(--head, 2.3rem) + .4rem); }
-    .filter { margin-bottom: -1.8rem; }
+    /* Two lines: the dot and the kinds; then the search, taking what the line has left, with the day and venue
+       menus in words at the end of it ("Any day", "All venues"), white while they narrow the list. */
+    .filter { row-gap: .35rem; column-gap: .75rem; }
+    .filter .finders .search { order: -1; }
+    .filter .finders .pick { flex: none; max-width: 9rem; }
+    .filter .finders .when-pick { max-width: 7rem; }
   }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
