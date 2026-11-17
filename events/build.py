@@ -3919,10 +3919,10 @@ INDEX_JS = """
   fromAddress();
   // The bar: its height, for the day's heading to stick under it rather than behind it.
   // The bar's height, which a listing gone to is kept clear of.
-  // On a phone the search is the bar's first line, which scrolls away with the page: the bar sticks that much
-  // above the top of the window (--lift), so only the filters under it stay, and the bar is as tall as they are.
+  // On a phone the search and its menus are the bar's first line, which scrolls away with the page: the bar sticks
+  // that much above the top of the window (--lift), so only the kinds under it stay, and the bar is as tall as they are.
   const barHeight = () => {
-    const lift = phone.matches ? Math.ceil(search.getBoundingClientRect().bottom - filter.getBoundingClientRect().top) : 0;
+    const lift = phone.matches ? Math.ceil(search.closest(".finders").getBoundingClientRect().bottom - filter.getBoundingClientRect().top) : 0;
     document.documentElement.style.setProperty("--lift", lift + "px");
     document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height - lift) + "px");
     // A day's heading's too, which sticks under the bar.
@@ -4647,32 +4647,31 @@ PIN_CSS = """
   html { overflow-anchor: none; }
   /* Beside the kinds, the menus and then the search, at the end of the line. */
   @media (max-width: 34rem) {
-    /* Two lines: the search, the width of the column, which scrolls away with the page (the bar sticks --lift,
-       its height, above the window, which the script measures); and under it the kinds, with the day and venue
-       menus at the end of their line as icons, a calendar and a pin (Tabler Icons' "calendar" and "map-pin", MIT
-       license, their paths verbatim), which open the phone's own list of choices; amber while they narrow the
-       list. Only the kinds' line stays at the top of the window. Each icon a good size to see, in a target a thumb
-       can't miss (44 pixels, Apple's least), which reaches out over the room around it rather than making the line
-       taller or wider. */
+    /* Two lines: the search, with the day and venue menus at the end of its line as icons, which scrolls away with
+       the page (the bar sticks --lift, the line's height, above the window, which the script measures); and under
+       it the kinds, the line that stays at the top of the window. The icons a calendar and a pin (Tabler Icons'
+       "calendar" and "map-pin", MIT license, their paths verbatim), which open the phone's own list of choices,
+       lit while they narrow the list; each a good size to see, in a target a thumb can't miss (44 pixels, Apple's
+       least), which reaches out over the room around it rather than making the line taller. */
     .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .45rem; column-gap: .7rem; align-items: center; }
-    .filter .finders { display: contents; }
+    /* The search's line runs under the icons too, the same as a day's heading's line, so the two read as the same
+       weight; it brightens while the search is being typed in. */
+    .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: .9rem; margin: 0;
+                       border-bottom: 1px solid #1c1c1c; }
+    .filter .finders:focus-within { border-bottom-color: #555; }
     /* The search's text the kinds' size, which is over 16 pixels: Safari on an iPhone zooms the page in on a field
        whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
-       anywhere along its width. Its line the same as a day's heading's under it, so the two read as the same
-       weight; it brightens while it's being typed in. */
-    .filter .finders .search { order: -1; flex: 1 1 100%; width: auto; height: 32px; margin: 0;
-                               padding: 0; border-bottom-color: #1c1c1c; background: none; font-size: 1.05rem; }
-    .filter .finders .search:focus { border-bottom-color: #555; }
-    /* The two at the end of the kinds' line, pushed there from the last kind, so their targets keep reaching out
-       over the room around them: down to a 320-pixel screen, it all fits on the one line. */
-    .filter > [data-show]:has(+ .when-links, + .finders) { margin-right: auto; }
+       anywhere along its width. */
+    .filter .finders .search { order: -1; flex: 1 1 0; width: 0; height: 32px; margin: 0;
+                               padding: 0; border: 0; background: none; font-size: 1.05rem; }
     .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.6rem -.45rem;
                              padding: 0; color: transparent; font-size: 1rem;
                              background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 24px; }
-    /* The pin's edge, not its target's, at the column's; the two targets meeting rather than leaving a gap. */
-    .filter .finders .pick:not(.when-pick) { margin-left: -1rem; margin-right: -10px; }
+    /* The pin's edge, not its target's, at the column's. */
+    .filter .finders .pick:not(.when-pick) { margin-right: -10px; }
     .filter .finders .when-pick { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
-    .filter .finders .pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E"); }
+    /* The pin white while a venue is chosen, as a chosen kind is; the calendar amber while a day is. */
+    .filter .finders .pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E"); }
     .filter .finders .when-pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
     .filter .finders .pick:focus-visible { outline-offset: -4px; border-radius: 8px; }
   }
