@@ -5376,27 +5376,28 @@ PIN_CSS = """
     .filter.revealed { top: 0; }
     .filter, .day > h2 { transition: top .2s ease; }
     @media (prefers-reduced-motion: reduce) { .filter, .day > h2 { transition: none; } }
-    /* The search: a box a shade off the page's black, the magnifying glass and the word inside it. Its text is
-       over 16 pixels: Safari on an iPhone zooms the page in on a field whose text is any smaller, and doesn't
-       zoom back out. */
+    /* The search: a box barely a shade off the page's black, quieter than the chips under it, the magnifying
+       glass and the word inside it; a little lighter while it's being typed in. Its text is 16 pixels: Safari on
+       an iPhone zooms the page in on a field whose text is any smaller, and doesn't zoom back out. */
     .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: 0; box-sizing: border-box; margin: 0;
-                       padding: 0 .25rem 0 .85rem; border-radius: 10px; background: #141414; }
-    .filter .finders:focus-within { background: #1a1a1a; }
-    .filter .finders .search { flex: 1 1 0; width: 0; min-width: 0; height: 2.7rem; box-sizing: border-box; margin: 0;
-                               padding: 0 0 0 1.6em; border: 0; background-size: 1em; font-size: 1.05rem; }
+                       padding: 0 .15rem 0 .75rem; border-radius: 9px; background: #0e0e0e; }
+    .filter .finders:focus-within { background: #171717; }
+    .filter .finders .search { flex: 1 1 0; width: 0; min-width: 0; height: 2.35rem; box-sizing: border-box; margin: 0;
+                               padding: 0 0 0 1.55em; border: 0; background-size: .95em; font-size: 1rem; }
+    .filter .finders .search:not(:focus)::placeholder { color: #5c5c5c; }
     /* Its ×, at the end of the box, while it has something in it (Tabler Icons' "x", MIT license): a press empties it. */
-    .filter .finders .search-clear { display: block; flex: none; width: 2.5rem; height: 2.5rem; padding: 0; cursor: pointer;
+    .filter .finders .search-clear { display: block; flex: none; width: 2.35rem; height: 2.35rem; padding: 0; cursor: pointer;
                                      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23777' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6l-12 12'/%3E%3Cpath d='M6 6l12 12'/%3E%3C/svg%3E") no-repeat center / 18px; }
     /* The chips: one row, out to the screen's edges, swiped along; one cut off at the edge says there's more.
        The kinds, a hairline, tonight and the weekends, and the venue's menu last. */
-    .filter .chips { display: flex; flex: 1 1 100%; align-items: center; gap: .45rem; min-width: 0; margin: 0 -1rem;
+    .filter .chips { display: flex; flex: 1 1 100%; align-items: center; gap: .4rem; min-width: 0; margin: 0 -1rem;
                      padding: 0 1rem; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
     .filter .chips::-webkit-scrollbar { display: none; }
     .when-links { display: contents; }
-    .when-links::before { content: ""; flex: none; align-self: stretch; width: 1px; margin: .4rem .15rem; background: #2a2a2a; }
+    .when-links::before { content: ""; flex: none; align-self: stretch; width: 1px; margin: .35rem .15rem; background: #2a2a2a; }
     .filter .chips [data-show], .filter .when-links a, .filter .chips .pick-box {
-      display: inline-flex; flex: none; align-items: center; box-sizing: border-box; height: 2.35rem; padding: 0 .85rem;
-      border: 1px solid #2a2a2a; border-radius: 999px; color: #999; font-size: 1rem; white-space: nowrap;
+      display: inline-flex; flex: none; align-items: center; box-sizing: border-box; height: 2rem; padding: 0 .7rem;
+      border: 1px solid #2a2a2a; border-radius: 999px; color: #999; font-size: .9rem; white-space: nowrap;
       text-decoration: none; }
     /* What's chosen, filled in: a kind, tonight or a weekend, a venue. */
     .filter .chips [aria-current="page"], .filter .chips [aria-pressed="true"], .filter .chips .pick-box.chosen {
