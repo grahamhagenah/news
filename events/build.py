@@ -4660,12 +4660,12 @@ PIN_CSS = """
   html { overflow-anchor: none; }
   /* Beside the kinds, the menus and then the search, at the end of the line. */
   @media (max-width: 34rem) {
-    /* Two lines: the dot and the kinds; then the search, taking what the line has left, with the day and venue
-       menus in words at the end of it ("Any day", "All venues"), white while they narrow the list. */
+    /* Three lines, each with room to spare: the dot and the kinds; the search, the width of the column; and the
+       day and venue menus in words ("Any day", "All venues"), white while they narrow the list. */
     .filter { row-gap: .35rem; column-gap: .75rem; }
-    .filter .finders .search { order: -1; }
-    .filter .finders .pick { flex: none; max-width: 9rem; }
-    .filter .finders .when-pick { max-width: 7rem; }
+    .filter .finders { flex-wrap: wrap; row-gap: .55rem; column-gap: 1.4rem; }
+    .filter .finders .search { order: -1; flex: 1 1 100%; width: auto; }
+    .filter .finders .pick { flex: none; max-width: calc(50% - .7rem); }
   }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
