@@ -4712,6 +4712,10 @@ PIN_CSS = """
        away with the page (the bar sticks --lift, the line's height, above the window, which the script measures);
        and under it the kinds, the line that stays at the top of the window. */
     .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .45rem; column-gap: .7rem; align-items: center; }
+    /* The same room between each line's words and the next's, the search's to the kinds', the kinds' to the day's
+       heading, whether the bar is where the page puts it or stuck at the top with a heading held under it: its
+       padding under the kinds sets the stuck one, and its margin, which a heading's own takes up, the other. */
+    .filter { padding-bottom: .475rem; margin-bottom: -1.83rem; }
     .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: 1rem; margin: 0; }
     /* The search's text the kinds' size, which is over 16 pixels: Safari on an iPhone zooms the page in on a field
        whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
