@@ -4740,7 +4740,7 @@ PIN_CSS = """
     .filter .finders .pick-box.chosen { flex: 0 1 auto; min-width: 3.5rem; }
     .filter .finders .search { min-width: 4.5rem; }
     .pick-box .pick-said { display: block; min-width: 0; max-width: 6rem; overflow: hidden; white-space: nowrap;
-                           text-overflow: ellipsis; padding-right: .95em; color: #777; font-size: 1.05rem;
+                           text-overflow: ellipsis; padding-right: .95em; color: #666; font-size: 1.05rem;
                            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em; }
     .pick-box.chosen .pick-said { color: #fff; }
     .filter .finders .pick-box .pick { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
