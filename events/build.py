@@ -3952,10 +3952,13 @@ INDEX_JS = """
   // The bar's height, which a listing gone to is kept clear of.
   // On a phone the search and its menus are the bar's first line, which scrolls away with the page: the bar sticks
   // that much above the top of the window (--lift), so only the kinds under it stay, and the bar is as tall as they are.
+  // Scrolling back up brings that line back down into the bar (revealed), to search or choose again without going
+  // back to the top; scrolling on down the list puts it away again.
+  let revealed = false;
   const barHeight = () => {
     const lift = phone.matches ? Math.ceil(search.closest(".finders").getBoundingClientRect().bottom - filter.getBoundingClientRect().top) : 0;
     document.documentElement.style.setProperty("--lift", lift + "px");
-    document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height - lift) + "px");
+    document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height - (revealed ? 0 : lift)) + "px");
     // A day's heading's too, which sticks under the bar.
     const heading = [...document.querySelectorAll(".day > h2")].find(h2 => h2.offsetParent);
     if (heading) document.documentElement.style.setProperty("--head", heading.getBoundingClientRect().height + "px");
@@ -4000,6 +4003,27 @@ INDEX_JS = """
     filter.classList.toggle("past", filter.classList.contains("stuck") && days.length > 0 && days.at(-1).getBoundingClientRect().bottom < under);
   };
   addEventListener("scroll", markStuck, { passive: true });
+  // Which way the page last went, by more than a nudge: up brings the search's line into the bar, down puts it
+  // away. Not while the search is being typed in, when the list changing under it moves the page, nor where there's
+  // no line to bring (a wide screen's bar has it all on one).
+  const reveal = on => {
+    on = on && phone.matches;
+    if (on === revealed) return;
+    revealed = on;
+    filter.classList.toggle("revealed", on);
+    barHeight();
+  };
+  let lastY = scrollY;
+  addEventListener("scroll", () => {
+    const moved = scrollY - lastY;
+    if (Math.abs(moved) < 8) return;
+    lastY = scrollY;
+    if (document.activeElement === search) return;
+    reveal(moved < 0 && scrollY > 0);
+  }, { passive: true });
+  phone.addEventListener("change", () => reveal(false));
+  // The bar and the heading under it slide to their places: check again once they're there.
+  filter.addEventListener("transitionend", markStuck);
   const params = () => {
     const params = new URLSearchParams();
     if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
@@ -4716,6 +4740,11 @@ PIN_CSS = """
        heading, whether the bar is where the page puts it or stuck at the top with a heading held under it: its
        padding under the kinds sets the stuck one, and its margin, which a heading's own takes up, the other. */
     .filter { padding-bottom: .475rem; margin-bottom: -1.83rem; }
+    /* Scrolling back up, the search's line slides back down into the bar, and the day's heading held under the
+       bar with it; scrolling on down, both slide back up. */
+    .filter.revealed { top: 0; }
+    .filter, .day > h2 { transition: top .2s ease; }
+    @media (prefers-reduced-motion: reduce) { .filter, .day > h2 { transition: none; } }
     .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: 1rem; margin: 0; }
     /* The search's text the kinds' size, which is over 16 pixels: Safari on an iPhone zooms the page in on a field
        whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
