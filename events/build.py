@@ -2843,11 +2843,8 @@ def render_combined(item):
     )
 
 
-# The filter is a bar that stays at the top of the window as the listings scroll under it. On a phone it's one
-# line: the pin's head from the name (WORDMARK), an amber dot, which goes back to the top in place of the
-# floating arrow; the kinds; then the day and venue menus as icons. The search is always open, on a line of its
-# own under it.
-TOP_DOT = '<button class="top-dot" type="button" aria-label="Back to top"><span></span></button>'
+# The filter is a bar that stays at the top of the window as the listings scroll under it. On a phone it's two
+# lines: the kinds; then the search, always open, with the day and venue menus as icons at the end of its line.
 
 
 def venue_menu(venues, towns, events):
@@ -3013,7 +3010,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{TOP_DOT}{buttons}{when_links}'
+        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}'
         f'<span class="finders">{when_menu}{venue_menu(venues, towns, events)}{shared.SEARCH}</span></nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
@@ -3967,12 +3964,6 @@ INDEX_JS = """
     filter.classList.toggle("past", filter.classList.contains("stuck") && days.length > 0 && days.at(-1).getBoundingClientRect().bottom < under);
   };
   addEventListener("scroll", markStuck, { passive: true });
-  // The dot, back to the top; from the keyboard, focus goes back to the top too, to the site's name.
-  filter.querySelector(".top-dot").addEventListener("click", event => {
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scrollTo({ top: 0, behavior: still ? "auto" : "smooth" });
-    if (event.detail === 0) document.querySelector("header a")?.focus({ preventScroll: true });
-  });
   const params = () => {
     const params = new URLSearchParams();
     if (search.offsetParent && search.value.trim()) params.set("q", search.value.trim());
@@ -4631,15 +4622,6 @@ PIN_CSS = """
     .filter { padding: .3rem 0; margin-bottom: -1.35rem; }
     h1.tagline + .bar-mark + .filter, .lead + .bar-mark + .filter { margin-top: -.3rem; }
   }
-  /* The dot, on a phone only, where it does the floating arrow's work and the arrow goes: as wide as itself in
-     the row, with more to press around it. A wide screen keeps the arrow, and its bar starts with the kinds. */
-  .filter .top-dot { display: none; }
-  @media (max-width: 34rem) {
-    .to-top { display: none; }
-    .filter .top-dot { align-self: center; display: block; padding: .55rem; margin: -.55rem; cursor: pointer; }
-  }
-  .top-dot span { display: block; width: 9px; height: 9px; border-radius: 50%; background: #fbbf24; }
-  .top-dot:focus-visible { outline: 1px solid #444; outline-offset: -2px; border-radius: 50%; }
   /* Once it's stuck over the list, its edge: no line, a shadow, so the listings dim as they go under rather than
      being cut off. Easing out, darkest at the bar and lifting slowly from there. It comes in gently as the bar
      sticks, rather than appearing all at once. Out as far as a lit row's band reaches; on a phone, the width of
@@ -4673,7 +4655,7 @@ PIN_CSS = """
     .filter .finders { align-items: center; gap: .15rem; border-bottom: 1px solid #2a2a2a; }
     .filter .finders:focus-within { border-bottom-color: #555; }
     .filter .finders .search { order: -1; flex: 1 1 0; width: 0; height: 2.6rem; margin-right: .5rem;
-                               padding-top: 0; padding-bottom: 0; border-bottom: 0; font-size: 17px; }
+                               padding: 0; border-bottom: 0; background: none; font-size: 17px; }
     .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.075rem 0;
                              padding: 0; color: transparent; font-size: 1rem;
                              background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 24px; }
