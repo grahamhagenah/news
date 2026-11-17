@@ -4660,12 +4660,22 @@ PIN_CSS = """
   html { overflow-anchor: none; }
   /* Beside the kinds, the menus and then the search, at the end of the line. */
   @media (max-width: 34rem) {
-    /* Three lines, each with room to spare: the dot and the kinds; the search, the width of the column; and the
-       day and venue menus in words ("Any day", "All venues"), white while they narrow the list. */
+    /* Two lines: the dot and the kinds; then the search, taking what the line has left, with the day and venue
+       menus at the end of it as icons, a calendar and a pin (Tabler Icons' "calendar" and "map-pin", MIT license,
+       their paths verbatim), which open the phone's own list of choices; amber while they narrow the list. Each
+       icon a good size to see, in a target a thumb can't miss (44 pixels, Apple's least), which reaches out over
+       the room around it rather than making the line taller. */
     .filter { row-gap: .35rem; column-gap: .75rem; }
-    .filter .finders { flex-wrap: wrap; row-gap: .55rem; column-gap: 1.4rem; }
-    .filter .finders .search { order: -1; flex: 1 1 100%; width: auto; }
-    .filter .finders .pick { flex: none; max-width: calc(50% - .7rem); }
+    .filter .finders { align-items: center; gap: .15rem; }
+    .filter .finders .search { order: -1; flex: 1 1 0; width: 0; margin-right: .5rem; }
+    .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.55rem 0;
+                             padding: 0; color: transparent; font-size: 1rem;
+                             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 24px; }
+    .filter .finders .pick:not(.when-pick) { margin-right: -10px; }  /* The pin's edge, not its target's, at the column's. */
+    .filter .finders .when-pick { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
+    .filter .finders .pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E"); }
+    .filter .finders .when-pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
+    .filter .finders .pick:focus-visible { outline-offset: -4px; border-radius: 8px; }
   }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
