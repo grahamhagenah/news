@@ -4666,9 +4666,15 @@ PIN_CSS = """
        icon a good size to see, in a target a thumb can't miss (44 pixels, Apple's least), which reaches out over
        the room around it rather than making the line taller. */
     .filter { row-gap: .35rem; column-gap: .75rem; }
-    .filter .finders { align-items: center; gap: .15rem; }
-    .filter .finders .search { order: -1; flex: 1 1 0; width: 0; margin-right: .5rem; }
-    .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.55rem 0;
+    /* The search's line runs the width of the column, under the icons too, so the three read as the one row; it
+       brightens while the search is being typed in. The field a little taller than a line of text, for an easier
+       press, and its text 17 pixels, the page's own size: Safari on an iPhone zooms the page in on a field whose
+       text is any smaller than 16, and doesn't zoom back out. */
+    .filter .finders { align-items: center; gap: .15rem; border-bottom: 1px solid #2a2a2a; }
+    .filter .finders:focus-within { border-bottom-color: #555; }
+    .filter .finders .search { order: -1; flex: 1 1 0; width: 0; height: 2.6rem; margin-right: .5rem;
+                               padding-top: 0; padding-bottom: 0; border-bottom: 0; font-size: 17px; }
+    .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.075rem 0;
                              padding: 0; color: transparent; font-size: 1rem;
                              background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 24px; }
     .filter .finders .pick:not(.when-pick) { margin-right: -10px; }  /* The pin's edge, not its target's, at the column's. */
