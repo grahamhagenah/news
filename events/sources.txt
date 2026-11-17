@@ -48,6 +48,17 @@
 #              (the ids are in the "eventTypes" data on its events page, bpl.bibliocommons.com/v2/events)
 #   mfa        the MFA's program calendar: its lectures, special events and films
 #   harvardart Harvard Art Museums' calendar: its lectures, talks, seminars, performances and films
+#   filmforum  Film Forum's week, from the showtimes table on its home page
+#   metrograph Metrograph's calendar page, /nyc/
+#   ifc        IFC Center's week, from the schedule on its home page
+#   filmbot    a cinema whose site runs on Filmbot, by its address there (Nitehawk's two): its showings from
+#              /wp-json/nj/v1/showtime/listings and its films from /wp-json/nj/v1/show
+#   spectacle  Spectacle's next seven days, from the table its home page frames (spex-rolling.html)
+#   bam        BAM's calendar data, sorted into its films, concerts, and theater and talks
+#   lpr        Le Poisson Rouge's shows, from what its home page loads as it's scrolled; its own rooms' only
+#   roulette   Roulette's calendar, ten a page
+#   issue      ISSUE Project Room's upcoming events
+#   pioneerworks  Pioneer Works' programs, from the data its calendar page is built from
 
 # Music
 aeg        https://aegwebprod.blob.core.windows.net/json/events/219/events.json   music   Roadrunner

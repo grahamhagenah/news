@@ -15,7 +15,7 @@ import urllib.error
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote as urllib_unquote, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
@@ -137,6 +137,63 @@ VENUE_ADDRESSES = {
     "Academy of Music": ("274 Main St", "Northampton", "01060"),
     "Beacon Cinema": ("57 North St", "Pittsfield", "01201"),
     "Colonial Theatre": ("111 South St", "Pittsfield", "01201"),
+    # New York, which gives its state, being outside Massachusetts. The town is the one the post office
+    # knows it by; the neighborhood, which is how anyone there thinks of it, is in VENUE_AREAS.
+    "Union Pool": ("484 Union Ave", "Brooklyn", "NY", "11211"),
+    "Baby's All Right": ("146 Broadway", "Brooklyn", "NY", "11211"),
+    "Elsewhere": ("599 Johnson Ave", "Brooklyn", "NY", "11237"),
+    "Market Hotel": ("1140 Myrtle Ave", "Brooklyn", "NY", "11221"),
+    "Saint Vitus": ("428 Troutman St", "Brooklyn", "NY", "11237"),
+    "Purgatory": ("675 Central Ave", "Brooklyn", "NY", "11207"),
+    "The Sultan Room": ("234 Starr St", "Brooklyn", "NY", "11237"),
+    "Alphaville": ("140 Wilson Ave", "Brooklyn", "NY", "11237"),
+    "Gold Sounds": ("44 Wilson Ave", "Brooklyn", "NY", "11237"),
+    "Sleepwalk": ("251 Bushwick Ave", "Brooklyn", "NY", "11206"),
+    "The Brooklyn Monarch": ("23 Meadow St", "Brooklyn", "NY", "11206"),
+    "TV Eye": ("1647 Weirfield St", "Ridgewood", "NY", "11385"),
+    "Cassette": ("68-38 Forest Ave", "Ridgewood", "NY", "11385"),
+    "H0L0": ("1090 Wyckoff Ave", "Ridgewood", "NY", "11385"),
+    "Low Cinema": ("70-11 60th St", "Ridgewood", "NY", "11385"),
+    "Knockdown Center": ("52-19 Flushing Ave", "Maspeth", "NY", "11378"),
+    "Public Records": ("233 Butler St", "Brooklyn", "NY", "11217"),
+    "C'mon Everybody": ("325 Franklin Ave", "Brooklyn", "NY", "11238"),
+    "Brooklyn Music Kitchen": ("177 Vanderbilt Ave", "Brooklyn", "NY", "11205"),
+    "Pianos": ("158 Ludlow St", "New York", "NY", "10002"),
+    "DROM": ("85 Avenue A", "New York", "NY", "10009"),
+    "Rough Trade": ("30 Rockefeller Plaza", "New York", "NY", "10112"),
+    "Le Poisson Rouge": ("158 Bleecker St", "New York", "NY", "10012"),
+    "Roulette": ("509 Atlantic Ave", "Brooklyn", "NY", "11217"),
+    "ISSUE Project Room": ("22 Boerum Pl", "Brooklyn", "NY", "11201"),
+    "Pioneer Works": ("159 Pioneer St", "Brooklyn", "NY", "11231"),
+    "Film Forum": ("209 W Houston St", "New York", "NY", "10014"),
+    "Metrograph": ("7 Ludlow St", "New York", "NY", "10002"),
+    "IFC Center": ("323 Sixth Ave", "New York", "NY", "10014"),
+    "Spectacle": ("124 S 3rd St", "Brooklyn", "NY", "11249"),
+    "Nitehawk Williamsburg": ("136 Metropolitan Ave", "Brooklyn", "NY", "11249"),
+    "Nitehawk Prospect Park": ("188 Prospect Park West", "Brooklyn", "NY", "11215"),
+    "BAM": ("30 Lafayette Ave", "Brooklyn", "NY", "11217"),
+}
+# The neighborhood a venue is in, where its town is too big to say much: Brooklyn is a city of two and a half
+# million, and a night out there is spent in Bushwick or in Williamsburg. The venue menu groups by these in
+# place of the town ("All of Bushwick"); a venue without one goes by its town, as Boston's do.
+VENUE_AREAS = {
+    "Union Pool": "Williamsburg", "Baby's All Right": "Williamsburg", "Spectacle": "Williamsburg",
+    "Nitehawk Williamsburg": "Williamsburg",
+    "Elsewhere": "Bushwick", "Market Hotel": "Bushwick", "Saint Vitus": "Bushwick", "Purgatory": "Bushwick",
+    "The Sultan Room": "Bushwick", "Alphaville": "Bushwick", "Gold Sounds": "Bushwick", "Sleepwalk": "Bushwick",
+    "The Brooklyn Monarch": "Bushwick",
+    "TV Eye": "Ridgewood", "Cassette": "Ridgewood", "H0L0": "Ridgewood", "Low Cinema": "Ridgewood",
+    "Knockdown Center": "Maspeth",
+    "Public Records": "Gowanus",
+    "C'mon Everybody": "Bed-Stuy",
+    "Brooklyn Music Kitchen": "Fort Greene", "BAM": "Fort Greene",
+    "Roulette": "Downtown Brooklyn", "ISSUE Project Room": "Downtown Brooklyn",
+    "Pioneer Works": "Red Hook",
+    "Nitehawk Prospect Park": "Park Slope",
+    "Pianos": "Lower East Side", "Metrograph": "Lower East Side",
+    "DROM": "East Village",
+    "Le Poisson Rouge": "Greenwich Village", "Film Forum": "Greenwich Village", "IFC Center": "Greenwich Village",
+    "Rough Trade": "Midtown",
 }
 
 
@@ -2260,7 +2317,382 @@ def wptheatre_describe(listing, production):
                        image=production["image"] or listing["image"])
 
 
+# Pushpin NYC's readers.
+
+
+def clock_of(hour, minute, half):
+    """A time of day from the parts a page writes it in: 7, 30 and "p" (or "PM") are 7:30 in the evening."""
+    return time(int(hour) % 12 + (12 if half.strip().lower().startswith("p") else 0), int(minute or 0))
+
+
+def yearless(month, day, today, form="%b"):
+    """"Nov 17", which carries no year: this year's, unless that's months behind, which is how a January day
+    read in December tells itself apart from the January just gone (the two months' grace tapos_day allows).
+    None for a day that doesn't exist."""
+    try:
+        found = datetime.strptime(f"{month} {day} {today.year}", f"{form} %d %Y").date()
+    except ValueError:
+        return None
+    return found.replace(year=today.year + 1) if found < today - timedelta(days=60) else found
+
+
+SMALL_WORDS = {"a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "of", "on", "or", "the", "to", "vs", "with"}
+
+
+def uncapped(title):
+    """A title a cinema sets in capitals (Film Forum, Spectacle), in title case, so it reads like the rest of
+    the list: "RAISE THE RED LANTERN" is "Raise the Red Lantern". One that's mostly lower case already is left
+    as it is, and so is a word that isn't only letters ("4K", "E.T.", "Q&A", "w/") or is a roman numeral."""
+    capitals, small = len(re.findall(r"[A-Z]", title)), len(re.findall(r"[a-z]", title))
+    if capitals < 2 or capitals <= small * 3:
+        return title
+    words, first = [], True
+    for word in title.split(" "):
+        bare = word.strip("()[]\"'“”‘’:;,!?–—-")
+        # Nor initials, which have no vowel to say: JFK, THX, TV.
+        if (not bare or re.search(r"[\d.&/]", bare) or re.fullmatch(r"[IVX]{2,}", bare) or bare != bare.upper()
+                or not re.search(r"[AEIOUY]", bare)):
+            words.append(word)
+        elif bare.lower() in SMALL_WORDS and not first:
+            words.append(word.lower())
+        else:
+            # A letter and an apostrophe lead a name: L'Innocente, D'Est. After a hyphen, a capital again.
+            words.append(re.sub(r"(?:^|(?<=[-–(\[\"“‘])|(?<=^[A-Za-z]['’]))[a-z]", lambda found: found.group().upper(), word.lower()))
+        first = word.endswith((":", "–", "—")) or not bare
+    return " ".join(words)
+
+
+FILMFORUM_TAB = re.compile(r'<div id="tabs-\d+">\s*<!--\s*(\d{1,2})\s*-->(.*?)</div>', re.S)
+FILMFORUM_FILM = re.compile(r'<strong><a href="([^"]+)">(.*?)</a></strong>(.*?)</p>', re.S)
+FILMFORUM_TIME = re.compile(r"<span>\s*(\d{1,2}):(\d{2})")
+
+
+def read_filmforum(source):
+    """Film Forum's week, from the table on its home page: a tab for each day, headed by the day of the month,
+    each film with its times. The times leave out am and pm, as its printed calendar does: its day runs from
+    late morning to late evening, so an 11 is the morning's and everything from 12 to 10 the afternoon's and
+    evening's. A film's picture is in the list of what's playing the same page carries for search engines."""
+    page = fetch(source["url"])
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    pictures = {}
+
+    def collect(data):
+        if isinstance(data, list):
+            for item in data:
+                collect(item)
+        elif isinstance(data, dict):
+            if data.get("@type") == "ScreeningEvent" and data.get("name") and data.get("image"):
+                pictures.setdefault(film_key(html.unescape(data["name"])), data["image"])
+            for value in data.values():
+                if isinstance(value, (dict, list)):
+                    collect(value)
+
+    for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', page, re.S):
+        try:
+            collect(json.loads(block))
+        except ValueError:
+            continue
+    events = []
+    for number, tab in FILMFORUM_TAB.findall(page):
+        # The tab's day of the month is one of the days from today on: the week it shows starts today.
+        day = next((today + timedelta(days=ahead) for ahead in range(-1, 10)
+                    if (today + timedelta(days=ahead)).day == int(number)), None)
+        if not day:
+            continue
+        for link, title, rest in FILMFORUM_FILM.findall(tab):
+            name = uncapped(text(title))
+            for hour, minute in FILMFORUM_TIME.findall(rest):
+                start = time(int(hour) if int(hour) in (11, 12) else int(hour) + 12, int(minute))
+                events.append(event(source, name, day, start, link=link, image=pictures.get(film_key(name), "")))
+    return events
+
+
+METROGRAPH_DAY = re.compile(r'id="calendar-list-day-(\d{4}-\d\d-\d\d)"(.*?)(?=id="calendar-list-day-|\Z)', re.S)
+METROGRAPH_FILM = re.compile(r'<div class="item film-thumbnail.*?(?=<div class="item film-thumbnail|\Z)', re.S)
+METROGRAPH_TIME = re.compile(r"<a ([^>]*)>\s*(\d{1,2}):(\d{2})\s*([ap])m\s*</a>", re.I)
+
+
+def read_metrograph(source):
+    """Metrograph's calendar page: a block for each day, each film in it with its picture, who made it and
+    when, on what ("Edward Yang / 1983 / 166min / DCP"), a line about the screening where it has one, and its
+    times, a sold-out one marked so."""
+    page = fetch(source["url"])
+    events, seen = [], set()
+    for stamp, block in METROGRAPH_DAY.findall(page):
+        day = date.fromisoformat(stamp)
+        for item in METROGRAPH_FILM.findall(block):
+            name = re.search(r'<a href="([^"]+)" class="title">(.*?)</a>', item, re.S)
+            times = re.search(r'<div class="showtimes">(.*?)</div>', item, re.S)
+            if not name or not times:
+                continue
+            picture = re.search(r'<img[^>]+src="([^"]+)"', item)
+            made = re.search(r'<div class="film-metadata">(.*?)</div>', item, re.S)
+            said = re.search(r'<div class="film-description">(.*?)</div>', item, re.S)
+            told = ([text(made.group(1)).replace(" / ", " · ")] if made and text(made.group(1)) else []) + about(said.group(1) if said else "")
+            for attributes, hour, minute, half in METROGRAPH_TIME.findall(times.group(1)):
+                start = clock_of(hour, minute, half)
+                if (name.group(1), day, start) in seen:  # The page has a day's films twice where it leads with them.
+                    continue
+                seen.add((name.group(1), day, start))
+                events.append(event(source, text(name.group(2)), day, start, link=name.group(1), about=told,
+                                    image=html.unescape(picture.group(1)) if picture else "",
+                                    sold_out="sold_out" in attributes))
+    return events
+
+
+IFC_DAY = re.compile(r'<div class="daily-schedule[^"]*">\s*<h3>\s*\w{3} (\w{3}) (\d{1,2})\s*</h3>(.*?)(?=<div class="daily-schedule|\Z)', re.S)
+IFC_FILM = re.compile(r'<li>\s*<a href="([^"]+)">\s*<img src="([^"]*)"[^>]*>\s*</a>\s*<div class="details">\s*<h3><a[^>]*>(.*?)</a></h3>'
+                      r'\s*<ul class="times">(.*?)</ul>', re.S)
+IFC_TIME = re.compile(r"(\d{1,2}):(\d{2})\s*([AP])M", re.I)
+
+
+def read_ifc(source):
+    """IFC Center's week, from the schedule on its home page: a list for each day ("Tue Nov 17"), each film with
+    its picture and its times."""
+    page = fetch(source["url"])
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    events = []
+    for month, number, block in IFC_DAY.findall(page):
+        day = yearless(month, number, today)
+        if not day:
+            continue
+        for link, picture, title, times in IFC_FILM.findall(block):
+            for hour, minute, half in IFC_TIME.findall(times):
+                events.append(event(source, text(title), day, clock_of(hour, minute, half), link=link, image=html.unescape(picture)))
+    return events
+
+
+def read_filmbot(source):
+    """A cinema on Filmbot (Nitehawk's two): every showing it has on sale, from the listings its site gives
+    ticketing apps, which name each film and nothing more; and each film's page, picture and the line about
+    it, from its site's list of films, asked for by those the listings name."""
+    base = source["url"].rstrip("/")
+    listings = json.loads(fetch(f"{base}/wp-json/nj/v1/showtime/listings"))
+    names = {film["movie_id"]: film for film in listings.get("movies") or []}
+    wanted = sorted({str(showing["movie_id"]) for showing in listings.get("showtimes") or []})
+    films = {}
+    for at in range(0, len(wanted), 50):
+        asked = urlencode({"per_page": 50, "include": ",".join(wanted[at:at + 50]),
+                           "_fields": "id,link,excerpt,_movie_still,featured_media_url"})
+        try:
+            films.update({film["id"]: film for film in json.loads(fetch(f"{base}/wp-json/nj/v1/show?{asked}"))})
+        except Exception:
+            continue  # Without them a film still has its name and its times, and the cinema's page to go to.
+    events = []
+    for showing in listings.get("showtimes") or []:
+        film, told = names.get(showing["movie_id"]), films.get(showing["movie_id"], {})
+        try:
+            moment = datetime.strptime(showing["datetime"], "%Y%m%d%H%M%S")
+        except (KeyError, ValueError):
+            continue
+        if not film or not film.get("movie_name"):
+            continue
+        facts = " · ".join(fact for fact in (film.get("release_year"), f"{film['runtime']} min" if film.get("runtime") else "",
+                                              film.get("rating")) if fact)
+        events.append(event(source, html.unescape(film["movie_name"]), moment.date(), moment.time(),
+                            link=told.get("link") or source["url"],
+                            about=about((told.get("excerpt") or {}).get("rendered", "")) + [facts] * bool(facts),
+                            image=told.get("_movie_still") or told.get("featured_media_url") or ""))
+    return events
+
+
+SPECTACLE_CELL = re.compile(r'<a href="([^"]+)">\s*(\d{1,2}):(\d{2})(?:&#8239;|&nbsp;|\s)*([AP])M.*?<img[^>]+src="([^"]*)"[^>]+alt="([^"]*)"', re.S | re.I)
+
+
+def read_spectacle(source):
+    """Spectacle's next seven days, from the table its home page frames (spex-rolling.html): a column a day,
+    headed with its date, and down it a cell for each screening, with its time, its picture and its name. A
+    day with fewer screenings than another has empty cells under its last."""
+    page = fetch(source["url"])
+    days = [date.fromisoformat(stamp) for stamp in re.findall(r"<th>[^<]*<!--\s*(\d{4}-\d\d-\d\d)\s*-->", page)]
+    events = []
+    for row in re.findall(r"<tr>(.*?)</tr>", page, re.S):
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+        if len(cells) != len(days):
+            continue  # The heading's row, or a table that's changed shape: better none than the wrong day's.
+        for day, cell in zip(days, cells):
+            found = SPECTACLE_CELL.search(cell)
+            if found:
+                link, hour, minute, half, picture, name = found.groups()
+                events.append(event(source, uncapped(html.unescape(name)), day, clock_of(hour, minute, half),
+                                    link=urljoin(source["url"], link), image=picture.replace("http://", "https://")))
+    return events
+
+
+# BAM's kinds of production, as its calendar's data names them, by the first of these it has: a film is a film
+# whatever else it is (the Met's operas, live in its cinemas), a concert or an opera music, and what's on its
+# stages otherwise goes with the art and talks. Classes aren't listed.
+BAM_KINDS = (("Film", "film"), ("Music", "music"), ("Opera", "music"), ("Education", None), ("", "art"))
+
+
+def read_bam(source):
+    """BAM's calendar, from the data its calendar page loads: each production on each day it's on, with that
+    day's times, its picture and a line about it. Asked for from today to the end of what's listed."""
+    zone = source.get("zone", BOSTON)
+    start = datetime.now(zone).date()
+    asked = urlencode({"start": f"{start:%m/%d/%Y}", "end": f"{start + timedelta(days=MUSIC_DAYS_AHEAD):%m/%d/%Y}"})
+    events = []
+    for item in json.loads(fetch(f"{source['url']}?{asked}")):
+        kinds = [kind.strip() for kind in (item.get("genres") or "").split(",")]
+        category = next(category for kind, category in BAM_KINDS if not kind or kind in kinds)
+        if not category or item.get("onGoing") or not item.get("name"):
+            continue
+        picture = re.sub(r"width=\d+", "width=800", item.get("img") or "")
+        for performance in item.get("performances") or []:
+            try:
+                day, moment = at_venue(datetime.fromisoformat(performance), zone)
+            except ValueError:
+                continue
+            listing = event(source, html.unescape(html.unescape(item["name"])), day, moment,
+                            link=urljoin("https://www.bam.org/", item.get("moreLink") or ""),
+                            about=about(html.unescape(html.unescape(item.get("desc") or ""))),
+                            image=urljoin("https://www.bam.org/", picture) if picture else "")
+            listing["category"] = category
+            events.append(listing)
+    return events
+
+
+LPR_ROOMS = {"main-space", "gallery"}  # Its own two rooms, as its listings mark where a show is.
+LPR_PAGES = 8  # Fourteen shows to a page: two months of them and more.
+
+
+def read_lpr(source):
+    """Le Poisson Rouge's shows, from what its home page loads as it's scrolled: fourteen at a time from today,
+    each with who else is on, its day and time, its picture, and where it is. LPR presents shows in other
+    halls too, and other cities'; those aren't in its rooms, and are left out."""
+    zone = source.get("zone", BOSTON)
+    today = datetime.now(zone).date()
+    events = []
+    for number in range(1, LPR_PAGES + 1):
+        page = fetch(f"{source['url']}&json%5Bdate%5D={today:%Y%m%d}&paged={number}")
+        entries = page.split('<div class="event ')[1:]
+        last = None
+        for entry in entries:
+            stamp = re.search(r"dateOfEvent='(\d{8})'", entry)
+            name = re.search(r'<span class="black_visible">(.*?)</span>', entry, re.S)
+            if not stamp or not name:
+                continue
+            last = day = datetime.strptime(stamp.group(1), "%Y%m%d").date()
+            room = re.search(r'placeIcon" id="([^"]*)"', entry)
+            if not room or room.group(1) not in LPR_ROOMS:
+                continue
+            link = re.search(r'class="eventSingleLink" href="([^"]+)"', entry)
+            at = re.search(r"<span class='time'>\s*(\d{1,2}):(\d{2})\s*([AP])M", entry, re.I)
+            with_ = re.search(r"<div class='openers'>\s*<h4>\s*with\s*(.*?)</h4>", entry, re.S)
+            picture = re.search(r"background-image:url\(([^)]+)\)", entry)
+            events.append(event(source, text(name.group(1)), day, clock_of(*at.groups()) if at else None,
+                                link=link.group(1) if link else "",
+                                detail=f"with {text(with_.group(1))}" if with_ and text(with_.group(1)) else "",
+                                image=picture.group(1).strip("'\" ") if picture else ""))
+        if not entries or not last or last > today + timedelta(days=MUSIC_DAYS_AHEAD):
+            break
+    return events
+
+
+ROULETTE_WHEN = re.compile(r"([A-Z][a-z]+ \d{1,2}, \d{4})\.?\s*(?:(\d{1,2}):(\d{2})\s*([ap])m)?", re.I)
+ROULETTE_PAGES = 4  # Ten events to a page.
+
+
+def read_roulette(source):
+    """Roulette's calendar, a page of ten at a time: each concert with its day and time written out
+    ("Wednesday, November 18, 2026. 8:00 pm"), its price, its picture and a line about it."""
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    events = []
+    for number in range(1, ROULETTE_PAGES + 1):
+        page = fetch(source["url"] if number == 1 else f"{source['url'].rstrip('/')}/page/{number}/")
+        entries = page.split('<div class="event">')[1:]
+        for entry in entries:
+            name = re.search(r'<h2 class="event-title">\s*<a href="([^"]+)">(.*?)</a>', entry, re.S)
+            when = ROULETTE_WHEN.search(text((re.search(r'<div class="event-time">(.*?)</div>', entry, re.S) or [""] * 2)[1]))
+            if not name or not when:
+                continue
+            try:
+                day = datetime.strptime(when.group(1), "%B %d, %Y").date()
+            except ValueError:
+                continue
+            price = re.search(r'<div class="event-price">(.*?)</div>', entry, re.S)
+            said = re.search(r'<div class="event-desc">(.*?)</div>', entry, re.S)
+            picture = re.search(r'<img[^>]+src="([^"]+)"', entry)
+            events.append(event(source, text(name.group(2)), day, clock_of(*when.groups()[1:]) if when.group(2) else None,
+                                link=name.group(1), about=about(said.group(1) if said else ""),
+                                image=re.sub(r"-150x150(\.\w+)$", r"-400x400\1", picture.group(1)) if picture else "",
+                                price=price_from(text(price.group(1))) if price else ""))
+        if len(entries) < 10 or (events and events[-1]["date"] > today + timedelta(days=MUSIC_DAYS_AHEAD)):
+            break
+    return events
+
+
+def read_issue(source):
+    """ISSUE Project Room's upcoming events: each with its time (in UTC, in the page's own markup), its picture,
+    what it's about, and where it is, which is its own theater or wherever else it's putting the night on."""
+    page = fetch(source["url"])
+    zone = source.get("zone", BOSTON)
+    events = []
+    for entry in page.split('<article class="node')[1:]:
+        name = re.search(r'<h2 class="node__title[^"]*">\s*<a href="([^"]+)"[^>]*>(.*?)</a>', entry, re.S)
+        when = re.search(r'<time datetime="([^"]+)"', entry)
+        if not name or not when:
+            continue
+        try:
+            day, start = at_venue(datetime.fromisoformat(when.group(1).replace("Z", "+00:00")), zone)
+        except ValueError:
+            continue
+        where = re.search(r'field--name-field-venue[^>]*>(.*?)</div>', entry, re.S)
+        place = re.match(r"(\d[^,]*),\s*([A-Za-z .]+?),?\s+(?:NY\s+)?(\d{5})", text(where.group(1)) if where else "")
+        # Its own theater's address, however it's written there ("22 Boerum Place"), is the venue's, not the night's.
+        home = VENUE_ADDRESSES.get(source["name"])
+        if place and home and place.group(1).split()[0] == home[0].split()[0] and place.group(3) == home[-1]:
+            place, where = None, None
+        # Somewhere it names without an address ("MITU580") is said beside the listing; a stream isn't a night out.
+        elsewhere = text(where.group(1)) if where and not place else ""
+        if re.search(r"\bstream", elsewhere, re.I):
+            continue
+        said = re.search(r'field--name-field-summary[^>]*>(.*?)</div>', entry, re.S)
+        picture = re.search(r'<img[^>]+src="([^"]+)"', entry)
+        events.append(event(source, text(name.group(2)), day, start, link=urljoin(source["url"], name.group(1)),
+                            detail=f"at {elsewhere}" if elsewhere else "", about=about(said.group(1) if said else ""),
+                            address=(place.group(1).strip(), place.group(2).strip(), "NY", place.group(3)) if place else None,
+                            image=urljoin(source["url"], html.unescape(picture.group(1))) if picture else ""))
+    return events
+
+
+def read_pioneer_works(source):
+    """Pioneer Works' programs, from the data its calendar page is built from: each talk, concert and
+    screening with its day and time and its picture. Its classes aren't listed, nor what runs for weeks (an
+    exhibition's open hours, a festival), which the data marks with a range or a span of dates to show in
+    place of its own."""
+    page = fetch(source["url"])
+    found = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', page, re.S)
+    listed = json.loads(found.group(1))["props"]["pageProps"].get("events") or [] if found else []
+    events = []
+    for item in listed:
+        when, slug = item.get("calendar") or {}, (item.get("slug") or {}).get("current")
+        if (item.get("_type") != "program" or item.get("hideFromPage") or when.get("range") or when.get("maskDate")
+                or not slug or not item.get("title")):
+            continue
+        try:
+            day = date.fromisoformat(when.get("startDate") or "")
+            start = time.fromisoformat(when["startTime"]) if when.get("startTime") else None
+        except ValueError:
+            continue
+        picture = item.get("image") or ""
+        events.append(event(source, item["title"].strip(), day, start, link=urljoin(source["url"], f"/programs/{slug}"),
+                            about=[f"Doors {clock(time.fromisoformat(when['doorTime']))}"] if when.get("doorTime") else [],
+                            image=f"{picture}?w=800&auto=format" if "cdn.sanity.io" in picture else picture))
+    return events
+
+
 READERS = {
+    "filmforum": read_filmforum,
+    "metrograph": read_metrograph,
+    "ifc": read_ifc,
+    "filmbot": read_filmbot,
+    "spectacle": read_spectacle,
+    "bam": read_bam,
+    "lpr": read_lpr,
+    "roulette": read_roulette,
+    "issue": read_issue,
+    "pioneerworks": read_pioneer_works,
     "aeg": read_aeg,
     "axs": read_axs,
     "ticketweb": read_ticketweb,
@@ -2873,7 +3305,9 @@ def venue_menu(venues, towns, events):
     options = '<option value="">All venues</option>'
     for town in sorted(grouped, key=lambda town: (town == "", -busy[town], town)):
         names = shared.as_said(grouped[town])
-        choices = ([f'<option value="town:{html.escape(town)}">All of {html.escape(town)}</option>']
+        # A neighborhood that's said with "the": all of the Lower East Side, as all of Bushwick.
+        the = "the " * bool(re.search(r"\b(Side|Village|Heights|Bronx)$", town))
+        choices = ([f'<option value="town:{html.escape(town)}">All of {the}{html.escape(town)}</option>']
                    if town and len(names) > 1 else [])
         choices += [f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in names]
         options += (f'<optgroup label="{html.escape(town)}">' + "".join(choices) + "</optgroup>" if town
@@ -2905,8 +3339,10 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     towns = {}
     for item in events:
         place = item.get("address") or VENUE_ADDRESSES.get(item["venue"])
-        if place and len(place) > 1 and place[1]:
-            towns.setdefault(item["source"], Counter())[place[1]] += 1
+        # Its neighborhood, where it has one (VENUE_AREAS) and the listing is at the venue's own address.
+        area = (not item.get("address") and VENUE_AREAS.get(item["venue"])) or (place[1] if place and len(place) > 1 else "")
+        if area:
+            towns.setdefault(item["source"], Counter())[area] += 1
     towns = {source: counted.most_common(1)[0][0] for source, counted in towns.items()}
     if public:
         if category:
@@ -3335,11 +3771,27 @@ WESTERN_MASS = city_texts(
                                    "next month, aggregated from select theaters."}})
 
 
+# New York's, kept to the rooms that book themselves: clubs on DICE, repertory cinemas, and the non-profits.
+NYC = city_texts(
+    "nyc", "Pushpin NYC", "New York", "Brooklyn, Manhattan, and Queens", state="New York",
+    who="I’m <a href=\"https://grahamhagenah.com\">Graham Hagenah</a>. I started Pushpin in Boston to keep track of "
+        "what’s on at the theaters and concert venues I love, without relying on Google or visiting each venue’s "
+        "website. This is the same for New York, starting with its independent rooms.",
+    kinds={"music": {"description": "Concerts at independent clubs, bars and halls across Brooklyn, Manhattan and "
+                                    "Queens for the next two months, aggregated from select venues."},
+           "film": {"title": "Movie showtimes and repertory film in New York",
+                    "description": "Showtimes at Film Forum, Metrograph, IFC Center, BAM, Nitehawk and Spectacle, "
+                                   "from repertory screenings to new releases, aggregated from select theaters.",
+                    "tagline": "Films around Brooklyn, Manhattan, and Queens, from repertory screenings to new "
+                               "releases, aggregated from select theaters."},
+           "art": {"description": "Talks, readings and performances around Brooklyn, Manhattan and Queens for the "
+                                  "next month, aggregated from select venues."}})
+
 # What's being worked on, listed after the cities under the same state, with what to say about it.
-COMING_SOON = {"New York": ("New York City", "Coming soon.")}
+COMING_SOON = {}
 # Each city's Pushpin, at pushpin.city/<its slug>/ (Boston's at the root), from sources-<its slug>.txt (Boston's,
 # sources.txt).
-CITIES = [BOSTON_CITY, WESTERN_MASS]
+CITIES = [BOSTON_CITY, WESTERN_MASS, NYC]
 # Cities Pushpin covered once and doesn't now, each's slug and name. Their addresses are still out there, in
 # bookmarks and search results, and left alone they'd fall through to Boston's, which isn't where anyone
 # following one meant to go: each has a page at its old folder saying so, and anything under it goes there.
@@ -3946,7 +4398,8 @@ INDEX_JS = """
   const sayChosen = (menu, word, label, chosen) => {
     const box = menu.closest(".pick-box"), name = menu.options[menu.selectedIndex].textContent.trim();
     if (box) {
-      box.querySelector(".pick-said").textContent = chosen ? name : word;
+      // A whole town or neighborhood by its name alone ("Bushwick"), which is short enough to show whole.
+      box.querySelector(".pick-said").textContent = chosen ? name.replace(/^All of (the )?/, "") : word;
       box.classList.toggle("chosen", chosen);
     }
     menu.setAttribute("aria-label", chosen ? `${label}: ${name}` : label);
@@ -4103,7 +4556,9 @@ INDEX_JS = """
     pageOfNow = pageOf;
     pager.hidden = page >= pages;
     // With a venue or a search narrowing it, what the page says of those; with neither, what it says of itself.
-    const at = !venue.value ? "" : venue.value.startsWith("town:") ? ` in ${venue.value.slice(5)}` : ` at ${venue.value}`;
+    // A town as its choice says it, "All of the Lower East Side": in the Lower East Side.
+    const at = !venue.value ? "" : venue.value.startsWith("town:")
+      ? ` in ${venue.options[venue.selectedIndex].textContent.trim().replace(/^All of /, "")}` : ` at ${venue.value}`;
     const narrowed = empty.dataset.narrowed;
     empty.textContent = words.length ? `${narrowed}${at} matches “${search.value.trim()}”.`
       : at ? `${narrowed}${at}.` : empty.dataset.none;

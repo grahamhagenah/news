@@ -2,19 +2,23 @@
 its home page and one for each kind's page; and one for pushpin.city itself (events/share/site). They don't change
 with the listings, so they're made by hand, not by each build, with Chrome installed: python3 -m events.share_cards.
 Run it again after adding a city, renaming one or rewording a page; it writes them all, and
-events/pushpin/apple-touch-icon.png, which the build copies to the public site."""
+events/pushpin/apple-touch-icon.png, which the build copies to the public site. Naming cities writes only
+theirs (python3 -m events.share_cards nyc), and CHROME names another browser to draw them with; one that
+isn't on a Mac sets them in another typeface than the rest, so they're worth writing again from one."""
 
 import html
+import os
 import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 from events import build
 
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CHROME = os.environ.get("CHROME") or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 OUT = Path(__file__).parent / "share"
 PUSHPIN = Path(__file__).parent / "pushpin"  # The site's own icons: favicon.svg, and the home screen's, made here.
 COLORS = {"music": "#a78bfa", "film": "#fbbf24", "art": "#60a5fa"}
@@ -35,9 +39,16 @@ CARDS = {
         ("tonight", "Tonight in Western Mass", "Concerts, films, and talks still to come today, across the Pioneer Valley and the Berkshires.", list(COLORS), "tonight/"),
         ("weekend", "This weekend in Western Mass", "Concerts, films, and talks, Friday to Sunday, across the Pioneer Valley and the Berkshires.", list(COLORS), "weekend/"),
     ],
+    "nyc": [
+        ("music", "Concerts in New York", "Independent clubs, bars and halls across Brooklyn, Manhattan, and Queens.", ["music"], "music/"),
+        ("film", "Films in New York", "Repertory screenings to new releases, at independent theaters across Brooklyn, Manhattan, and Queens.", ["film"], "film/"),
+        ("talks", "Art & talks in New York", "Talks, readings and performances across Brooklyn, Manhattan, and Queens.", ["art"], "talks/"),
+        ("tonight", "Tonight in New York", "Concerts, films, and talks still to come today, across Brooklyn, Manhattan, and Queens.", list(COLORS), "tonight/"),
+        ("weekend", "This weekend in New York", "Concerts, films, and talks, Friday to Sunday, across Brooklyn, Manhattan, and Queens.", list(COLORS), "weekend/"),
+    ],
 }
 # pushpin.city's own: every city's.
-SITE_CARD = ("home", "Pushpin", "Concerts, films, and talks, aggregated from select venues, in Boston and Western Mass.", list(COLORS), None)
+SITE_CARD = ("home", "Pushpin", "Concerts, films, and talks, aggregated from select venues, in Boston, Western Mass and New York.", list(COLORS), None)
 
 
 def card(heading, line, kinds, path):
@@ -110,13 +121,18 @@ def shoot(html_page, size, destination, scratch):
 
 
 def main():
+    only = set(sys.argv[1:])  # Just these cities' cards, where any are named.
     with tempfile.TemporaryDirectory() as scratch:
         for city in build.CITIES:
+            if only and city.slug not in only:
+                continue
             build.use_city(city)
             home = ("home", build.PUBLIC_NAME, build.PUBLIC_TAGLINE, list(COLORS), "")
             for name, heading, line, kinds, path in [home] + CARDS[city.slug]:
                 shoot(card(heading, line, kinds, path), (1200, 630), OUT / city.slug / f"{name}.png", scratch)
         build.use_city(build.BOSTON_CITY)
+        if only:
+            return
         name, heading, line, kinds, path = SITE_CARD
         shoot(card(heading, line, kinds, path), (1200, 630), OUT / "site" / f"{name}.png", scratch)
         shoot(dot_on_black(180), (180, 180), PUSHPIN / "apple-touch-icon.png", scratch)

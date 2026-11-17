@@ -90,6 +90,19 @@ ROUTES = [
     ("spektrix.com/berkshiretheatregroup/api/v3/instances", "spektrix_instances.json"),
     ("berkshiretheatregroup.org/", "btg_home.html"),  # Its calendar and home page, for each event's page.
     ("arts.umass.edu/performing-arts/events", "umass_fac.html"),
+    # Pushpin NYC's.
+    ("filmforum.org", "filmforum.html"),
+    ("metrograph.com/nyc", "metrograph.html"),
+    ("ifccenter.com", "ifc.html"),
+    ("nitehawkcinema.com/williamsburg/wp-json/nj/v1/showtime/listings", "filmbot_listings.json"),
+    ("nitehawkcinema.com/williamsburg/wp-json/nj/v1/show?", "filmbot_shows.json"),
+    ("spectacletheater.com/spex-rolling.html", "spectacle.html"),
+    ("bam.org/api/BAMApi", "bam.json"),
+    ("lpr.com/wp-admin/admin-ajax.php?action=do_ajax&fn=get_homepageEvents&json%5Bdate%5D=20261117&paged=1", "lpr.html"),
+    ("lpr.com/wp-admin/admin-ajax.php", "empty.html"),  # Its later pages: nothing more.
+    ("roulette.org/calendar", "roulette.html"),
+    ("issueprojectroom.org/events", "issue.html"),
+    ("pioneerworks.org/calendar", "pioneerworks.html"),
 ]
 
 
@@ -622,7 +635,7 @@ class Cities(unittest.TestCase):
         build.use_city(build.BOSTON_CITY)
 
     def test_each_city_its_own_site(self):
-        self.assertEqual([city.slug for city in build.CITIES], ["boston", "westernma"])
+        self.assertEqual([city.slug for city in build.CITIES], ["boston", "westernma", "nyc"])
         self.assertEqual(build.BOSTON_CITY.sources, build.SOURCES_FILE)
         build.use_city(build.WESTERN_MASS)
         self.assertEqual((build.PUBLIC_URL, build.PUBLIC_ROOT, build.PUBLIC_NAME), ("https://pushpin.city/westernma/", "/westernma/", "Pushpin Western Mass"))
@@ -661,15 +674,15 @@ class Cities(unittest.TestCase):
         self.assertIn('<a href="/westernma/">Western Mass</a>', home)
         self.assertIn("share/site/home.png", home, "its own card, not Boston's, which is at share/ now")
         self.assertIn("<h2>Massachusetts</h2>", home, "its cities under the state they're in")
-        self.assertIn('<h2>New York</h2>', home)
-        self.assertIn('<span class="soon">New York City</span><p>Coming soon.</p>', home, "one being worked on, not a link")
+        self.assertIn('<h2>New York</h2>\n<ul><li><a href="/nyc/">NYC</a><p>Brooklyn, Manhattan, and Queens</p></li>', home)
+        self.assertNotIn('class="soon"', home, "nothing being worked on right now")
         self.assertIn('<a href="/contact/">Let us know</a>', home, "a way to ask for another")
         contact = build.render_contact()
         self.assertIn("https://formsubmit.co/", contact)
         self.assertIn('value="Pushpin: a message"', contact, "one form for every city")
         self.assertIn('value="https://pushpin.city/contact/?sent"', contact)
         missing = build.render_not_found(build.CITIES, build.RETIRED)
-        self.assertIn('["westernma"]', missing, "Boston's pages are at the root, in no folder")
+        self.assertIn('["westernma", "nyc"]', missing, "Boston's pages are at the root, in no folder")
         self.assertIn('/^\\/boston(\\/|$)/.test(path)', missing, "addresses from when Boston's were under /boston/")
         self.assertIn('(moved ? "/" + rest : home)', missing, "go to the same page at the root")
 
@@ -685,7 +698,7 @@ class Cities(unittest.TestCase):
         self.assertLess(missing.index("if (gone)"), missing.index("const moved"), "before Boston gets it")
         page = build.render_retired("bayarea", "Pushpin Bay Area", build.CITIES)
         self.assertIn("Pushpin Bay Area isn’t updated any more", page)
-        self.assertIn('<a href="/">Boston</a> and <a href="/westernma/">Western Mass</a>', page)
+        self.assertIn('<a href="/">Boston</a>, <a href="/westernma/">Western Mass</a> and <a href="/nyc/">NYC</a>', page)
         self.assertIn('<a class="home" href="/cities/">All cities →</a>', page)
         self.assertIn('<link rel="canonical" href="https://pushpin.city/bayarea/">', page)
         self.assertIn('<meta name="robots" content="noindex">', page, "for search results to forget it")
@@ -846,6 +859,184 @@ class Descriptions(unittest.TestCase):
         self.assertIn('<div class="about"><p>Paragraph 0', own)
         self.assertIn("Paragraph 5 says", own)
         self.assertIn('<button class="event-more" type="button" hidden', page)
+
+
+class NewYork(unittest.TestCase):
+    """Pushpin NYC's readers, each against a sample saved on November 17, 2026, and read as of then: several of
+    its cinemas' pages give a day with no year, or only its number in the month."""
+
+    def setUp(self):
+        class November(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 11, 17, 12, tzinfo=tz)
+        for patcher in (mock.patch.object(build, "fetch", sample), mock.patch.object(build, "datetime", November)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def read(self, kind, url, category, name):
+        found = build.READERS[kind](dict(source(kind, url, category, name), zone=build.NYC.clock))
+        self.assertTrue(found, f"{kind} read nothing from its sample")
+        for item in found:
+            self.assertTrue(item["title"].strip())
+            self.assertIsInstance(item["date"], date)
+            self.assertTrue(all(isinstance(moment, time) for moment in item["times"]))
+            self.assertTrue(item["link"].startswith("http"), item["link"])
+        return found
+
+    def times(self, found, title, day):
+        return [moment for item in found if item["title"] == title and item["date"] == day for moment in item["times"]]
+
+    def test_its_own_site_and_sources(self):
+        build.use_city(build.NYC)
+        self.addCleanup(build.use_city, build.BOSTON_CITY)
+        self.assertEqual((build.PUBLIC_URL, build.PUBLIC_NAME), ("https://pushpin.city/nyc/", "Pushpin NYC"))
+        sources = build.read_sources(build.NYC.sources, "nyc", build.NYC.clock)
+        self.assertEqual(build.NYC.sources.name, "sources-nyc.txt")
+        self.assertEqual(len({s["name"] for s in sources}), len(sources), "a name is how a source's listings are kept")
+        for s in sources:
+            self.assertIn(s["kind"], build.READERS, s["name"])
+            self.assertIn(s["category"], build.CATEGORIES, s["name"])
+            # Each has an address, in New York, and a neighborhood for the venue menu to group it under.
+            self.assertEqual(build.VENUE_ADDRESSES[s["name"]][2], "NY", s["name"])
+            self.assertIn(s["name"], build.VENUE_AREAS)
+        theirs = {s["name"] for city in build.CITIES if city is not build.NYC
+                  for s in build.read_sources(city.sources, city.slug, city.clock)}
+        self.assertFalse(theirs & {s["name"] for s in sources}, "no name another city's source has")
+        about = build.render_about(sources, datetime(2026, 11, 17, tzinfo=timezone.utc))
+        self.assertIn("I started Pushpin in Boston", about)
+        self.assertNotIn("I live in Somerville", about)
+
+    def test_the_venue_menu_goes_by_neighborhood(self):
+        """Brooklyn says little about where a venue is; Bushwick does. A venue with no neighborhood goes by its
+        town, and a night it puts on somewhere else by that address's."""
+        build.use_city(build.NYC)
+        self.addCleanup(build.use_city, build.BOSTON_CITY)
+        pool, vitus, issue = (dict(source("jsonld", name, "music", name), public=True) for name in ("Union Pool", "Saint Vitus", "ISSUE Project Room"))
+        events = [build.event(pool, "A", date(2026, 11, 18), time(20, 0)), build.event(vitus, "B", date(2026, 11, 18), time(20, 0)),
+                  build.event(issue, "C", date(2026, 11, 18), time(20, 0))]
+        page = build.render_index(events, [pool, vitus, issue], [], [], datetime(2026, 11, 17, 17, tzinfo=timezone.utc), public=True)
+        menu = page.split('aria-label="Venue">')[1].split("</select>")[0]
+        self.assertEqual(sorted(re.findall(r'<optgroup label="([^"]+)">', menu)), ["Bushwick", "Downtown Brooklyn", "Williamsburg"])
+        self.assertIn('data-address', build.address_attribute(dict(events[0], address=["1 Elsewhere St", "Queens", "NY", "11101"])))
+        self.assertEqual(build.written(build.VENUE_ADDRESSES["Union Pool"]), "484 Union Ave, Brooklyn, NY 11211")
+
+    def test_capitals_come_down_to_title_case(self):
+        for shouted, said in [("RAISE THE RED LANTERN", "Raise the Red Lantern"), ("LADY WINDERMERE'S FAN", "Lady Windermere's Fan"),
+                              ("L'INNOCENTE", "L'Innocente"), ("ROME, OPEN CITY", "Rome, Open City"), ("ROCKY II", "Rocky II"),
+                              ("MACBETH 3000 (w/ Q&A)", "Macbeth 3000 (w/ Q&A)"), ("JFK", "JFK"), ("5 AGAINST THE HOUSE", "5 Against the House"),
+                              ("DOG STAR MAN: PART ONE", "Dog Star Man: Part One"), ("Memento", "Memento"),
+                              ("threeASFOUR: FULL CIRCLE", "threeASFOUR: Full Circle")]:
+            self.assertEqual(build.uncapped(shouted), said)
+
+    def test_filmforum_times_have_no_am_or_pm(self):
+        found = self.read("filmforum", "https://filmforum.org/", "film", "Film Forum")
+        # Three of its week's tabs, each headed by the day of the month alone: the 17th, 20th and 22nd.
+        self.assertEqual(sorted({item["date"] for item in found}), [date(2026, 11, 17), date(2026, 11, 20), date(2026, 11, 22)])
+        # 12:20 is just after noon and 3:00 the afternoon's; an 11:00, Sunday's Film Forum Jr., the morning's.
+        self.assertEqual(self.times(found, "Raise the Red Lantern", date(2026, 11, 17)), [time(12, 20), time(15, 0), time(17, 40), time(20, 20)])
+        self.assertEqual(self.times(found, "Little Fugitive", date(2026, 11, 22)), [time(11, 0)])
+        self.assertIn("Once Upon a Time in Harlem", {item["title"] for item in found}, "not in capitals")
+        fatherland = next(item for item in found if item["title"] == "Fatherland")
+        self.assertEqual(fatherland["link"], "https://filmforum.org/film/fatherland")
+        self.assertTrue(fatherland["image"].endswith("FATHERLAND_thumbnail_1.png"), "from the page's list of what's playing")
+
+    def test_metrograph_marks_a_sold_out_showing(self):
+        found = self.read("metrograph", "https://metrograph.com/nyc/", "film", "Metrograph")
+        self.assertEqual([(item["title"], item["date"], item["times"], item["sold_out"]) for item in found][:4],
+                         [("Memento", date(2026, 11, 20), [time(15, 10)], False),
+                          ("The Killing of a Sacred Deer", date(2026, 11, 20), [time(15, 45)], False),
+                          ("That Day, On The Beach", date(2026, 11, 20), [time(17, 30)], False),
+                          ("Wallace & Gromit: The Classic Shorts", date(2026, 11, 22), [time(11, 15)], True)])
+        self.assertEqual(found[0]["about"][0], "Christopher Nolan · 2000 · 113min · 35mm")
+        self.assertEqual(found[0]["link"], "https://metrograph.com/film/9999005093-memento/")
+        self.assertTrue(all(item["image"] for item in found))
+
+    def test_ifc_days_carry_no_year(self):
+        found = self.read("ifc", "https://www.ifccenter.com/", "film", "IFC Center")
+        self.assertEqual(sorted({item["date"] for item in found}), [date(2026, 11, 17), date(2026, 11, 18)])
+        self.assertEqual(self.times(found, "The Devils", date(2026, 11, 17)), [time(11, 0), time(16, 35), time(19, 25), time(21, 15)])
+        self.assertEqual(self.times(found, "Mouse", date(2026, 11, 18)), [time(10, 50), time(18, 40)])
+        self.assertTrue(all(item["image"].startswith("https://images.amcnetworks.com/") for item in found))
+        # A January day read in December is the January coming, not the one just gone.
+        self.assertEqual(build.yearless("Jan", "3", date(2026, 12, 20)), date(2027, 1, 3))
+        self.assertEqual(build.yearless("Nov", "17", date(2026, 11, 20)), date(2026, 11, 17))
+        self.assertIsNone(build.yearless("Feb", "30", date(2026, 1, 1)))
+
+    def test_filmbot_names_its_films_from_its_list_of_them(self):
+        found = self.read("filmbot", "https://nitehawkcinema.com/williamsburg/", "film", "Nitehawk Williamsburg")
+        self.assertEqual({item["title"] for item in found}, {"You Can See Everything"})
+        self.assertEqual(self.times(found, "You Can See Everything", date(2026, 11, 17)), [time(15, 15), time(18, 5), time(21, 5)])
+        self.assertEqual(found[0]["link"], "https://nitehawkcinema.com/williamsburg/movies/you-can-see-everything/")
+        self.assertTrue(found[0]["image"].startswith("https://s3.amazonaws.com/nightjarprod/"))
+        self.assertTrue(found[0]["about"][0].startswith("Elizabeth Holmes invites a skeptical film crew"))
+        self.assertEqual(found[0]["about"][-1], "2026 · 174 min · R")
+
+    def test_spectacle_reads_down_each_days_column(self):
+        found = self.read("spectacle", "https://www.spectacletheater.com/spex-rolling.html", "film", "Spectacle")
+        self.assertEqual(len(found), 17)
+        tuesday = sorted((item["times"][0], item["title"]) for item in found if item["date"] == date(2026, 11, 17))
+        self.assertEqual(tuesday, [(time(19, 30), "The Mob"), (time(22, 0), "The Crow Double Feature")])
+        # A day with a third screening where the others have two: the cells under theirs are empty, not shifted along.
+        self.assertEqual(sorted(item["title"] for item in found if item["times"] == [time(23, 55)]),
+                         ["Mummy Theme Park", "Young Blondes Stalked and Murdered"])
+        self.assertEqual({item["date"] for item in found if item["times"] == [time(23, 55)]}, {date(2026, 11, 20), date(2026, 11, 21)})
+        mob = next(item for item in found if item["title"] == "The Mob")
+        self.assertEqual(mob["link"], "https://www.spectacletheater.com/journey-through-the-past-70s-canadian-classics/")
+        self.assertTrue(mob["image"].startswith("https://www.spectacletheater.com/wp-content/"))
+
+    def test_bam_sorts_its_productions_by_kind(self):
+        found = self.read("bam", "https://www.bam.org/api/BAMApi/GetCalendarEventsByDayWithOnGoing", "film", "BAM")
+        kinds = {item["title"]: item["category"] for item in found}
+        self.assertEqual(kinds["ArteEast Presents Sunshine Express"], "film")
+        self.assertEqual(kinds["Samson et Dalila"], "film", "the Met's opera, live in its cinemas")
+        self.assertEqual(kinds["Einstein on the Beach–50th Anniversary Concert"], "music")
+        self.assertEqual(kinds["La Distance"], "art")
+        self.assertEqual(kinds["Somi in conversation with Claudia Rankine and Helga Davis"], "art")
+        self.assertNotIn("BAM TeenSpace", kinds, "not its classes")
+        distance = next(item for item in found if item["title"] == "La Distance")
+        self.assertEqual((distance["date"], distance["times"]), (date(2026, 11, 18), [time(19, 30)]))
+        self.assertEqual(distance["link"], "https://www.bam.org/theater/2026/la-distance")
+        self.assertIn("width=800", distance["image"])
+        self.assertTrue(distance["about"][0].startswith("When a daughter opts for exile on Mars"))
+        self.assertIn("I’mPossible Holiday Wonders", kinds, "its names' marks unescaped, twice over")
+
+    def test_lpr_keeps_to_its_own_rooms(self):
+        found = self.read("lpr", "https://lpr.com/wp-admin/admin-ajax.php?action=do_ajax&fn=get_homepageEvents", "music", "Le Poisson Rouge")
+        # The page has a show it presents at The Town Hall and one in Miami Beach; neither is at LPR.
+        self.assertEqual([(item["title"], item["date"], item["times"], item["detail"]) for item in found],
+                         [("Phillip Phillips", date(2026, 11, 17), [time(18, 30)], "with Briscoe"),
+                          ("Fruition", date(2026, 11, 18), [time(18, 30)], "with Handmade Moments")])
+        self.assertEqual(found[0]["link"], "https://lpr.com/lpr_events/pp26nyc/")
+        self.assertTrue(found[0]["image"].startswith("https://lpr.com/wp-content/uploads/"))
+
+    def test_roulette(self):
+        found = self.read("roulette", "https://roulette.org/calendar/", "music", "Roulette")
+        self.assertEqual([(item["title"], item["date"], item["times"], item["price"]) for item in found][:2],
+                         [("Qasim Naqvi: Slow Television", date(2026, 11, 18), [time(20, 0)], "$25"),
+                          ("Breaks: A Solo Performance by Jessica Cook (Night 1)", date(2026, 11, 19), [time(20, 0)], "$25")])
+        self.assertTrue(found[0]["about"][0].startswith("For his Roulette Commission"))
+        self.assertTrue(found[0]["image"].endswith("-400x400.jpg"), "a size up from the list's thumbnail")
+
+    def test_issue_says_where_a_night_elsewhere_is(self):
+        found = self.read("issue", "https://issueprojectroom.org/events", "music", "ISSUE Project Room")
+        crawford, _, girma = found
+        # Its markup gives the time in UTC: 1am on the 20th there is 8pm on the 19th in Brooklyn.
+        self.assertEqual((crawford["date"], crawford["times"]), (date(2026, 11, 19), [time(20, 0)]))
+        self.assertIsNone(crawford["address"], "its own theater, by the venue's address")
+        self.assertEqual(crawford["detail"], "")
+        self.assertEqual(girma["detail"], "at MITU580")
+        self.assertTrue(crawford["link"].startswith("https://issueprojectroom.org/event/"))
+        self.assertTrue(crawford["image"].startswith("https://issueprojectroom.org/sites/default/files/"))
+
+    def test_pioneer_works_lists_its_programs(self):
+        found = self.read("pioneerworks", "https://pioneerworks.org/calendar", "art", "Pioneer Works")
+        # Not its class, the gallery's open hours, or a festival that runs for weeks.
+        self.assertEqual([(item["title"], item["date"], item["times"]) for item in found],
+                         [("Rachel Cusk: Life of M", date(2026, 11, 17), [time(19, 30)])])
+        self.assertEqual(found[0]["link"], "https://pioneerworks.org/programs/rachel-cusk-life-of-m")
+        self.assertEqual(found[0]["about"], ["Doors 7pm"])
+        self.assertTrue(found[0]["image"].endswith("?w=800&auto=format"))
 
 
 class DayHeadings(unittest.TestCase):
