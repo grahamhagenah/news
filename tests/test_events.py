@@ -1707,7 +1707,8 @@ class Page(unittest.TestCase):
         page = build.render_index(events, [venue], [], [], built, public=True, weekend=0)
         self.assertEqual([title for title in ("On the 17th", "On the 18th", "On the 20th", "On the 21th") if title in page],
                          ["On the 18th", "On the 20th"])
-        self.assertIn("Friday, September 18 to Sunday, September 20", page)
+        # The line over it just its dates, two lines on a phone.
+        self.assertIn('<h1 class="tagline">September 18–20 around Boston, Cambridge, and Somerville.</h1>', page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
         self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><button', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png?pin">', page)
@@ -1717,7 +1718,11 @@ class Page(unittest.TestCase):
         self.assertIn(f'<a href="{R}weekend/next/">Next weekend, Sep 25–27 →</a>', page)
         following = build.render_index(events, [venue], [], [], built, public=True, weekend=1)
         self.assertNotIn("On the 18th", following)
-        self.assertIn("Next weekend around Boston, Cambridge, and Somerville: Friday, September 25", following)
+        self.assertIn('<h1 class="tagline">September 25–27 around Boston, Cambridge, and Somerville.</h1>', following)
+        # A weekend across two months names both.
+        across = build.render_index(events, [venue], [], [], datetime(2026, 10, 26, 12, tzinfo=timezone.utc),
+                                    public=True, weekend=0)
+        self.assertIn('<h1 class="tagline">October 30 – November 1 around Boston, Cambridge, and Somerville.</h1>', across)
         self.assertIn(f'<a href="{R}weekend/">← This weekend, Sep 18–20</a>', following)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/next/">', following)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png?pin">', following)

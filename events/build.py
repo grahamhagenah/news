@@ -2994,8 +2994,11 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         title, description, tagline = PUBLIC_PAGES[category][1:] if category else (PUBLIC_TITLE, PUBLIC_DESCRIPTION, PUBLIC_TAGLINE)
         if weekend is not None:
             _, name, title, description = PUBLIC_WEEKENDS[weekend]
-            tagline = (f"{name} around {PUBLIC_AROUND}: {friday:%A, %B} {friday.day} to "
-                       f"{sunday:%A, %B} {sunday.day}.")
+            # Just its dates, which the header's "This weekend" and the days under it say are Friday to Sunday:
+            # two lines on a phone. "November 20–22", or across a month, "October 30 – November 1".
+            days = (f"{friday:%B} {friday.day}–{sunday.day}" if friday.month == sunday.month else
+                    f"{friday:%B} {friday.day} – {sunday:%B} {sunday.day}")
+            tagline = f"{days} around {PUBLIC_AROUND}."
         if tonight:
             _, title, description, tagline = PUBLIC_TONIGHT
         if added:
@@ -3267,7 +3270,7 @@ def city_texts(slug, name, place, around, *, state="Massachusetts", zone="Americ
         # read, so it rolls over at midnight, before the next build.
         ("tonight/", f"Things to do in {place} tonight · {name}",
          f"Concerts, films and talks still to come today around {around}, aggregated from select venues.",
-         f"Tonight around {around}: everything still to come today, aggregated from select venues."),
+         f"Everything still to come today around {around}."),
         # What's turned up in the last week, newest first.
         ("new/", f"Just announced in {place} · {name}",
          f"Concerts and talks just added around {around}, from select venues.",
