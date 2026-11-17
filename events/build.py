@@ -3592,13 +3592,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         when_links = '<span class="when-links">' + "".join(
             f'<a{later} href="{root}{path}"{" aria-current=\"page\"" if path == now else ""}>{label}</a>'
             for path, label, later in whens) + "</span>"
-    # A phone's row of chips is swiped along, so what's chosen can be off the screen, and forgotten: "Clear", first
-    # in the row and held at its start however far it's swiped, while anything is narrowing the list. A page that
-    # is itself a narrowing (a kind's, tonight's, a weekend's) is written with it showing; the script shows it
-    # for the rest, a kind shown in place, a venue, a search.
-    narrowed = bool(public and (category or tonight or weekend is not None))
-    clear = f'<span class="clear-box"{"" if narrowed else " hidden"}><button class="clear-all" type="button">Clear</button></span>'
-    names = ", ".join(html.escape(source["name"]) for source in sources)
+    names =", ".join(html.escape(source["name"]) for source in sources)
     # Notices of sources that didn't load, marked as such, last in the footer.
     mark = shared.icon("notice")
     failed_note = f'<p class="notice">{mark}<span>Couldn’t load {html.escape(", ".join(failed))}.</span></p>\n' if failed else ""
@@ -3648,7 +3642,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     body = (
         # The kinds, when and where together (a phone's row of chips), then the search (its box, on a line above).
         f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>'
-        f'<span class="chips">{clear}{buttons}{when_links}{said_over(venue_menu(venues, towns, events), "Where")}</span>'
+        f'<span class="chips">{buttons}{when_links}{said_over(venue_menu(venues, towns, events), "Where")}</span>'
         f'<span class="finders">{SEARCH}'
         '<button class="search-clear" type="button" aria-label="Clear the search" hidden></button></span></nav>\n'
         + "\n".join(sections)
@@ -4580,10 +4574,6 @@ INDEX_JS = """
   hint();
   // On a phone, an × in the search while it has something in it. A wide screen has Esc.
   const clearSearch = document.querySelector(".search-clear");
-  // And "Clear" at the start of its chips, while anything narrows the list: this page itself, where it's a kind's
-  // own, tonight's or a weekend's (elsewhere than the home page, which has everything), or what's chosen on it.
-  const clearAll = filter.querySelector(".clear-all");
-  const elsewhere = () => (kindPages && !everything) || Boolean(filter.querySelector(".when-links a[aria-current]"));
   const combined = [...document.querySelectorAll(".combined")];
   const fromAddress = () => {
     const params = new URLSearchParams(location.search);
@@ -4751,7 +4741,6 @@ INDEX_JS = """
     venue.classList.toggle("chosen", Boolean(venue.value));
     sayChosen(venue, "Where", "Venue", Boolean(venue.value));
     clearSearch.hidden = !search.value;
-    clearAll.parentNode.hidden = !(elsewhere() || show !== "all" || venue.value || words.length);
     empty.hidden = rows.length > 0;
     // With nothing left because of the search or the venue, a way out of it under what the page says.
     const narrowing = [words.length && "the search", venue.value && "the venue"].filter(Boolean);
@@ -4835,22 +4824,6 @@ INDEX_JS = """
     history.replaceState(null, "", address(1));
     showEvents();
     toList();
-  });
-  // "Clear", in a phone's row of chips: everything again, with no kind, day, venue or search narrowing it. From a
-  // page that is one of those, a kind's own or tonight's or a weekend's, that's the home page; shown in place,
-  // it's let go in place, and the row goes back to its start.
-  clearAll.addEventListener("click", () => {
-    const home = filter.querySelector('a[data-show="all"]');
-    if (elsewhere()) { location.href = (filter.querySelector(".when-links a[aria-current]") || home).dataset.href; return; }
-    search.value = "";
-    venue.value = "";
-    show = "all";
-    if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
-    if (kindPages) history.pushState(null, "", new URL(home.dataset.href, location.href).pathname);
-    else history.replaceState(null, "", address(1));
-    showEvents();
-    toList();
-    clearAll.closest(".chips").scrollLeft = 0;
   });
   // The ×, emptying the search and leaving it ready for another.
   clearSearch.addEventListener("click", () => {
@@ -5401,7 +5374,7 @@ PIN_CSS = """
   html { overflow-anchor: none; }
   /* Beside the kinds, the venue's menu and then the search, at the end of the line. The search's ×, and the menu's
      short word (below), are a phone's alone: a wide screen's menu says what's chosen itself. */
-  .search-clear, .pick-said, .clear-box { display: none; }
+  .search-clear, .pick-said { display: none; }
   .pick-box { display: contents; }
   @media (max-width: 34rem) {
     /* Two rows, each a shape of its own rather than more words: the search, a box the width of the column, which
@@ -5434,9 +5407,8 @@ PIN_CSS = """
                      overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
     .filter .chips::-webkit-scrollbar { display: none; }
     /* The column's margin at each end of the row, as room on its first and after its last rather than the row's
-       own padding, which browsers differ on: whether what's held at the row's start is held inside it, and
-       whether there's any after the last. */
-    .filter .chips .clear-box[hidden] + * { margin-left: 1rem; }
+       own padding, which not every browser keeps after the last when the row is swiped to its end. */
+    .filter .chips > :first-child { margin-left: 1rem; }
     .filter .chips::after { content: ""; flex: none; width: .6rem; height: 1px; }
     .when-links { display: contents; }
     .when-links::before { content: ""; flex: none; align-self: stretch; width: 1px; margin: .35rem .15rem; background: #2a2a2a; }
@@ -5459,19 +5431,6 @@ PIN_CSS = """
     .filter .chips .pick-box .pick { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
                                      margin: 0; padding: 0; opacity: 0; font-size: 1rem; cursor: pointer; }
     .filter .chips .pick-box:focus-within { outline: 1px solid #555; outline-offset: 2px; }
-    /* "Clear", while anything narrows the list: first in the row and held at its start, the other chips going
-       under it as they're swiped along (black behind it out to the screen's edge, fading off after it), so it's
-       there however far along the row is, when what's chosen may be off the screen. Filled, not outlined, and
-       led by an × (Tabler Icons' "x", MIT license): something to do, where the others are things to choose. */
-    .clear-box:not([hidden]) { display: flex; flex: none; position: sticky; left: 0; z-index: 1; padding-left: 1rem;
-                               background: #000; }
-    .clear-box::after { content: ""; position: absolute; top: 0; bottom: 0; left: 100%; width: .4rem;
-                        background: linear-gradient(90deg, #000, transparent); pointer-events: none; }
-    .filter .chips .clear-all {
-      display: inline-flex; flex: none; align-items: center; box-sizing: border-box; height: 2rem;
-      padding: 0 .7rem 0 1.75rem; border: 1px solid #1f1f1f; border-radius: 999px; color: #ddd; font-size: .9rem;
-      white-space: nowrap; text-decoration: none; cursor: pointer;
-      background: #1f1f1f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ddd' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6l-12 12'/%3E%3Cpath d='M6 6l12 12'/%3E%3C/svg%3E") no-repeat .6rem center / .85rem; }
     /* A chip's word in the middle of it, by the letters themselves: centering the line leaves the word wherever
        the font's own room over and under its letters puts it, a pixel or two high in some. Where a browser can
        trim a line to its capitals' height and its baseline, the chip is that and the same padding over and
@@ -5480,9 +5439,7 @@ PIN_CSS = """
     @supports (text-box: trim-both cap alphabetic) {
       .filter .chips [data-show], .filter .when-links a, .filter .chips .pick-box {
         display: block; height: auto; padding: calc((2rem - 2px - 1cap) / 2) .7rem; line-height: 1; }
-      .filter .chips .clear-all { display: block; height: auto; padding-block: calc((2rem - 2px - 1cap) / 2); line-height: 1; }
-      .filter .chips [data-show], .filter .when-links a, .filter .chips .clear-all, .pick-box .pick-said {
-        text-box: trim-both cap alphabetic; }
+      .filter .chips [data-show], .filter .when-links a, .pick-box .pick-said { text-box: trim-both cap alphabetic; }
       .pick-box .pick-said { padding-block: .4em; margin-block: -.4em; }
     }
   }
