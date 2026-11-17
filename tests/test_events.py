@@ -1618,6 +1618,20 @@ class HomePage(unittest.TestCase):
         self.assertNotIn("when-pick", home)
         self.assertIn(".chips { display: contents; gap: inherit; }", home, "a wide screen's bar holds them itself")
 
+    def test_clear_leads_a_phones_chips_while_anything_narrows_the_list(self):
+        """What's chosen can be swiped off the screen, so "Clear" is first in the row and held there. The home page
+        is written with it hidden, for the script to show with a kind, a venue or a search; a kind's own page,
+        which is a narrowing itself, with it showing. A wide screen, with everything in view, has none."""
+        clear = '<button class="clear-all" type="button">Clear</button></span>'
+        self.assertIn(f'<span class="chips"><span class="clear-box" hidden>{clear}<a data-show="all"', self.page())
+        self.assertIn(f'<span class="chips"><span class="clear-box">{clear}<a data-show="all"', self.page(category="film"))
+        self.assertIn(".search-clear, .pick-said, .clear-box { display: none; }", self.page())
+        self.assertIn(".clear-box:not([hidden]) { display: flex; flex: none; position: sticky; left: 0;", self.page())
+        self.assertIn('clearAll.parentNode.hidden = !(elsewhere() || show !== "all" || venue.value || words.length);', build.INDEX_JS)
+        # From a page that's a narrowing, to the home page; on the home page, let go in place.
+        self.assertIn('if (elsewhere()) { location.href = (filter.querySelector(".when-links a[aria-current]") || home).dataset.href; return; }',
+                      build.INDEX_JS)
+
     def test_the_home_pages_line_is_in_its_header_and_a_kind_pages_under_it(self):
         home = self.page()
         header = home[home.index("<header>"):home.index("</header>")]
@@ -1972,7 +1986,8 @@ class Page(unittest.TestCase):
         self.assertNotIn("Roadrunner", film.split("<footer>")[1])
         # Your own page keeps its buttons.
         self.assertIn('<button data-show="film">', mine)
-        self.assertIn('<nav class="filter" aria-label="Show"><span class="chips"><button', mine)
+        self.assertIn('<nav class="filter" aria-label="Show"><span class="chips"><span class="clear-box" hidden>'
+                      '<button class="clear-all" type="button">Clear</button></span><button data-show="all">', mine)
         self.assertIn(f"<loc>{build.PUBLIC_URL}talks/</loc>", build.render_sitemap(built))
 
     def test_weekend_days(self):
@@ -1994,7 +2009,9 @@ class Page(unittest.TestCase):
         # The line over it just its dates, two lines on a phone.
         self.assertIn('<h1 class="tagline">September 18–20 around Boston, Cambridge, and Somerville.</h1>', page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
-        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><span class="chips"><button', page)
+        # A weekend is a narrowing itself, so its "Clear" is there from the start.
+        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><span class="chips"><span class="clear-box">'
+                      '<button class="clear-all" type="button">Clear</button></span><button data-show="all">', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png?pin">', page)
         self.assertIn(f'<a href="{R}about/" aria-current="page">About</a>', build.render_about([venue], built))
         self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', page)
@@ -2022,7 +2039,8 @@ class Page(unittest.TestCase):
         self.assertIn("On the 14th", page)
         self.assertIn("On the 15th", page)
         self.assertNotIn("On the 16th", page)
-        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page data-today><span class="chips"><button', page)
+        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page data-today><span class="chips">'
+                      '<span class="clear-box"><button', page)
         self.assertIn(f"<title>{build.PUBLIC_TONIGHT[1]}</title>", page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}tonight/">', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/tonight.png?pin">', page)
