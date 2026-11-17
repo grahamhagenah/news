@@ -4663,7 +4663,7 @@ PIN_CSS = """
        whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
        anywhere along its width. */
     .filter .finders .search { order: -1; flex: 1 1 0; width: 0; height: 32px; margin: 0;
-                               padding: 0; border: 0; background: none; font-size: 1.05rem; }
+                               padding: 0 0 0 1.4em; border: 0; background-size: 1em; font-size: 1.05rem; }
     .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.6rem -.45rem;
                              padding: 0; color: transparent; font-size: 1rem;
                              background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 24px; }
