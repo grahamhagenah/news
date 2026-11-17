@@ -3919,8 +3919,12 @@ INDEX_JS = """
   fromAddress();
   // The bar: its height, for the day's heading to stick under it rather than behind it.
   // The bar's height, which a listing gone to is kept clear of.
+  // On a phone the search is the bar's first line, which scrolls away with the page: the bar sticks that much
+  // above the top of the window (--lift), so only the filters under it stay, and the bar is as tall as they are.
   const barHeight = () => {
-    document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height) + "px");
+    const lift = phone.matches ? Math.ceil(search.getBoundingClientRect().bottom - filter.getBoundingClientRect().top) : 0;
+    document.documentElement.style.setProperty("--lift", lift + "px");
+    document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height - lift) + "px");
     // A day's heading's too, which sticks under the bar.
     const heading = [...document.querySelectorAll(".day > h2")].find(h2 => h2.offsetParent);
     if (heading) document.documentElement.style.setProperty("--head", heading.getBoundingClientRect().height + "px");
@@ -3946,7 +3950,8 @@ INDEX_JS = """
   // Once the bar is stuck over the list, the shadow under it; or, with a day's heading stuck under the bar, under
   // that. Checked as the page scrolls, and whenever the list changes.
   const markStuck = () => {
-    filter.classList.toggle("stuck", mark.getBoundingClientRect().top + parseFloat(getComputedStyle(filter).marginTop) < 0);
+    filter.classList.toggle("stuck", mark.getBoundingClientRect().top + parseFloat(getComputedStyle(filter).marginTop)
+      < (parseFloat(getComputedStyle(filter).top) || 0));
     const under = filter.getBoundingClientRect().bottom;
     let pinned = false;
     for (const h2 of document.querySelectorAll(".day > h2")) {
@@ -4642,24 +4647,27 @@ PIN_CSS = """
   html { overflow-anchor: none; }
   /* Beside the kinds, the menus and then the search, at the end of the line. */
   @media (max-width: 34rem) {
-    /* Two lines: the dot and the kinds; then the search, taking what the line has left, with the day and venue
-       menus at the end of it as icons, a calendar and a pin (Tabler Icons' "calendar" and "map-pin", MIT license,
-       their paths verbatim), which open the phone's own list of choices; amber while they narrow the list. Each
-       icon a good size to see, in a target a thumb can't miss (44 pixels, Apple's least), which reaches out over
-       the room around it rather than making the line taller. */
-    .filter { row-gap: .35rem; column-gap: .75rem; }
-    /* The search's line runs the width of the column, under the icons too, so the three read as the one row; it
-       brightens while the search is being typed in. The field a little taller than a line of text, for an easier
-       press, and its text 17 pixels, the page's own size: Safari on an iPhone zooms the page in on a field whose
-       text is any smaller than 16, and doesn't zoom back out. */
-    .filter .finders { align-items: center; gap: .15rem; border-bottom: 1px solid #2a2a2a; }
-    .filter .finders:focus-within { border-bottom-color: #555; }
-    .filter .finders .search { order: -1; flex: 1 1 0; width: 0; height: 2.6rem; margin-right: .5rem;
-                               padding: 0; border-bottom: 0; background: none; font-size: 17px; }
-    .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.075rem 0;
+    /* Two lines: the search, the width of the column, which scrolls away with the page (the bar sticks --lift,
+       its height, above the window, which the script measures); and under it the kinds, with the day and venue
+       menus at the end of their line as icons, a calendar and a pin (Tabler Icons' "calendar" and "map-pin", MIT
+       license, their paths verbatim), which open the phone's own list of choices; amber while they narrow the
+       list. Only the kinds' line stays at the top of the window. Each icon a good size to see, in a target a thumb
+       can't miss (44 pixels, Apple's least), which reaches out over the room around it rather than making the line
+       taller or wider. */
+    .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .45rem; column-gap: .7rem; align-items: center; }
+    .filter .finders { display: contents; }
+    /* The search's text 17 pixels, the page's own size: Safari on an iPhone zooms the page in on a field whose
+       text is any smaller than 16, and doesn't zoom back out. Its line brightens while it's being typed in. */
+    .filter .finders .search { order: -1; flex: 1 1 100%; width: auto; height: 2.6rem; margin: 0;
+                               padding: 0; background: none; font-size: 17px; }
+    /* The two at the end of the kinds' line, pushed there from the last kind, so their targets keep reaching out
+       over the room around them: down to a 320-pixel screen, it all fits on the one line. */
+    .filter > [data-show]:has(+ .when-links, + .finders) { margin-right: auto; }
+    .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.6rem -.45rem;
                              padding: 0; color: transparent; font-size: 1rem;
                              background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 24px; }
-    .filter .finders .pick:not(.when-pick) { margin-right: -10px; }  /* The pin's edge, not its target's, at the column's. */
+    /* The pin's edge, not its target's, at the column's; the two targets meeting rather than leaving a gap. */
+    .filter .finders .pick:not(.when-pick) { margin-left: -1rem; margin-right: -10px; }
     .filter .finders .when-pick { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
     .filter .finders .pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E"); }
     .filter .finders .when-pick.chosen { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M11 15h1'/%3E%3Cpath d='M12 15v3'/%3E%3C/svg%3E"); }
