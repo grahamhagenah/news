@@ -4573,13 +4573,15 @@ INDEX_JS = """
   fromAddress();
   // The bar: its height, for the day's heading to stick under it rather than behind it.
   // The bar's height, which a listing gone to is kept clear of.
-  // On a phone the search and its menus are the bar's first line, which scrolls away with the page: the bar sticks
-  // that much above the top of the window (--lift), so only the kinds under it stay, and the bar is as tall as they are.
-  // Scrolling back up brings that line back down into the bar (revealed), to search or choose again without going
-  // back to the top; scrolling on down the list puts it away again.
+  // On a phone the search is the bar's first row, which scrolls away with the page: the bar sticks that much above
+  // the top of the window (--lift), so only the chips under it stay, with the room over them that the bar has
+  // under them, whatever the room between them and the search.
+  // Scrolling back up brings the search back down into the bar (revealed), to search again without going back to
+  // the top; scrolling on down the list puts it away again.
   let revealed = false;
   const barHeight = () => {
-    const lift = phone.matches ? Math.ceil(search.closest(".finders").getBoundingClientRect().bottom - filter.getBoundingClientRect().top) : 0;
+    const lift = phone.matches ? Math.max(0, Math.ceil(filter.querySelector(".chips").getBoundingClientRect().top
+      - filter.getBoundingClientRect().top - parseFloat(getComputedStyle(filter).paddingBottom))) : 0;
     document.documentElement.style.setProperty("--lift", lift + "px");
     document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height - (revealed ? 0 : lift)) + "px");
     // A day's heading's too, which sticks under the bar.
@@ -5368,7 +5370,7 @@ PIN_CSS = """
        scrolls away with the page (the bar sticks --lift, its height, above the window, which the script
        measures); and under it a row of chips, the row that stays at the top of the window: the kinds, then
        tonight and the weekends, then the venue's menu. */
-    .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .6rem; column-gap: 0; align-items: center; }
+    .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .95rem; column-gap: 0; align-items: center; }
     /* Room under the chips where the bar is stuck, and the day's label the same distance under them where it isn't. */
     .filter { padding-bottom: .55rem; margin-bottom: -1.35rem; }
     /* Scrolling back up, the search's line slides back down into the bar, and the day's heading held under the
@@ -5414,6 +5416,17 @@ PIN_CSS = """
     .filter .chips .pick-box .pick { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
                                      margin: 0; padding: 0; opacity: 0; font-size: 1rem; cursor: pointer; }
     .filter .chips .pick-box:focus-within { outline: 1px solid #555; outline-offset: 2px; }
+    /* A chip's word in the middle of it, by the letters themselves: centering the line leaves the word wherever
+       the font's own room over and under its letters puts it, a pixel or two high in some. Where a browser can
+       trim a line to its capitals' height and its baseline, the chip is that and the same padding over and
+       under, adding up to the height it has above. The venue's word keeps room of its own, taken back out, for
+       the tail of a "g", which its cutting off at the end would cut too. */
+    @supports (text-box: trim-both cap alphabetic) {
+      .filter .chips [data-show], .filter .when-links a, .filter .chips .pick-box {
+        display: block; height: auto; padding: calc((2rem - 2px - 1cap) / 2) .7rem; line-height: 1; }
+      .filter .chips [data-show], .filter .when-links a, .pick-box .pick-said { text-box: trim-both cap alphabetic; }
+      .pick-box .pick-said { padding-block: .4em; margin-block: -.4em; }
+    }
   }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
