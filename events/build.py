@@ -3445,12 +3445,13 @@ def render_combined(item):
 
 
 # The filter is a bar that stays at the top of the window as the listings scroll under it. On a phone it's two
-# lines: the kinds; then the search, always open, with the day and venue menus as icons at the end of its line.
+# rows: the search, a box of its own, which scrolls away; then a row of chips, swiped along, which stays: the
+# kinds, tonight and the weekends, and the venue's menu.
 
 
 def said_over(menu, word):
-    """A menu with the short word a phone shows for it ("When", "Where") drawn over it, which the script swaps for
-    what's chosen. A wide screen shows the menu as it is."""
+    """A menu with the short word a phone shows for it ("Where") drawn over it, which the script swaps for what's
+    chosen. A wide screen shows the menu as it is."""
     return f'<span class="pick-box"><span class="pick-said" aria-hidden="true">{word}</span>{menu}</span>' if menu else ""
 
 
@@ -3573,21 +3574,17 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     # Tonight and this weekend beside the kinds, as a pair of their own: they narrow by when rather than by what,
     # and were only in the footer, a full day of listings below where anyone was looking. The one this page is,
     # where it's one of them, marked as a kind is.
-    # On a phone there isn't the width for them beside the kinds, so they're a menu there instead, beside the
-    # venue's, with next weekend's too, which a menu has the room for. In the filter this weekend is just
-    # "Weekend", short beside "Tonight"; its page, the footer and its title still say "This weekend".
-    when_links = when_menu = ""
+    # On a phone they're chips in the same row as the kinds, which is swiped along, so there's room for the
+    # weekend after too ("later": a wide screen's bar leaves it to the weekend's own page). In the filter this
+    # weekend is just "Weekend", short beside "Tonight"; its page, the footer and its title still say "This weekend".
+    when_links = ""
     if public:
-        now, current = "tonight" if tonight else "weekend" if weekend == 0 else "", ' aria-current="page"'
+        now = PUBLIC_TONIGHT[0] if tonight else PUBLIC_WEEKENDS[weekend][0] if weekend is not None else None
+        whens = [(PUBLIC_TONIGHT[0], "Tonight", "")] + [(path, "Weekend" if at == 0 else name, ' class="later"' * (at > 0))
+                                                         for at, (path, name, *_) in enumerate(PUBLIC_WEEKENDS)]
         when_links = '<span class="when-links">' + "".join(
-            f'<a href="{root}{path}"{current if key == now else ""}>{label}</a>'
-            for key, path, label in (("tonight", PUBLIC_TONIGHT[0], "Tonight"),
-                                     ("weekend", PUBLIC_WEEKENDS[0][0], "Weekend"))) + "</span>"
-        chosen = PUBLIC_TONIGHT[0] if tonight else PUBLIC_WEEKENDS[weekend][0] if weekend is not None else ""
-        when_menu = (f'<select class="pick when-pick{" chosen" if chosen else ""}" aria-label="When">' + "".join(
-            f'<option value="{root}{path}"{" selected" if path == chosen else ""}>{label}</option>'
-            for path, label in [("", "Any day"), (PUBLIC_TONIGHT[0], "Tonight")]
-            + [(path, "Weekend" if at == 0 else name) for at, (path, name, *_) in enumerate(PUBLIC_WEEKENDS)]) + "</select>")
+            f'<a{later} href="{root}{path}"{" aria-current=\"page\"" if path == now else ""}>{label}</a>'
+            for path, label, later in whens) + "</span>"
     names = ", ".join(html.escape(source["name"]) for source in sources)
     # Notices of sources that didn't load, marked as such, last in the footer.
     mark = shared.icon("notice")
@@ -3636,8 +3633,10 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>{buttons}{when_links}'
-        f'<span class="finders">{said_over(when_menu, "When")}{said_over(venue_menu(venues, towns, events), "Where")}{shared.SEARCH}'
+        # The kinds, when and where together (a phone's row of chips), then the search (its box, on a line above).
+        f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>'
+        f'<span class="chips">{buttons}{when_links}{said_over(venue_menu(venues, towns, events), "Where")}</span>'
+        f'<span class="finders">{shared.SEARCH}'
         '<button class="search-clear" type="button" aria-label="Clear the search" hidden></button></span></nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>'
@@ -4550,12 +4549,8 @@ INDEX_JS = """
   let show = kindPages ? filter.dataset.current : "all";
   if (remember) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
   // The venue menu shows one venue's events, of every kind, kept in the address too (?venue=).
-  const venue = document.querySelector(".filter .pick:not(.when-pick)");
-  // On a phone, when (tonight, a weekend) is a menu rather than links: choosing in it goes to that page.
-  const when = document.querySelector(".filter .when-pick");
-  // The search and the venue go along, so a day narrows what's already chosen rather than starting over.
-  if (when) when.addEventListener("change", () => { location.href = when.value + query(); });
-  // On a phone a menu shows a short word ("When", "Where") until something's chosen, and then what is, in white;
+  const venue = document.querySelector(".filter .pick");
+  // On a phone the venue's menu is a chip that says "Where" until something's chosen, and then what is;
   // and tells a screen reader what's chosen, as a wide screen's menu says it itself.
   const sayChosen = (menu, word, label, chosen) => {
     const box = menu.closest(".pick-box"), name = menu.options[menu.selectedIndex].textContent.trim();
@@ -4566,7 +4561,6 @@ INDEX_JS = """
     }
     menu.setAttribute("aria-label", chosen ? `${label}: ${name}` : label);
   };
-  if (when) sayChosen(when, "When", "When", when.selectedIndex > 0);
   // On a phone, an × in the search while it has something in it. A wide screen has Esc.
   const clearSearch = document.querySelector(".search-clear");
   const combined = [...document.querySelectorAll(".combined")];
@@ -4661,6 +4655,13 @@ INDEX_JS = """
   };
   const query = () => (params().toString() ? "?" + params() : "");
   for (const a of filter.querySelectorAll("a[data-show], .when-links a")) a.dataset.href = a.getAttribute("href");
+  // Tonight's page's own link, or a weekend's, goes back to every day: a chip pressed again is let go.
+  for (const a of filter.querySelectorAll(".when-links a[aria-current]")) {
+    a.dataset.href = new URL(SHARE_URL).pathname;
+    // And on a phone, where the row is swiped along, it starts far enough along to show the whole of that chip.
+    const row = a.closest(".chips"), over = a.getBoundingClientRect().right + 16 - row.getBoundingClientRect().right;
+    if (row.scrollWidth > row.clientWidth && over > 0) row.scrollLeft = over;
+  }
   const address = page => {
     const kept = params();
     if (page > 1) kept.set("page", page);
@@ -5312,14 +5313,14 @@ PIN_CSS = """
   /* Tonight and this weekend: a pair of their own after the kinds, a hairline between, since they narrow by when
      and the kinds by what. */
   .when-links { display: flex; gap: inherit; padding-left: 1.1rem; border-left: 1px solid #262626; }
-  /* On a phone, a menu in their place, first on the venue and search's line; the links would take one of their own. */
-  .when-pick { display: none; }
-  @media (max-width: 34rem) { .when-links { display: none; } .when-pick { display: inline-block; } }
+  .when-links .later { display: none; }  /* Next weekend: a phone's row has the room (below); here, the weekend's page links to it. */
+  /* The kinds, when and where are wrapped together for a phone's row of chips; on a wide screen they sit in the
+     bar itself, the venue's menu at the end of it beside the search. */
+  .chips { display: contents; gap: inherit; }  /* The bar's gap, for tonight and the weekend to take in turn. */
+  .filter .chips .pick { margin-left: auto; }
+  .filter .finders { margin-left: .3rem; }
   .lead + .bar-mark + .filter { margin-top: 0; }
   .filter { margin-bottom: -1.3rem; }
-  /* On a phone the filter is two lines, and the second, the venue and the search, wants a little more under it
-     than one line of kinds does, to read as the end of the filter rather than the start of the day. */
-  @media (max-width: 34rem) { .filter { margin-bottom: -1.05rem; } }
   /* What the page says when nothing's left to show takes that pull-up too, with no day between them; it gets back
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
@@ -5358,54 +5359,60 @@ PIN_CSS = """
      it had picked in place, pulling the page out from under the bar and the bar down off the top with it. What's
      over the list is the page's own and settled, so there's nothing for anchoring to hold still. */
   html { overflow-anchor: none; }
-  /* Beside the kinds, the menus and then the search, at the end of the line. The search's ×, and the menus' short
-     words (below), are a phone's alone: a wide screen's menus say what's chosen themselves. */
+  /* Beside the kinds, the venue's menu and then the search, at the end of the line. The search's ×, and the menu's
+     short word (below), are a phone's alone: a wide screen's menu says what's chosen itself. */
   .search-clear, .pick-said { display: none; }
   .pick-box { display: contents; }
   @media (max-width: 34rem) {
-    /* Two lines: the search, with the day and venue menus at the end of its line as a word each, which scrolls
-       away with the page (the bar sticks --lift, the line's height, above the window, which the script measures);
-       and under it the kinds, the line that stays at the top of the window. */
-    .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .45rem; column-gap: .7rem; align-items: center; }
-    /* The same room between each line's words and the next's, the search's to the kinds', the kinds' to the day's
-       heading, whether the bar is where the page puts it or stuck at the top with a heading held under it: its
-       padding under the kinds sets the stuck one, and its margin, which a heading's own takes up, the other. */
-    .filter { padding-bottom: .475rem; margin-bottom: -1.83rem; }
+    /* Two rows, each a shape of its own rather than more words: the search, a box the width of the column, which
+       scrolls away with the page (the bar sticks --lift, its height, above the window, which the script
+       measures); and under it a row of chips, the row that stays at the top of the window: the kinds, then
+       tonight and the weekends, then the venue's menu. */
+    .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .6rem; column-gap: 0; align-items: center; }
+    /* Room under the chips where the bar is stuck, and the day's label the same distance under them where it isn't. */
+    .filter { padding-bottom: .55rem; margin-bottom: -1.35rem; }
     /* Scrolling back up, the search's line slides back down into the bar, and the day's heading held under the
        bar with it; scrolling on down, both slide back up. */
     .filter.revealed { top: 0; }
     .filter, .day > h2 { transition: top .2s ease; }
     @media (prefers-reduced-motion: reduce) { .filter, .day > h2 { transition: none; } }
-    .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: 1rem; margin: 0; }
-    /* The search's text the kinds' size, which is over 16 pixels: Safari on an iPhone zooms the page in on a field
-       whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
-       anywhere along its width. No line under it, for a quieter bar: the magnifying glass and the word say what it
-       is, and the phone's own cursor where it's being typed in. */
-    .filter .finders .search { order: -1; flex: 1 1 0; width: 0; height: 32px; box-sizing: border-box; margin: 0;
-                               padding: 0 0 0 1.4em; border: 0; background-size: 1em; font-size: 1.05rem; }
-    /* The search's ×, right after it, while it has something in it (Tabler Icons' "x", MIT license): a press
-       empties it. Its target the icons' size, reaching back over the gap before it. */
-    .filter .finders .search-clear { order: -1; display: block; flex: none; width: 2.75rem; height: 2.75rem;
-                                     margin: -.6rem -.45rem -.6rem -.9rem; padding: 0; cursor: pointer;
+    /* The search: a box a shade off the page's black, the magnifying glass and the word inside it. Its text is
+       over 16 pixels: Safari on an iPhone zooms the page in on a field whose text is any smaller, and doesn't
+       zoom back out. */
+    .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: 0; box-sizing: border-box; margin: 0;
+                       padding: 0 .25rem 0 .85rem; border-radius: 10px; background: #141414; }
+    .filter .finders:focus-within { background: #1a1a1a; }
+    .filter .finders .search { flex: 1 1 0; width: 0; min-width: 0; height: 2.7rem; box-sizing: border-box; margin: 0;
+                               padding: 0 0 0 1.6em; border: 0; background-size: 1em; font-size: 1.05rem; }
+    /* Its ×, at the end of the box, while it has something in it (Tabler Icons' "x", MIT license): a press empties it. */
+    .filter .finders .search-clear { display: block; flex: none; width: 2.5rem; height: 2.5rem; padding: 0; cursor: pointer;
                                      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23777' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6l-12 12'/%3E%3Cpath d='M6 6l12 12'/%3E%3C/svg%3E") no-repeat center / 18px; }
-    /* The menus as a short word each, "When" and "Where", or what's chosen in white in its place ("Tonight",
-       "Brattle Theatre"), a long one ending in "…" so it never crowds the search; a small arrow after it says it
-       opens. The word is drawn over the menu itself, which is there in full but unseen, so a press opens the
-       phone's own list of choices; a menu's own width would be its longest choice in Safari, a venue's whole name.
-       Its target 44 pixels tall (Apple's least), reaching over the room around it rather than making the line taller. */
-    .filter .finders .pick-box { position: relative; display: flex; align-items: center; flex: none;
-                                 height: 2.75rem; margin: -.6rem 0; }
-    /* Where the line's short of room, what's chosen gives way first, then the search, down to a few letters; the
-       words "When" and "Where" never do. */
-    .filter .finders .pick-box.chosen { flex: 0 1 auto; min-width: 3.5rem; }
-    .filter .finders .search { min-width: 4.5rem; }
-    .pick-box .pick-said { display: block; min-width: 0; max-width: 6rem; overflow: hidden; white-space: nowrap;
-                           text-overflow: ellipsis; padding-right: .95em; color: #666; font-size: 1.05rem;
-                           background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em; }
-    .pick-box.chosen .pick-said { color: #fff; }
-    .filter .finders .pick-box .pick { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
-                                       margin: 0; padding: 0; opacity: 0; font-size: 1rem; cursor: pointer; }
-    .filter .finders .pick-box:focus-within .pick-said { outline: 1px solid #444; outline-offset: 2px; }
+    /* The chips: one row, out to the screen's edges, swiped along; one cut off at the edge says there's more.
+       The kinds, a hairline, tonight and the weekends, and the venue's menu last. */
+    .filter .chips { display: flex; flex: 1 1 100%; align-items: center; gap: .45rem; min-width: 0; margin: 0 -1rem;
+                     padding: 0 1rem; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+    .filter .chips::-webkit-scrollbar { display: none; }
+    .when-links { display: contents; }
+    .when-links::before { content: ""; flex: none; align-self: stretch; width: 1px; margin: .4rem .15rem; background: #2a2a2a; }
+    .filter .chips [data-show], .filter .when-links a, .filter .chips .pick-box {
+      display: inline-flex; flex: none; align-items: center; box-sizing: border-box; height: 2.35rem; padding: 0 .85rem;
+      border: 1px solid #2a2a2a; border-radius: 999px; color: #999; font-size: 1rem; white-space: nowrap;
+      text-decoration: none; }
+    /* What's chosen, filled in: a kind, tonight or a weekend, a venue. */
+    .filter .chips [aria-current="page"], .filter .chips [aria-pressed="true"], .filter .chips .pick-box.chosen {
+      border-color: #fff; background: #fff; color: #000; }
+    /* The venue's chip says "Where", or what's chosen ("Bushwick", "Union Pool", a long one ending in "…"), with a
+       small arrow after it. The word is drawn over the menu itself, which is there in full but unseen, so a press
+       opens the phone's own list of choices; a menu's own width would be its longest choice in Safari, a venue's
+       whole name. */
+    .filter .chips .pick-box { position: relative; }
+    .pick-box .pick-said { display: block; min-width: 0; max-width: 9rem; overflow: hidden; white-space: nowrap;
+                           text-overflow: ellipsis; padding-right: 1em;
+                           background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em; }
+    .pick-box.chosen .pick-said { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+    .filter .chips .pick-box .pick { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
+                                     margin: 0; padding: 0; opacity: 0; font-size: 1rem; cursor: pointer; }
+    .filter .chips .pick-box:focus-within { outline: 1px solid #555; outline-offset: 2px; }
   }
   /* The search, as quiet as the menu beside it and the kinds across from it: its word in their grey with a
      magnifying glass (Tabler Icons' "search", MIT license, its paths verbatim) before it, over a faint line. The
@@ -5501,9 +5508,14 @@ CSS = """
      is plain at a glance, and a little room between it and the first row. */
   .day > h2 { margin-bottom: .35rem; border-bottom: 1px solid #1c1c1c; }
   @media (max-width: 34rem) { .day > h2 { padding-bottom: .45rem; } }
-  /* On a phone, the kinds' size there. At the edge, with the dot and the rows' marks, so it reads as heading the
-     rows under it rather than as one of them. */
-  @media (max-width: 34rem) { .day > h2 { font-size: 1.05rem; } }
+  /* On a phone, a small label in capitals, "TODAY · TUESDAY, NOV 17": under a search box and a row of chips, a
+     heading the kinds' size read as a third row of controls. The day in a lighter gray than its date. */
+  @media (max-width: 34rem) {
+    .day > h2 { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }
+    .day > h2 .relative:not(:empty), .day > h2 .weekday, .day > h2 .relative:not(:empty) + .date .weekday { color: #bbb; }
+    .day > h2 .relative:not(:empty) { margin-right: .45em; }
+    .day > h2 .relative:not(:empty)::after { content: " ·"; color: #555; }
+  }
   /* Each day's heading held under the bar while its day is passing, black so the rows go under it, until the
      next day's pushes it up and away. Once it's held, the bar's shadow is its (the script marks it pinned). */
   .day > h2 { position: sticky; top: var(--bar, 0px); z-index: 2; background: #000; }
@@ -5616,13 +5628,8 @@ CSS = """
     .lead > :first-child:not(:only-child) { padding-right: 0; }
   }
   @media (max-width: 34rem) {
-    /* A thumb's targets: the kinds a size up, each a target 44 pixels tall (Apple's least) and out to meet the
-       next, taken back out of its margins so the words look and sit just as they would without. The filter as a
-       whole a little nearer the listings than the film and what's announced above it, and the lead's room under
-       it a little less than on a wide screen, where there's width to spare instead. */
-    .filter button, .filter a { font-size: 1.05rem; }
-    .filter > [data-show] { padding: .65rem .35rem; margin: -.45rem -.35rem; }
-    .finders { margin-top: .15rem; }
+    /* The filter as a whole a little nearer the listings than the film and what's announced above it, and the
+       lead's room under it a little less than on a wide screen, where there's width to spare instead. */
     .lead { margin-bottom: 1.6rem; }
     /* A still the width of the page over the words; a poster beside them, since the width of the page it would
        be half the screen tall. */

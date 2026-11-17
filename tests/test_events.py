@@ -1586,27 +1586,37 @@ class HomePage(unittest.TestCase):
         self.assertEqual(order, sorted(order))
 
     def test_tonight_and_this_weekend_beside_the_kinds(self):
-        """In the filter on every page, not just the footer, and marked where the page is one of them."""
+        """In the filter on every page, not just the footer, and marked where the page is one of them. Next
+        weekend's is there too, for a phone's row of chips; a wide screen's bar leaves it out (.later)."""
         R = build.PUBLIC_ROOT
         home = self.page()
-        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">Weekend</a></span>',
-                      home)
+        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">Weekend</a>'
+                      f'<a class="later" href="{R}weekend/next/">Next weekend</a></span>', home)
         self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', self.page(tonight=True))
         self.assertIn(f'<a href="{R}weekend/" aria-current="page">Weekend</a>', self.page(weekend=0))
-        self.assertNotIn('aria-current="page">Weekend', self.page(weekend=1), "next weekend's isn't this one")
-        # The phone's menu says it as short, with next weekend's in full.
-        menu = home.split('<select class="pick when-pick')[1].split("</select>")[0]
-        self.assertEqual(re.findall(r">([^<]+)</option>", menu), ["Any day", "Tonight", "Weekend", "Next weekend"])
+        following = self.page(weekend=1)
+        self.assertNotIn('aria-current="page">Weekend', following, "next weekend's isn't this one")
+        self.assertIn(f'<a class="later" href="{R}weekend/next/" aria-current="page">Next weekend</a>', following)
+        self.assertIn(".when-links .later { display: none; }", home)
+        # The one the page is goes back to every day when it's pressed again.
+        self.assertIn('filter.querySelectorAll(".when-links a[aria-current]")) {\n'
+                      '    a.dataset.href = new URL(SHARE_URL).pathname;', build.INDEX_JS)
+        # And a phone's row starts far enough along to show it.
+        self.assertIn("if (row.scrollWidth > row.clientWidth && over > 0) row.scrollLeft = over;", build.INDEX_JS)
 
-    def test_on_a_phone_when_is_a_menu(self):
-        """The same choices, and next weekend's, as a menu beside the venue's; the one the page is, chosen."""
-        R = build.PUBLIC_ROOT
+    def test_on_a_phone_the_filter_is_a_search_box_over_a_row_of_chips(self):
+        """The kinds, when and where are wrapped together, to be one row a phone swipes along; the search after
+        them, which a phone puts above. No menu for when: tonight and the weekends are chips of their own."""
         home = self.page()
-        self.assertIn(f'<select class="pick when-pick" aria-label="When"><option value="{R}" selected>Any day</option>', home)
-        self.assertIn(f'<option value="{R}weekend/next/">Next weekend</option>', home)
-        self.assertLess(home.index('class="pick when-pick"'), home.index('aria-label="Venue"'), "first on its line")
-        self.assertIn(f'<option value="{R}tonight/" selected>Tonight</option>', self.page(tonight=True))
-        self.assertIn('class="pick when-pick chosen"', self.page(weekend=1), "white, as a chosen venue is")
+        bar = home[home.index('<nav class="filter"'):home.index("</nav>", home.index('<nav class="filter"'))]
+        chips, finders = bar.index('<span class="chips">'), bar.index('<span class="finders">')
+        self.assertLess(chips, bar.index('data-show="all"'))
+        self.assertLess(bar.index('class="when-links"'), bar.index('aria-label="Venue"'))
+        self.assertLess(bar.index('aria-label="Venue"'), finders, "the venue's menu with the chips, not with the search")
+        self.assertLess(finders, bar.index('class="search"'))
+        self.assertIn('<span class="pick-box"><span class="pick-said" aria-hidden="true">Where</span><select class="pick" aria-label="Venue">', bar)
+        self.assertNotIn("when-pick", home)
+        self.assertIn(".chips { display: contents; gap: inherit; }", home, "a wide screen's bar holds them itself")
 
     def test_the_home_pages_line_is_in_its_header_and_a_kind_pages_under_it(self):
         home = self.page()
@@ -1962,7 +1972,7 @@ class Page(unittest.TestCase):
         self.assertNotIn("Roadrunner", film.split("<footer>")[1])
         # Your own page keeps its buttons.
         self.assertIn('<button data-show="film">', mine)
-        self.assertIn('<nav class="filter" aria-label="Show"><button', mine)
+        self.assertIn('<nav class="filter" aria-label="Show"><span class="chips"><button', mine)
         self.assertIn(f"<loc>{build.PUBLIC_URL}talks/</loc>", build.render_sitemap(built))
 
     def test_weekend_days(self):
@@ -1984,7 +1994,7 @@ class Page(unittest.TestCase):
         # The line over it just its dates, two lines on a phone.
         self.assertIn('<h1 class="tagline">September 18–20 around Boston, Cambridge, and Somerville.</h1>', page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}weekend/">', page)
-        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><button', page)
+        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page><span class="chips"><button', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/weekend.png?pin">', page)
         self.assertIn(f'<a href="{R}about/" aria-current="page">About</a>', build.render_about([venue], built))
         self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', page)
@@ -2012,7 +2022,7 @@ class Page(unittest.TestCase):
         self.assertIn("On the 14th", page)
         self.assertIn("On the 15th", page)
         self.assertNotIn("On the 16th", page)
-        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page data-today><button', page)
+        self.assertIn('<nav class="filter" aria-label="Show" data-here data-one-page data-today><span class="chips"><button', page)
         self.assertIn(f"<title>{build.PUBLIC_TONIGHT[1]}</title>", page)
         self.assertIn(f'<link rel="canonical" href="{build.PUBLIC_URL}tonight/">', page)
         self.assertIn(f'<meta property="og:image" content="{build.PUBLIC_URL}share/tonight.png?pin">', page)
