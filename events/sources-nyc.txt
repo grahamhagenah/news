@@ -28,14 +28,19 @@ jsonld     https://dice.fm/venue/rough-trade-below-eoklo       music   Rough Tra
 lpr        https://lpr.com/wp-admin/admin-ajax.php?action=do_ajax&fn=get_homepageEvents   music   Le Poisson Rouge
 roulette   https://roulette.org/calendar/                      music   Roulette
 issue      https://issueprojectroom.org/events                 music   ISSUE Project Room
+nationalsawdust  https://www.nationalsawdust.org/performances  music   National Sawdust
+vanguard   https://villagevanguard.com/                        music   Village Vanguard
 
 # Art & talks
 pioneerworks  https://pioneerworks.org/calendar                art     Pioneer Works
+mcnally    https://mcnallyjackson.com/events                   art     McNally Jackson
 
 # Film
 filmforum  https://filmforum.org/                              film    Film Forum
 metrograph https://metrograph.com/nyc/                         film    Metrograph
 ifc        https://www.ifccenter.com/                          film    IFC Center
+anthology  https://www.anthologyfilmarchives.org/film_screenings/calendar   film   Anthology Film Archives
+quad       https://quadcinema.com/                             film    Quad Cinema
 spectacle  https://www.spectacletheater.com/spex-rolling.html  film    Spectacle
 filmbot    https://nitehawkcinema.com/williamsburg/            film    Nitehawk Williamsburg
 filmbot    https://nitehawkcinema.com/prospectpark/            film    Nitehawk Prospect Park

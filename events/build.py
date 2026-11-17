@@ -17,7 +17,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from urllib.parse import unquote as urllib_unquote, urlencode, urljoin, urlsplit
+from urllib.parse import quote as urllib_quote, unquote as urllib_unquote, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 from shared import site as shared
@@ -172,13 +172,20 @@ VENUE_ADDRESSES = {
     "Nitehawk Williamsburg": ("136 Metropolitan Ave", "Brooklyn", "NY", "11249"),
     "Nitehawk Prospect Park": ("188 Prospect Park West", "Brooklyn", "NY", "11215"),
     "BAM": ("30 Lafayette Ave", "Brooklyn", "NY", "11217"),
+    "Anthology Film Archives": ("32 Second Ave", "New York", "NY", "10003"),
+    "Quad Cinema": ("34 W 13th St", "New York", "NY", "10011"),
+    "Village Vanguard": ("178 Seventh Ave South", "New York", "NY", "10014"),
+    "National Sawdust": ("80 N 6th St", "Brooklyn", "NY", "11249"),
+    "McNally Jackson": ("134 Prince St", "New York", "NY", "10012"),  # Its first store; each event gives its own.
 }
 # The neighborhood a venue is in, where its town is too big to say much: Brooklyn is a city of two and a half
 # million, and a night out there is spent in Bushwick or in Williamsburg. The venue menu groups by these in
 # place of the town ("All of Bushwick"); a venue without one goes by its town, as Boston's do.
 VENUE_AREAS = {
     "Union Pool": "Williamsburg", "Baby's All Right": "Williamsburg", "Spectacle": "Williamsburg",
-    "Nitehawk Williamsburg": "Williamsburg",
+    "Nitehawk Williamsburg": "Williamsburg", "National Sawdust": "Williamsburg",
+    "Anthology Film Archives": "East Village", "Quad Cinema": "Greenwich Village", "Village Vanguard": "Greenwich Village",
+    "McNally Jackson": "SoHo",
     "Elsewhere": "Bushwick", "Market Hotel": "Bushwick", "Saint Vitus": "Bushwick", "Purgatory": "Bushwick",
     "The Sultan Room": "Bushwick", "Alphaville": "Bushwick", "Gold Sounds": "Bushwick", "Sleepwalk": "Bushwick",
     "The Brooklyn Monarch": "Bushwick",
@@ -2337,21 +2344,31 @@ def yearless(month, day, today, form="%b"):
 
 
 SMALL_WORDS = {"a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "of", "on", "or", "the", "to", "vs", "with"}
+INITIALS = {"NYC", "NY", "USA", "UK", "LA", "UFO", "EC", "AFA", "DIY", "AI", "USSR", "OK", "DJ"}
+
+
+def day_numbered(number, today):
+    """The day a cinema's week names by its number in the month alone (Film Forum's tab for "17"): the first
+    such day from yesterday on, a week's page starting today or just before. None for a number that isn't one."""
+    return next((today + timedelta(days=ahead) for ahead in range(-1, 12)
+                 if (today + timedelta(days=ahead)).day == int(number)), None)
 
 
 def uncapped(title):
-    """A title a cinema sets in capitals (Film Forum, Spectacle), in title case, so it reads like the rest of
-    the list: "RAISE THE RED LANTERN" is "Raise the Red Lantern". One that's mostly lower case already is left
-    as it is, and so is a word that isn't only letters ("4K", "E.T.", "Q&A", "w/") or is a roman numeral."""
-    capitals, small = len(re.findall(r"[A-Z]", title)), len(re.findall(r"[a-z]", title))
-    if capitals < 2 or capitals <= small * 3:
+    """A title a cinema sets in capitals (Film Forum, Spectacle, Anthology), in title case, so it reads like the
+    rest of the list: "RAISE THE RED LANTERN" is "Raise the Red Lantern". Only its words in capitals change, so
+    a note after it stays as written ("TROMEO AND JULIET (Will Keenan in person)"); one with no word in capitals
+    is left alone, and so is a word that isn't only letters ("4K", "E.T.", "Q&A", "w/"), a roman numeral, or
+    initials."""
+    shouted = [word for word in re.findall(r"[^\W\d_]+", title) if len(word) > 2 and word == word.upper()]
+    if title != title.upper() and not shouted:
         return title
     words, first = [], True
     for word in title.split(" "):
         bare = word.strip("()[]\"'“”‘’:;,!?–—-")
-        # Nor initials, which have no vowel to say: JFK, THX, TV.
+        # Nor initials: those with no vowel to say (JFK, THX, TV), and the few that have one.
         if (not bare or re.search(r"[\d.&/]", bare) or re.fullmatch(r"[IVX]{2,}", bare) or bare != bare.upper()
-                or not re.search(r"[AEIOUY]", bare)):
+                or not re.search(r"[AEIOUY]", bare) or bare in INITIALS):
             words.append(word)
         elif bare.lower() in SMALL_WORDS and not first:
             words.append(word.lower())
@@ -2394,9 +2411,7 @@ def read_filmforum(source):
             continue
     events = []
     for number, tab in FILMFORUM_TAB.findall(page):
-        # The tab's day of the month is one of the days from today on: the week it shows starts today.
-        day = next((today + timedelta(days=ahead) for ahead in range(-1, 10)
-                    if (today + timedelta(days=ahead)).day == int(number)), None)
+        day = day_numbered(number, today)  # The week it shows starts today.
         if not day:
             continue
         for link, title, rest in FILMFORUM_FILM.findall(tab):
@@ -2682,7 +2697,152 @@ def read_pioneer_works(source):
     return events
 
 
+ANTHOLOGY_DAY = re.compile(r'<td[^>]*class="calendar_day[^"]*"[^>]*>(.*?)</td>', re.S)
+ANTHOLOGY_SHOWING = re.compile(r'<li id="\d+" class="calendar_event">\s*(\d{1,2}):(\d{2})\s*([AP])M.*?<a href="([^"]*month=(\d+)&(?:amp;)?year=(\d+)[^"]*)">(.*?)</a>'
+                               r'(?:\s*<img[^>]*image-url="([^"]*)")?', re.S)
+
+
+def read_anthology(source):
+    """Anthology Film Archives' calendar, a grid for this month and one for the next: each day's screenings
+    with their times, their names (in capitals, brought down to title case), and a still where there is one.
+    A screening's link, to its notes in the calendar's list, says which month and year it's in."""
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    after = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+    events = []
+    for page in (fetch(source["url"]), fetch_quietly(f"{source['url']}?month={after.month}&year={after.year}")):
+        for cell in ANTHOLOGY_DAY.findall(page):
+            number = re.search(r'<span class="day">\s*(\d{1,2})\s*</span>', cell)
+            for hour, minute, half, link, month, year, name, picture in ANTHOLOGY_SHOWING.findall(cell):
+                try:
+                    day = date(int(year), int(month), int(number.group(1)))
+                except (AttributeError, ValueError):
+                    continue
+                events.append(event(source, uncapped(text(name)), day, clock_of(hour, minute, half),
+                                    link=urljoin(source["url"], html.unescape(link)),
+                                    image=urljoin(source["url"], f"/uploads/{urllib_quote(picture)}") if picture else ""))
+    return events
+
+
+QUAD_DAY = re.compile(r'<div class="day-wrap date-(\d{1,2})[^"]*">(.*?)(?=<div class="day-wrap date-|\Z)', re.S)
+QUAD_FILM = re.compile(r'<div class="col span_3 grid-item">(.*?)(?=<div class="col span_3 grid-item">|\Z)', re.S)
+QUAD_TIME = re.compile(r'<li class="time-[^"]*">\s*<a[^>]*>\s*(\d{1,2})[.:](\d{2})\s*([ap])m', re.I)
+
+
+def read_quad(source):
+    """Quad Cinema's week, from its home page: a block for each day, named by its number in the month, each
+    film with its still, its times ("7.30pm") and the series it's in."""
+    page = fetch(source["url"])
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    events = []
+    for number, block in QUAD_DAY.findall(page):
+        day = day_numbered(number, today)
+        if not day:
+            continue
+        for film in QUAD_FILM.findall(block):
+            name = re.search(r'<h4><a href="([^"]+)">(.*?)</a></h4>', film, re.S)
+            if not name:
+                continue
+            picture = re.search(r"background-image:url\(([^)]+)\)", film)
+            series = [text(found) for found in re.findall(r'<a class="ts-2" href="[^"]*/program/[^"]*">(.*?)</a>', film, re.S)]
+            for hour, minute, half in QUAD_TIME.findall(film):
+                events.append(event(source, text(name.group(2)), day, clock_of(hour, minute, half), link=name.group(1),
+                                    detail=series[0] if series else "", image=picture.group(1).strip("'\" ") if picture else ""))
+    return events
+
+
+VANGUARD_RUN = re.compile(r"([A-Z][a-z]+) (\d{1,2})\s*(?:[-‑–—]\s*(?:([A-Z][a-z]+) (\d{1,2}))?)?")
+
+
+def read_vanguard(source):
+    """The Village Vanguard's bookings, from its home page: each band with the nights of its run ("November 17 ‑
+    November 22", most of them Tuesday to Sunday), who's in it, and its picture. Listed on each night of the
+    run, without a time: the page gives the nights, not the sets."""
+    page = fetch(source["url"])
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    events = []
+    for entry in page.split('<div class="event-listing">')[1:]:
+        name = re.search(r'<div class="col-md-6 event-details">\s*<h2>(.*?)</h2>\s*<h3>(.*?)</h3>', entry, re.S)
+        run = VANGUARD_RUN.search(text(name.group(2))) if name else None
+        first = yearless(run.group(1), run.group(2), today, "%B") if run else None
+        if not first:
+            continue
+        last = yearless(run.group(3), run.group(4), first, "%B") if run.group(3) else first
+        if not last or not first <= last <= first + timedelta(days=14):
+            last = first
+        players = re.search(r'<div class="event-short-description">(.*?)</div>', entry, re.S)
+        tickets = re.search(r'<a class="btn btn-primary" href="([^"]+)"', entry)
+        picture = re.search(r'<img\s+src="([^"]+)"', entry)
+        # Who's playing, a line each on its page, as one: "John Zorn – Saxophone · Julian Lage – Guitar".
+        told = " · ".join(line for line in (text(found) for found in re.findall(r"<h4>(.*?)</h4>", players.group(1) if players else "", re.S)) if line)
+        for ahead in range((last - first).days + 1):
+            events.append(event(source, uncapped(text(name.group(1))), first + timedelta(days=ahead),
+                                link=html.unescape(tickets.group(1)) if tickets else "", about=[told] * bool(told),
+                                image=html.unescape(picture.group(1)) if picture else ""))
+    return events
+
+
+def read_national_sawdust(source):
+    """National Sawdust's performances page: each with its day written out ("November 17, 2026"), its picture
+    and what it's about. The page gives no time, which is on each performance's own; they're listed by day."""
+    page = fetch(source["url"])
+    events = []
+    for entry in page.split('class="collection-item-_cms_350px w-dyn-item"')[1:]:
+        link = re.search(r'<a href="(/event/[^"]+)"', entry)
+        name = re.search(r'fs-cmsfilter-field="Title"[^>]*>(.*?)</h4>', entry, re.S)
+        when = re.search(r'class="category-title-date[^"]*">\s*([A-Z][a-z]+ \d{1,2}, \d{4})', entry)
+        if not link or not name or not when:
+            continue
+        try:
+            day = datetime.strptime(when.group(1), "%B %d, %Y").date()
+        except ValueError:
+            continue
+        said = re.search(r'<p class="cms_description">(.*?)</p>', entry, re.S)
+        # Quoted, so a picture named "…sleeve (1).png" is read to its end, not to its first bracket.
+        picture = re.search(r"background-image:url\(&quot;(.*?)&quot;\)", entry)
+        events.append(event(source, text(name.group(1)), day, link=urljoin(source["url"], link.group(1)),
+                            about=about(said.group(1) if said else ""), image=html.unescape(picture.group(1)) if picture else ""))
+    return events
+
+
+MCNALLY_KINDS = {"Event"}  # What it tags an author's talk; not its book clubs or its seminars, which meet for weeks.
+
+
+def read_mcnally(source):
+    """McNally Jackson's events, this month's page and the next's: each talk and reading with its day (in its
+    address), its time, its picture, a few lines about it, and which of its stores it's at, with that store's
+    address."""
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    after = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+    base = source["url"].rstrip("/")
+    events = []
+    for page in (fetch(f"{base}/{today.year}/{today.month:02d}"), fetch_quietly(f"{base}/{after.year}/{after.month:02d}")):
+        for entry in page.split('<article id="event-')[1:]:
+            name = re.search(r'<h3 class="event-list__title">\s*<a href="(/event/(\d{4}-\d\d-\d\d)/[^"]*)"[^>]*>(.*?)</a>', entry, re.S)
+            kinds = {text(kind) for kind in re.findall(r'class="event-tag__term">(.*?)</div>', entry, re.S)}
+            if not name or not kinds & MCNALLY_KINDS:
+                continue
+            at = re.search(r"Time:\s*</span>\s*(\d{1,2}):(\d{2})\s*([ap])m", entry, re.I)
+            store = re.search(r'class="address-line1">(.*?)</span>', entry, re.S)
+            parts = [re.search(rf'class="{part}">(.*?)</span>', entry, re.S) for part in ("address-line2", "locality", "postal-code")]
+            said = re.search(r'<div class="event-list__body">(.*?)</div>', entry, re.S)
+            picture = re.search(r'<img[^>]+src="([^"]+)"', entry)
+            events.append(event(
+                source, text(name.group(3)), date.fromisoformat(name.group(2)), clock_of(*at.groups()) if at else None,
+                link=urljoin(source["url"], name.group(1)),
+                # Which store, by its name alone: "Seaport", for McNally Jackson Seaport.
+                detail=text(store.group(1)).removeprefix(source["name"]).strip() if store else "",
+                about=about(said.group(1) if said else ""),
+                address=(text(parts[0].group(1)), text(parts[1].group(1)), "NY", text(parts[2].group(1))) if all(parts) else None,
+                image=urljoin(source["url"], html.unescape(picture.group(1))) if picture else ""))
+    return events
+
+
 READERS = {
+    "anthology": read_anthology,
+    "vanguard": read_vanguard,
+    "nationalsawdust": read_national_sawdust,
+    "quad": read_quad,
+    "mcnally": read_mcnally,
     "filmforum": read_filmforum,
     "metrograph": read_metrograph,
     "ifc": read_ifc,
@@ -3306,7 +3466,8 @@ def venue_menu(venues, towns, events):
     for town in sorted(grouped, key=lambda town: (town == "", -busy[town], town)):
         names = shared.as_said(grouped[town])
         # A neighborhood that's said with "the": all of the Lower East Side, as all of Bushwick.
-        the = "the " * bool(re.search(r"\b(Side|Village|Heights|Bronx)$", town))
+        # Not every Village: all of Greenwich Village, but all of the East Village.
+        the = "the " * bool(re.search(r"\bSide$|^(East|West) Village$|^Bronx$|\bDistrict$", town))
         choices = ([f'<option value="town:{html.escape(town)}">All of {the}{html.escape(town)}</option>']
                    if town and len(names) > 1 else [])
         choices += [f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in names]
@@ -3339,8 +3500,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     towns = {}
     for item in events:
         place = item.get("address") or VENUE_ADDRESSES.get(item["venue"])
-        # Its neighborhood, where it has one (VENUE_AREAS) and the listing is at the venue's own address.
-        area = (not item.get("address") and VENUE_AREAS.get(item["venue"])) or (place[1] if place and len(place) > 1 else "")
+        # Its neighborhood, where it has one (VENUE_AREAS), wherever a night of its own is: the menu puts a venue
+        # in one place.
+        area = VENUE_AREAS.get(item["venue"]) or (place[1] if place and len(place) > 1 else "")
         if area:
             towns.setdefault(item["source"], Counter())[area] += 1
     towns = {source: counted.most_common(1)[0][0] for source, counted in towns.items()}

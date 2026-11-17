@@ -103,6 +103,13 @@ ROUTES = [
     ("roulette.org/calendar", "roulette.html"),
     ("issueprojectroom.org/events", "issue.html"),
     ("pioneerworks.org/calendar", "pioneerworks.html"),
+    ("anthologyfilmarchives.org/film_screenings/calendar?month=", "empty.html"),  # Next month's grid: nothing on it yet.
+    ("anthologyfilmarchives.org/film_screenings/calendar", "anthology.html"),
+    ("quadcinema.com", "quad.html"),
+    ("mcnallyjackson.com/events/2026/11", "mcnally.html"),
+    ("mcnallyjackson.com/events/", "empty.html"),  # Next month's page.
+    ("villagevanguard.com", "vanguard.html"),
+    ("nationalsawdust.org/performances", "nationalsawdust.html"),
 ]
 
 
@@ -909,7 +916,7 @@ class NewYork(unittest.TestCase):
 
     def test_the_venue_menu_goes_by_neighborhood(self):
         """Brooklyn says little about where a venue is; Bushwick does. A venue with no neighborhood goes by its
-        town, and a night it puts on somewhere else by that address's."""
+        town; one with one stays under it wherever a night of its own is (McNally Jackson's four stores)."""
         build.use_city(build.NYC)
         self.addCleanup(build.use_city, build.BOSTON_CITY)
         pool, vitus, issue = (dict(source("jsonld", name, "music", name), public=True) for name in ("Union Pool", "Saint Vitus", "ISSUE Project Room"))
@@ -925,6 +932,8 @@ class NewYork(unittest.TestCase):
         for shouted, said in [("RAISE THE RED LANTERN", "Raise the Red Lantern"), ("LADY WINDERMERE'S FAN", "Lady Windermere's Fan"),
                               ("L'INNOCENTE", "L'Innocente"), ("ROME, OPEN CITY", "Rome, Open City"), ("ROCKY II", "Rocky II"),
                               ("MACBETH 3000 (w/ Q&A)", "Macbeth 3000 (w/ Q&A)"), ("JFK", "JFK"), ("5 AGAINST THE HOUSE", "5 Against the House"),
+                              ("TROMEO AND JULIET (Will Keenan in person on Sun, Nov 1!)", "Tromeo and Juliet (Will Keenan in person on Sun, Nov 1!)"),
+                              ("EC: ERNIE GEHR", "EC: Ernie Gehr"), ("NYC SHORTS", "NYC Shorts"), ("RAN", "Ran"),
                               ("DOG STAR MAN: PART ONE", "Dog Star Man: Part One"), ("Memento", "Memento"),
                               ("threeASFOUR: FULL CIRCLE", "threeASFOUR: Full Circle")]:
             self.assertEqual(build.uncapped(shouted), said)
@@ -1037,6 +1046,62 @@ class NewYork(unittest.TestCase):
         self.assertEqual(found[0]["link"], "https://pioneerworks.org/programs/rachel-cusk-life-of-m")
         self.assertEqual(found[0]["about"], ["Doors 7pm"])
         self.assertTrue(found[0]["image"].endswith("?w=800&auto=format"))
+
+    def test_anthology_reads_its_months_grid(self):
+        found = self.read("anthology", "https://www.anthologyfilmarchives.org/film_screenings/calendar", "film", "Anthology Film Archives")
+        self.assertEqual([(item["title"], item["date"], item["times"]) for item in found],
+                         [("Tromeo and Juliet (Will Keenan in person on Sun, Nov 1!)", date(2026, 11, 1), [time(15, 30)]),
+                          ("EC: Ernie Gehr", date(2026, 11, 1), [time(16, 30)]),
+                          ("Terror Firmer (Lloyd Kaufman in person for both screenings!)", date(2026, 11, 1), [time(18, 15)]),
+                          ("Dorsky & Hiler, PGM 2: Jerome Hiler", date(2026, 11, 17), [time(19, 0)]),
+                          ("Devo: Restorations and Revelations", date(2026, 11, 17), [time(19, 30)])])
+        self.assertTrue(found[0]["link"].endswith("/film_screenings/calendar?view=list&month=11&year=2026#showing-62052"))
+        # A still's name with a space in it is an address with one escaped.
+        self.assertEqual(found[-1]["image"], "https://www.anthologyfilmarchives.org/uploads/WHIP_IT%20copy.jpg")
+
+    def test_quad_names_its_days_by_number(self):
+        found = self.read("quad", "https://quadcinema.com/", "film", "Quad Cinema")
+        self.assertEqual(self.times(found, "Digger", date(2026, 11, 17)), [time(13, 20), time(16, 20)])
+        self.assertEqual(self.times(found, "Digger", date(2026, 11, 18)), [time(12, 45), time(15, 20)])
+        heat = next(item for item in found if item["title"] == "Body Heat")
+        self.assertEqual((heat["times"], heat["detail"], heat["link"]), ([time(19, 30)], "Femme Noir", "https://quadcinema.com/film/body-heat/"))
+        self.assertTrue(heat["image"].startswith("https://quadcinema.com/wp-content/uploads/"))
+        # A week's page named by day numbers alone: the 28th on a page read on the 27th is tomorrow, and a 2 next month's.
+        self.assertEqual(build.day_numbered("28", date(2026, 11, 27)), date(2026, 11, 28))
+        self.assertEqual(build.day_numbered("2", date(2026, 11, 27)), date(2026, 12, 2))
+        self.assertIsNone(build.day_numbered("15", date(2026, 11, 27)))
+
+    def test_mcnally_lists_its_talks_at_the_store_each_is_in(self):
+        found = self.read("mcnally", "https://mcnallyjackson.com/events", "art", "McNally Jackson")
+        # Not the book club between them.
+        self.assertEqual([(item["title"], item["date"], item["times"], item["detail"]) for item in found],
+                         [("Soyica Diggs Colbert & Salamishah Tillet", date(2026, 11, 2), [time(19, 0)], "Seaport"),
+                          ("Girls Write Now: Metamorphosis Anthology Launch Party", date(2026, 11, 4), [time(18, 0)], "Seaport")])
+        self.assertEqual(found[0]["address"], ["4 Fulton Street", "New York", "NY", "10038"])
+        self.assertEqual(found[0]["link"], "https://mcnallyjackson.com/event/2026-11-02/soyica-diggs-colbert-salamishah-tillet")
+        self.assertTrue(found[0]["about"][0].startswith("An illuminating portrait"))
+        self.assertTrue(found[0]["image"].startswith("https://mcnallyjackson.com/sites/default/files/"))
+
+    def test_vanguard_lists_a_band_on_each_night_of_its_run(self):
+        found = self.read("vanguard", "https://villagevanguard.com/", "music", "Village Vanguard")
+        zorn = [item for item in found if item["title"] == "John Zorn’s New Masada Quartet"]
+        self.assertEqual([item["date"].day for item in zorn], [17, 18, 19, 20, 21, 22], "November 17 ‑ November 22")
+        self.assertTrue(all(not item["times"] for item in found), "the page gives the nights, not the sets")
+        self.assertEqual(zorn[0]["about"], ["John Zorn – Saxophone · Julian Lage – Guitar · Jorge Roeder – Bass · Kenny Wollesen – Drums"])
+        self.assertEqual(zorn[0]["link"], "https://vv.squadup.com/artists/john-zorn-new-masada-quartet")
+        # A run over New Year's ends in the year after it starts; one night alone has no end.
+        potter = [item["date"] for item in found if item["title"] == "Chris Potter Quartet"]
+        self.assertEqual((potter[0], potter[-1], len(potter)), (date(2026, 12, 29), date(2027, 1, 3), 6))
+        self.assertEqual([item["date"] for item in found if item["title"].startswith("New Year’s Eve")], [date(2026, 12, 31)])
+
+    def test_national_sawdust_lists_by_day(self):
+        found = self.read("nationalsawdust", "https://www.nationalsawdust.org/performances", "music", "National Sawdust")
+        self.assertEqual([(item["title"], item["date"], item["times"]) for item in found],
+                         [("makemake presents: Wholly Unwinding (A New Musical) - NYC Premiere", date(2026, 11, 17), []),
+                          ("makemake presents: Opera Praktikos’ La Sonnambula", date(2026, 11, 18), [])])
+        self.assertEqual(found[1]["link"], "https://www.nationalsawdust.org/event/opera-praktikos-presents-la-sonnambula")
+        self.assertTrue(found[1]["image"].endswith("logo-sleeve%20(1).png"), "to its end, past the bracket in its name")
+        self.assertTrue(found[0]["about"][0].startswith("Step through a portal"))
 
 
 class DayHeadings(unittest.TestCase):

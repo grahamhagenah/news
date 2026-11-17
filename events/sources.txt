@@ -59,6 +59,11 @@
 #   roulette   Roulette's calendar, ten a page
 #   issue      ISSUE Project Room's upcoming events
 #   pioneerworks  Pioneer Works' programs, from the data its calendar page is built from
+#   anthology  Anthology Film Archives' calendar, this month's grid and the next's
+#   quad       Quad Cinema's week, from its home page
+#   vanguard   the Village Vanguard's bookings, each on every night of its run
+#   nationalsawdust  National Sawdust's performances page, by day
+#   mcnally    McNally Jackson's events page (/events), this month's and the next's: its talks, at the store each is in
 
 # Music
 aeg        https://aegwebprod.blob.core.windows.net/json/events/219/events.json   music   Roadrunner
