@@ -3207,7 +3207,13 @@ FRESH_SHOWN = 3  # How many of the newest announcements are listed.
 # Where a film's own art comes from, in the order they're preferred (a poster from any of them still comes before
 # a still from any): a film database's or a chain's own, never a theater's photograph, as often its lobby as the film.
 PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
-                 "indy-systems.imgix.net", "img.vwassets.com", "ticketing.phoenixmovies.net")
+                 "indy-systems.imgix.net", "img.vwassets.com", "ticketing.phoenixmovies.net",
+                 # New York's cinemas, whose own pictures are each film's still, not the house: BAM's first, cut to
+                 # sixteen by nine and 800 pixels wide by its address; Nitehawk's (its uploads' folder at Amazon)
+                 # after the others, as its stills are often too big to copy.
+                 "www.bam.org", "quadcinema.com", "images.amcnetworks.com/ifccenter.com", "filmforum.org",
+                 "metrograph.com", "s3.amazonaws.com/nightjarprod", "www.anthologyfilmarchives.org",
+                 "www.spectacletheater.com")
 
 # A picture bigger than this isn't shown: the build can't make one smaller, and a megabyte for a box 160 pixels
 # wide (one theater's still came to that) is a slower page for nothing. Posters at their smaller sizes are a tenth.
@@ -3268,6 +3274,12 @@ def picture_shape(url):
         shape = struct.unpack(">II", data[16:24])
     elif data[:4] == b"RIFF" and data[8:12] == b"WEBP" and data[12:16] == b"VP8X":
         shape = (int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1)
+    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP" and data[12:16] == b"VP8 " and data[23:26] == b"\x9d\x01\x2a":
+        # WebP's plain kind, a photograph's: fourteen bits each of width and height after its frame's start code.
+        shape = (int.from_bytes(data[26:28], "little") & 0x3FFF, int.from_bytes(data[28:30], "little") & 0x3FFF)
+    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP" and data[12:16] == b"VP8L" and data[20:21] == b"\x2f":
+        bits = int.from_bytes(data[21:25], "little")  # Its lossless kind: fourteen bits each, less one.
+        shape = ((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1)
     elif data[:2] == b"\xff\xd8":  # JPEG: the size is in the frame header, past however many come first.
         at = 2
         while at + 9 < len(data):

@@ -1687,6 +1687,14 @@ class PictureSize(unittest.TestCase):
             self.assertIsNone(build.picture_bytes("https://x/too-big.jpg"))
             self.assertIsNone(build.picture_shape("https://x/too-big.jpg"), "so it has no shape, and isn't shown")
 
+    def test_a_webps_shape_whichever_kind_it_is(self):
+        """Quad Cinema's stills are WebP's plain kind, which says its size differently from the extended one."""
+        plain = b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00\x00\x00\x00\x9d\x01\x2a" + (640).to_bytes(2, "little") + (372).to_bytes(2, "little")
+        lossless = b"RIFF\x00\x00\x00\x00WEBPVP8L\x00\x00\x00\x00\x2f" + ((640 - 1) | ((372 - 1) << 14)).to_bytes(4, "little")
+        for name, data in (("plain", plain), ("lossless", lossless)):
+            with mock.patch.object(build, "picture_bytes", return_value=data + b"\x00" * 16):
+                self.assertEqual(build.picture_shape(f"https://x/{name}.webp"), (640, 372), name)
+
     def test_tmdbs_smaller_poster(self):
         self.assertEqual(build.lighter("https://image.tmdb.org/t/p/w780/a.jpg"), "https://image.tmdb.org/t/p/w342/a.jpg")
         self.assertEqual(build.lighter("https://image.tmdb.org/t/p/w342/a.jpg"), "https://image.tmdb.org/t/p/w342/a.jpg")
@@ -1802,6 +1810,23 @@ class Biggest(unittest.TestCase):
         with mock.patch.object(build, "picture_shape", side_effect=lambda url: shapes.get(url)):
             film = build.biggest_film(events, self.built)
         self.assertEqual((film["image"], film["standing"]), (still, False))
+
+    def test_new_yorks_cinemas_own_stills_are_a_films_art(self):
+        """Their pictures are each film's still, so the film has one there too: BAM's before the others, and
+        Nitehawk's by its uploads' folder, not everything at Amazon."""
+        bam = "https://www.bam.org/globalassets/programs/cinema/still.jpg?width=800&mode=crop&heightratio=0.5625&quality=80"
+        nitehawk = "https://s3.amazonaws.com/nightjarprod/content/uploads/sites/3/2026/09/a-still-scaled.jpeg"
+        quad = "https://quadcinema.com/wp-content/uploads/2026/10/you3-640x372.webp"
+        events = [self.showing("Wide Release", "Nitehawk Williamsburg", image=nitehawk), self.showing("Wide Release", "Quad Cinema", image=quad),
+                  self.showing("Wide Release", "BAM", image=bam), self.showing("Wide Release", "Elsewhere", image="https://s3.amazonaws.com/other/x.jpg")]
+        shapes = {bam: (800, 450), nitehawk: None, quad: (640, 372), "https://s3.amazonaws.com/other/x.jpg": (800, 450)}
+        with mock.patch.object(build, "picture_shape", side_effect=lambda url: shapes.get(url)):
+            film = build.biggest_film(events, self.built)
+            self.assertEqual((film["image"], film["standing"]), (bam, False))
+            shapes[bam] = None  # BAM's won't load: Quad's, and never Nitehawk's, too big to copy.
+            self.assertEqual(build.biggest_film(events, self.built)["image"], quad)
+            shapes[quad] = None
+            self.assertEqual(build.biggest_film(events, self.built)["image"], "", "not what else is at Amazon")
 
     def test_no_picture_rather_than_a_theaters_photograph_or_a_cropped_one(self):
         """Only a film's own art, and only where its shape is known: otherwise the film is words alone."""
