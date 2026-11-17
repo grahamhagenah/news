@@ -4657,13 +4657,10 @@ PIN_CSS = """
     .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: .9rem; margin: 0; }
     /* The search's text the kinds' size, which is over 16 pixels: Safari on an iPhone zooms the page in on a field
        whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
-       anywhere along its width. Its line, under the field alone, shows only while it's being typed in; otherwise
-       there's none, the magnifying glass and the word saying what it is. It keeps its room either way, so nothing
-       moves. */
+       anywhere along its width. No line under it, for a quieter bar: the magnifying glass and the word say what it
+       is, and the phone's own cursor where it's being typed in. */
     .filter .finders .search { order: -1; flex: 1 1 0; width: 0; height: 32px; box-sizing: border-box; margin: 0;
-                               padding: 0 0 0 1.4em; border: 0; border-bottom: 1px solid transparent;
-                               background-size: 1em; font-size: 1.05rem; }
-    .filter .finders .search:focus { border-bottom-color: #555; }
+                               padding: 0 0 0 1.4em; border: 0; background-size: 1em; font-size: 1.05rem; }
     .filter .finders .pick { flex: none; width: 2.75rem; max-width: none; height: 2.75rem; margin: -.6rem -.45rem;
                              padding: 0; color: transparent; font-size: 1rem;
                              background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0'/%3E%3Cpath d='M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'/%3E%3C/svg%3E") no-repeat center / 24px; }
