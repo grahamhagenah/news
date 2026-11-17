@@ -848,6 +848,21 @@ class Descriptions(unittest.TestCase):
         self.assertIn('<button class="event-more" type="button" hidden', page)
 
 
+class DayHeadings(unittest.TestCase):
+    def test_today_and_tomorrow_are_written_in(self):
+        """As of the build, by the city's clock, so they're there as the page first shows rather than swapped in
+        once its script, at the foot of a long page, has run; the script says them again by the reader's day."""
+        venue = dict(source("axs", "x", "music", "The Sinclair"), public=True)
+        events = [build.event(venue, "A show", date(2026, 9, day), time(20, 0)) for day in (15, 16, 17)]
+        page = build.render_index(events, [venue], [], [], datetime(2026, 9, 15, 16, tzinfo=timezone.utc), public=True)
+        self.assertIn('<h2><span class="relative">Today</span><span class="date"><span class="weekday">Tuesday</span>, Sep 15</span></h2>', page)
+        self.assertIn('<h2><span class="relative">Tomorrow</span><span class="date"><span class="weekday">Wednesday</span>, Sep 16</span></h2>', page)
+        self.assertIn('<h2><span class="relative"></span><span class="date"><span class="weekday">Thursday</span>, Sep 17</span></h2>', page)
+        # 11pm on the 15th in Boston is already the 16th by UTC: the city's day, not the clock's.
+        late = build.render_index(events, [venue], [], [], datetime(2026, 9, 16, 3, tzinfo=timezone.utc), public=True)
+        self.assertIn('<span class="relative">Today</span><span class="date"><span class="weekday">Tuesday</span>', late)
+
+
 class JustAnnounced(unittest.TestCase):
     def setUp(self):
         self.built = datetime(2026, 9, 15, 12, tzinfo=timezone.utc)
@@ -1415,13 +1430,16 @@ class Biggest(unittest.TestCase):
         self.assertEqual(film["id"], "2026-09-20-wide-release", "its row's address on the page")
 
     def test_its_day_is_a_date_the_page_names(self):
-        """Not "Today" written in at the build, which would still say so after midnight: the page's script names
-        the day by the reader's clock, as it does the days' headings."""
+        """Today as of the build, written in so it's there as the page first shows rather than swapped in once the
+        script has run; the script names the day again by the reader's clock, as it does the days' headings, and
+        goes back to the date itself (data-said) for a page read after midnight."""
         events = [self.showing("Wide Release", f"Theater {n}") for n in range(4)]
         lead, _ = build.render_lead(events, self.built)
-        self.assertIn('4 theaters · <span class="lead-day" data-date="2026-09-20">Sun, Sep 20</span>', lead)
-        self.assertNotIn("Today", lead)
+        self.assertIn('4 theaters · <span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Today</span>', lead)
+        later, _ = build.render_lead(events, self.built - timedelta(days=2))
+        self.assertIn('data-said="Sun, Sep 20">Sun, Sep 20</span>', later, "not today or tomorrow: the date")
         self.assertIn('document.querySelectorAll(".lead-day")', build.INDEX_JS)
+        self.assertIn("when.dataset.said", build.INDEX_JS)
         # Not a <time datetime>, which the shared script would take for a timestamp and show as an age ("18h").
         self.assertNotIn("datetime=", lead)
 

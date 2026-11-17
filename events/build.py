@@ -2758,6 +2758,12 @@ def biggest_film(events, built_at, before=""):
             "about": said[0] if said else "", "image": picture, "standing": height > width * 1.2}
 
 
+def lead_day(day, built_at):
+    """The film's day as the lead says it: Today, Tomorrow, or "Thu, Nov 19", as of this build by the city's clock."""
+    here = built_at.astimezone(PUBLIC_ZONE).date()
+    return "Today" if day == here else "Tomorrow" if day == here + timedelta(days=1) else f"{day:%a, %b} {day.day}"
+
+
 def render_lead(events, built_at, before=""):
     """What's over the listings on the home page: the week's biggest film beside the newest few announced,
     each a way to its row in the list below. Either on its own where there's only it; nothing where there's
@@ -2776,8 +2782,11 @@ def render_lead(events, built_at, before=""):
             f'<span class="biggest-said"><span class="lead-tag biggest-tag">{icon("film", decorative=True)}'
             f'Playing everywhere</span><b class="biggest-title">{html.escape(film["title"])}</b>'
             # A data-date, not a datetime: the shared script reads every datetime as a timestamp to age ("18h").
+            # Today or Tomorrow as of this build, there as the page first shows; the script says it again by the
+            # reader's day, and goes back to the date itself (data-said) for a page read the day after.
             f'<span class="biggest-facts">{film["theaters"]} theaters · <span class="lead-day" '
-            f'data-date="{film["day"].isoformat()}">{film["day"]:%a, %b} {film["day"].day}</span></span>'
+            f'data-date="{film["day"].isoformat()}" data-said="{film["day"]:%a, %b} {film["day"].day}">'
+            f'{lead_day(film["day"], built_at)}</span></span>'
             + (f'<span class="biggest-about">{html.escape(film["about"])}</span>' if film["about"] else "")
             + '</span></a>')
     if fresh:
@@ -2922,6 +2931,11 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         days.setdefault("recent" if added else item["date"], []).append(item)
 
     sections = []
+    # Today and Tomorrow as of this build, by the city's clock, written into the headings so they're there as the
+    # page first shows: a phone draws the top of a long page before its script, at the foot, has run. The script
+    # says them again by the reader's day, which differs only for a page built before midnight and read after.
+    built_day = built_at.astimezone(PUBLIC_ZONE).date()
+    relative = {built_day: "Today", built_day + timedelta(days=1): "Tomorrow"}
     # Just announced is one list, newest first; every other page goes by the day each listing is on.
     for day in sorted(days):
         if added:  # Each row says the day it's on, since the heading doesn't.
@@ -2935,7 +2949,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
                        # The day in full and the month short, "Thursday, Nov 19": a day's heading has a line of its
                        # own, and a whole month's name would take a long one, "Tomorrow Wednesday, September 30",
                        # onto two.
-                       f'<h2><span class="relative"></span><span class="date"><span class="weekday">{day:%A}</span>, '
+                       f'<h2><span class="relative">{relative.get(day, "")}</span><span class="date"><span class="weekday">{day:%A}</span>, '
                        f'{day:%b} {day.day}</span></h2>\n')
         sections.append(heading + '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>")
 
@@ -3800,7 +3814,7 @@ INDEX_JS = """
   // The film over the listings says its day the same way, by the same clock.
   for (const when of document.querySelectorAll(".lead-day")) {
     const date = when.dataset.date;
-    if (date === today || date === tomorrow) when.textContent = date === today ? "Today" : "Tomorrow";
+    when.textContent = date === today ? "Today" : date === tomorrow ? "Tomorrow" : when.dataset.said;
   }
 
   // Today lists only what's still to come: showings drop off once they've started, and an event goes
