@@ -2958,19 +2958,20 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     # and were only in the footer, a full day of listings below where anyone was looking. The one this page is,
     # where it's one of them, marked as a kind is.
     # On a phone there isn't the width for them beside the kinds, so they're a menu there instead, beside the
-    # venue's, with next weekend's too, which a menu has the room for.
+    # venue's, with next weekend's too, which a menu has the room for. In the filter this weekend is just
+    # "Weekend", short beside "Tonight"; its page, the footer and its title still say "This weekend".
     when_links = when_menu = ""
     if public:
         now, current = "tonight" if tonight else "weekend" if weekend == 0 else "", ' aria-current="page"'
         when_links = '<span class="when-links">' + "".join(
             f'<a href="{root}{path}"{current if key == now else ""}>{label}</a>'
             for key, path, label in (("tonight", PUBLIC_TONIGHT[0], "Tonight"),
-                                     ("weekend", PUBLIC_WEEKENDS[0][0], "This weekend"))) + "</span>"
+                                     ("weekend", PUBLIC_WEEKENDS[0][0], "Weekend"))) + "</span>"
         chosen = PUBLIC_TONIGHT[0] if tonight else PUBLIC_WEEKENDS[weekend][0] if weekend is not None else ""
         when_menu = (f'<select class="pick when-pick{" chosen" if chosen else ""}" aria-label="When">' + "".join(
             f'<option value="{root}{path}"{" selected" if path == chosen else ""}>{label}</option>'
             for path, label in [("", "Any day"), (PUBLIC_TONIGHT[0], "Tonight")]
-            + [(path, name) for path, name, *_ in PUBLIC_WEEKENDS]) + "</select>")
+            + [(path, "Weekend" if at == 0 else name) for at, (path, name, *_) in enumerate(PUBLIC_WEEKENDS)]) + "</select>")
     names = ", ".join(html.escape(source["name"]) for source in sources)
     # Notices of sources that didn't load, marked as such, last in the footer.
     mark = shared.icon("notice")

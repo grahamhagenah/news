@@ -1318,11 +1318,14 @@ class HomePage(unittest.TestCase):
         """In the filter on every page, not just the footer, and marked where the page is one of them."""
         R = build.PUBLIC_ROOT
         home = self.page()
-        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">This weekend</a></span>',
+        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">Weekend</a></span>',
                       home)
         self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', self.page(tonight=True))
-        self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', self.page(weekend=0))
-        self.assertNotIn('aria-current="page">This weekend', self.page(weekend=1), "next weekend's isn't this one")
+        self.assertIn(f'<a href="{R}weekend/" aria-current="page">Weekend</a>', self.page(weekend=0))
+        self.assertNotIn('aria-current="page">Weekend', self.page(weekend=1), "next weekend's isn't this one")
+        # The phone's menu says it as short, with next weekend's in full.
+        menu = home.split('<select class="pick when-pick')[1].split("</select>")[0]
+        self.assertEqual(re.findall(r">([^<]+)</option>", menu), ["Any day", "Tonight", "Weekend", "Next weekend"])
 
     def test_on_a_phone_when_is_a_menu(self):
         """The same choices, and next weekend's, as a menu beside the venue's; the one the page is, chosen."""
