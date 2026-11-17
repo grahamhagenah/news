@@ -392,10 +392,16 @@ class Readers(unittest.TestCase):
         self.assertTrue(all(item["image"] for item in found))
 
     def test_tapos_gives_each_day_its_own_times(self):
-        found = self.read("tapos", "https://www.internet-ticketing.com/websales/sales/LEXLEX/start", "film")
+        # Read as of when the sample was saved: its headings carry no year, and from two months on a September
+        # day reads as next year's (test_tapos_day_takes_next_year_months_on), which would split its three days.
+        class September(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 9, 15, 12, tzinfo=tz)
+        with mock.patch.object(build, "datetime", September):
+            found = self.read("tapos", "https://www.internet-ticketing.com/websales/sales/LEXLEX/start", "film")
         coyote = sorted((item["date"], item["times"]) for item in found if item["title"] == "Coyote vs. Acme")
         # Three days, a showing each: the times run on in the page under headings with no end of their own.
-        # The sample's headings carry no year, so the days are read as this year's, whenever this test runs.
         self.assertEqual([(day.month, day.day, times) for day, times in coyote],
                          [(9, 17, [time(18, 45)]), (9, 18, [time(19, 15)]), (9, 19, [time(17, 0)])])
         self.assertEqual(len({day.year for day, _ in coyote}), 1)
@@ -403,6 +409,14 @@ class Readers(unittest.TestCase):
         self.assertTrue(any("billboard lawyer" in line for line in found[0]["about"]))
         # A film with no certificate says "Rating N/A" where one would go; that isn't part of its name.
         self.assertIn("National Theatre Live The Misanthrope", [item["title"] for item in found])
+
+    def test_tapos_day_takes_next_year_months_on(self):
+        # A day more than two months behind is next year's: January's, read in December. Up to two months behind
+        # stays this year's, for a page still showing last week. (The heading's "17th" comes to it as "17".)
+        self.assertEqual(build.tapos_day("Friday January 8", date(2026, 12, 20)), date(2027, 1, 8))
+        self.assertEqual(build.tapos_day("Friday September 18", date(2026, 11, 17)), date(2026, 9, 18))
+        self.assertEqual(build.tapos_day("Thursday September 17", date(2026, 11, 17)), date(2027, 9, 17))
+        self.assertIsNone(build.tapos_day("Monday February 30", date(2026, 1, 1)))
 
     def test_wptheatre_takes_its_films_names_from_the_theatres_own_site(self):
         found = self.read("wptheatre", "https://www.somervilletheatre.com/#CSBSOM", "film", sorts_its_own=True)
