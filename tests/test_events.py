@@ -1618,6 +1618,13 @@ class HomePage(unittest.TestCase):
         self.assertNotIn("when-pick", home)
         self.assertIn(".chips { display: contents; gap: inherit; }", home, "a wide screen's bar holds them itself")
 
+    def test_a_phones_search_says_what_can_be_searched_for(self):
+        """The field says "Search", which is all a wide screen's has room for; a phone's box has the width to say
+        what for, which the script swaps in there."""
+        self.assertIn('<input class="search" type="search" placeholder="Search" data-hint="Search artists, films, venues" '
+                      'aria-label="Search"', self.page())
+        self.assertIn('search.setAttribute("placeholder", phone.matches ? search.dataset.hint : "Search")', build.INDEX_JS)
+
     def test_clear_leads_a_phones_chips_while_anything_narrows_the_list(self):
         """What's chosen can be swiped off the screen, so "Clear" is first in the row and held there. The home page
         is written with it hidden, for the script to show with a kind, a venue or a search; a kind's own page,

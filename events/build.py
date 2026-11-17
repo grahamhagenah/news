@@ -3449,6 +3449,13 @@ def render_combined(item):
 # kinds, tonight and the weekends, and the venue's menu.
 
 
+# The search, which says "Search" on a wide screen, where it's a short field at the end of the bar; and on a phone,
+# where it's a box the width of the column, what there is to search for, which the script puts in its place.
+SEARCH_HINT = "Search artists, films, venues"
+SEARCH = shared.SEARCH.replace(' placeholder="Search"', f' placeholder="Search" data-hint="{SEARCH_HINT}"')
+assert SEARCH != shared.SEARCH
+
+
 def said_over(menu, word):
     """A menu with the short word a phone shows for it ("Where") drawn over it, which the script swaps for what's
     chosen. A wide screen shows the menu as it is."""
@@ -3642,7 +3649,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         # The kinds, when and where together (a phone's row of chips), then the search (its box, on a line above).
         f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>'
         f'<span class="chips">{clear}{buttons}{when_links}{said_over(venue_menu(venues, towns, events), "Where")}</span>'
-        f'<span class="finders">{shared.SEARCH}'
+        f'<span class="finders">{SEARCH}'
         '<button class="search-clear" type="button" aria-label="Clear the search" hidden></button></span></nav>\n'
         + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>'
@@ -4567,6 +4574,10 @@ INDEX_JS = """
     }
     menu.setAttribute("aria-label", chosen ? `${label}: ${name}` : label);
   };
+  // On a phone the search's box has the room to say what can be searched for; a wide screen's field, just "Search".
+  const hint = () => search.setAttribute("placeholder", phone.matches ? search.dataset.hint : "Search");
+  phone.addEventListener("change", hint);
+  hint();
   // On a phone, an × in the search while it has something in it. A wide screen has Esc.
   const clearSearch = document.querySelector(".search-clear");
   // And "Clear" at the start of its chips, while anything narrows the list: this page itself, where it's a kind's
