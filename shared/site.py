@@ -328,6 +328,11 @@ SEARCH_KEYS = """
       } else if (event.key === "Escape" && document.activeElement === search && search.value) {
         search.value = "";
         search.dispatchEvent(new Event("input"));
+      } else if (event.key === "Enter" && document.activeElement === search && !event.isComposing) {
+        // The list follows the search as it's typed, so there's nothing to send: a phone's Search key puts the
+        // keyboard away instead, so what it found can be seen.
+        event.preventDefault();
+        search.blur();
       }
     });
   }
