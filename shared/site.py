@@ -142,8 +142,11 @@ def preview(title, paragraphs, note=""):
 # The page around a list: its ground, its width, and the header at the top of it. A page written without the
 # rest of these styles (pushpin.city's own, which lists its cities) takes these, so its header is the same.
 HEADER_CSS = """
-  html { background: #000; }
-  /* Nothing scrolls the page sideways on a phone, whatever runs wide. */
+  /* Nothing scrolls the page sideways on a phone, whatever runs wide. On the page itself, which is the window's
+     own scrolling, as well as the body: Safari on an iPhone doesn't carry the body's to the window, and lets the
+     whole page slide sideways under a finger for anything a pixel too wide. Hidden on the page rather than
+     clipped, as a window's overflow is anyway; neither makes a box the sticky bar would stick inside instead. */
+  html { background: #000; overflow-x: hidden; }
   body { margin: 0; padding: 2rem 1.25rem 4rem; overflow-x: clip; color: #fff; background: #000;
          font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
   main { max-width: 46rem; margin: 0 auto; }
@@ -255,7 +258,8 @@ BASE_CSS = HEADER_CSS + """
     .row { display: block; padding-left: calc(14px + .7em); }
     .row > .icon { position: absolute; left: 0; width: 14px; height: 14px; top: calc(.4rem + .72em - 7px); }
     .headline, .headline .title { display: inline; }
-    .headline .title { white-space: normal; }
+    /* A word longer than the line (an address, a run-together name) breaks wherever it must to fit. */
+    .headline .title { white-space: normal; overflow-wrap: anywhere; }
     .headline > .title { margin-right: .3em; }
     .source { display: inline; max-width: none; text-align: left; }
     .source > span { display: inline; overflow: visible; white-space: normal; }
