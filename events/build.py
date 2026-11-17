@@ -4654,10 +4654,10 @@ PIN_CSS = """
        lit while they narrow the list; each a good size to see, in a target a thumb can't miss (44 pixels, Apple's
        least), which reaches out over the room around it rather than making the line taller. */
     .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .45rem; column-gap: .7rem; align-items: center; }
-    /* The search's line runs under the icons too, the same as a day's heading's line, so the two read as the same
-       weight; it brightens while the search is being typed in. */
+    /* The search's line shows only while it's being typed in, and then runs under the icons too. Otherwise there's
+       none, the magnifying glass and the word saying what it is; it keeps its room either way, so nothing moves. */
     .filter .finders { order: -1; flex: 1 1 100%; align-items: center; gap: .9rem; margin: 0;
-                       border-bottom: 1px solid #1c1c1c; }
+                       border-bottom: 1px solid transparent; }
     .filter .finders:focus-within { border-bottom-color: #555; }
     /* The search's text the kinds' size, which is over 16 pixels: Safari on an iPhone zooms the page in on a field
        whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
