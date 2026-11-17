@@ -1590,12 +1590,13 @@ class HomePage(unittest.TestCase):
         weekend's is there too, for a phone's row of chips; a wide screen's bar leaves it out (.later)."""
         R = build.PUBLIC_ROOT
         home = self.page()
-        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">Weekend</a>'
+        # Each says which weekend it is: a bare "Weekend" beside "Next weekend" had to be worked out.
+        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">This weekend</a>'
                       f'<a class="later" href="{R}weekend/next/">Next weekend</a></span>', home)
         self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', self.page(tonight=True))
-        self.assertIn(f'<a href="{R}weekend/" aria-current="page">Weekend</a>', self.page(weekend=0))
+        self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', self.page(weekend=0))
         following = self.page(weekend=1)
-        self.assertNotIn('aria-current="page">Weekend', following, "next weekend's isn't this one")
+        self.assertNotIn('aria-current="page">This weekend', following, "next weekend's isn't this one")
         self.assertIn(f'<a class="later" href="{R}weekend/next/" aria-current="page">Next weekend</a>', following)
         self.assertIn(".when-links .later { display: none; }", home)
         # The one the page is goes back to every day when it's pressed again.
@@ -1604,6 +1605,12 @@ class HomePage(unittest.TestCase):
         # And a phone's row starts far enough along to show it, unless a venue's chosen, which leads the row.
         self.assertIn("const over = here && !venue.value ? row.scrollLeft + here.getBoundingClientRect().right + 16 "
                       "- row.getBoundingClientRect().right : 0;", build.INDEX_JS)
+
+    def test_the_bars_shadow_is_never_over_a_days_heading(self):
+        """A heading right under the bar but not held there yet (a phone's first day as the bar sticks, where the
+        page goes back to when a kind is chosen) counts as the bar's heading, so the bar's shadow doesn't dim it."""
+        self.assertIn("const near = h2.offsetParent !== null && box.bottom > under && box.top - under < 22;", build.INDEX_JS)
+        self.assertIn("pinned ||= on || near;", build.INDEX_JS)
 
     def test_a_venue_chosen_leads_a_phones_chips_and_a_chip_is_pressed_over_44_pixels(self):
         """What's chosen at the end of a row that's swiped along would be off the screen: a venue chosen is the

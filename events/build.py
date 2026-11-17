@@ -3582,12 +3582,12 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     # and were only in the footer, a full day of listings below where anyone was looking. The one this page is,
     # where it's one of them, marked as a kind is.
     # On a phone they're chips in the same row as the kinds, which is swiped along, so there's room for the
-    # weekend after too ("later": a wide screen's bar leaves it to the weekend's own page). In the filter this
-    # weekend is just "Weekend", short beside "Tonight"; its page, the footer and its title still say "This weekend".
+    # weekend after too ("later": a wide screen's bar leaves it to the weekend's own page). Each says which weekend
+    # it is, "This weekend" and "Next weekend": a bare "Weekend" beside "Next weekend" left it to be worked out.
     when_links = ""
     if public:
         now = PUBLIC_TONIGHT[0] if tonight else PUBLIC_WEEKENDS[weekend][0] if weekend is not None else None
-        whens = [(PUBLIC_TONIGHT[0], "Tonight", "")] + [(path, "Weekend" if at == 0 else name, ' class="later"' * (at > 0))
+        whens = [(PUBLIC_TONIGHT[0], "Tonight", "")] + [(path, name, ' class="later"' * (at > 0))
                                                          for at, (path, name, *_) in enumerate(PUBLIC_WEEKENDS)]
         when_links = '<span class="when-links">' + "".join(
             f'<a{later} href="{root}{path}"{" aria-current=\"page\"" if path == now else ""}>{label}</a>'
@@ -4631,7 +4631,11 @@ INDEX_JS = """
       const on = filter.classList.contains("stuck") && h2.offsetParent !== null && Math.abs(box.top - at) < 1.5
         && h2.parentElement.getBoundingClientRect().bottom > box.bottom + 1;
       h2.classList.toggle("pinned", on);
-      pinned ||= on;
+      // Or not held yet, but right under the bar, where the bar's shadow would lie over it and dim it nearly
+      // away: a phone's first day, a few pixels under the bar as it sticks, which is also where the page goes
+      // back to when a kind or a venue is chosen; and each day's as it comes up to the bar.
+      const near = h2.offsetParent !== null && box.bottom > under && box.top - under < 22;
+      pinned ||= on || near;
     }
     filter.classList.toggle("headed", pinned);
     // Past the end of the list, where there's no day's heading for the search to lie along on a phone.
@@ -5432,6 +5436,12 @@ PIN_CSS = """
       display: inline-flex; flex: none; align-items: center; box-sizing: border-box; height: 2rem; padding: 0 .7rem;
       border: 1px solid #2a2a2a; border-radius: 999px; color: #999; font-size: .9rem; white-space: nowrap;
       text-decoration: none; }
+    /* Under a pointer, in a narrow window on a computer: a brighter outline, not the wide screen's underline. */
+    .filter .chips [data-show]:hover, .filter .chips .when-links a:hover { text-decoration: none; }
+    @media (hover: hover) and (pointer: fine) {
+      .filter .chips [data-show]:not([aria-current], [aria-pressed="true"]):hover,
+      .filter .chips .when-links a:not([aria-current]):hover { border-color: #555; color: #ccc; }
+    }
     /* What's chosen, filled in: a kind, tonight or a weekend, a venue. */
     .filter .chips [aria-current="page"], .filter .chips [aria-pressed="true"], .filter .chips .pick-box.chosen {
       border-color: #fff; background: #fff; color: #000; }
