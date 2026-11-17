@@ -1599,10 +1599,23 @@ class HomePage(unittest.TestCase):
         self.assertIn(f'<a class="later" href="{R}weekend/next/" aria-current="page">Next weekend</a>', following)
         self.assertIn(".when-links .later { display: none; }", home)
         # The one the page is goes back to every day when it's pressed again.
-        self.assertIn('filter.querySelectorAll(".when-links a[aria-current]")) {\n'
-                      '    a.dataset.href = new URL(SHARE_URL).pathname;', build.INDEX_JS)
-        # And a phone's row starts far enough along to show it.
-        self.assertIn("if (row.scrollWidth > row.clientWidth && over > 0) row.scrollLeft = over;", build.INDEX_JS)
+        self.assertIn('filter.querySelectorAll(".when-links a[aria-current]")) a.dataset.href = new URL(SHARE_URL).pathname;',
+                      build.INDEX_JS)
+        # And a phone's row starts far enough along to show it, unless a venue's chosen, which leads the row.
+        self.assertIn("const over = here && !venue.value ? row.scrollLeft + here.getBoundingClientRect().right + 16 "
+                      "- row.getBoundingClientRect().right : 0;", build.INDEX_JS)
+
+    def test_a_venue_chosen_leads_a_phones_chips_and_a_chip_is_pressed_over_44_pixels(self):
+        """What's chosen at the end of a row that's swiped along would be off the screen: a venue chosen is the
+        row's first chip. And a chip takes a press over more than is drawn of it, in the row's own padding."""
+        home = self.page()
+        self.assertIn(".filter .chips .pick-box.chosen { order: -1; }", home)
+        self.assertIn(".filter .chips::before { order: -2; }", home, "the margin before the row stays before it")
+        self.assertIn('.filter .chips [data-show]::after, .filter .when-links a::after { content: ""; position: absolute; '
+                      "inset: -7px -.2rem; }", home)
+        self.assertIn("margin: -6px -1rem;\n                     padding: 6px 0;", home, "32 pixels drawn, 44 to press")
+        # The bar is measured from a chip, not the row, whose padding isn't the bar's.
+        self.assertIn('filter.querySelector(".chips [data-show]").getBoundingClientRect().top', build.INDEX_JS)
 
     def test_on_a_phone_the_filter_is_a_search_box_over_a_row_of_chips(self):
         """The kinds, when and where are wrapped together, to be one row a phone swipes along; the search after

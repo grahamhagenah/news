@@ -4591,7 +4591,7 @@ INDEX_JS = """
   // the top; scrolling on down the list puts it away again.
   let revealed = false;
   const barHeight = () => {
-    const lift = phone.matches ? Math.max(0, Math.ceil(filter.querySelector(".chips").getBoundingClientRect().top
+    const lift = phone.matches ? Math.max(0, Math.ceil(filter.querySelector(".chips [data-show]").getBoundingClientRect().top
       - filter.getBoundingClientRect().top - parseFloat(getComputedStyle(filter).paddingBottom))) : 0;
     document.documentElement.style.setProperty("--lift", lift + "px");
     document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height - (revealed ? 0 : lift)) + "px");
@@ -4669,12 +4669,16 @@ INDEX_JS = """
   const query = () => (params().toString() ? "?" + params() : "");
   for (const a of filter.querySelectorAll("a[data-show], .when-links a")) a.dataset.href = a.getAttribute("href");
   // Tonight's page's own link, or a weekend's, goes back to every day: a chip pressed again is let go.
-  for (const a of filter.querySelectorAll(".when-links a[aria-current]")) {
-    a.dataset.href = new URL(SHARE_URL).pathname;
-    // And on a phone, where the row is swiped along, it starts far enough along to show the whole of that chip.
-    const row = a.closest(".chips"), over = a.getBoundingClientRect().right + 16 - row.getBoundingClientRect().right;
-    if (row.scrollWidth > row.clientWidth && over > 0) row.scrollLeft = over;
-  }
+  for (const a of filter.querySelectorAll(".when-links a[aria-current]")) a.dataset.href = new URL(SHARE_URL).pathname;
+  // A phone's row of chips is swiped along, so what's chosen could be off the screen, and forgotten. A venue
+  // chosen is the row's first chip (its styles move it there), and the row at its start; with none, on tonight's
+  // page or a weekend's, the row is far enough along to show the whole of that page's chip.
+  const settleRow = () => {
+    const row = filter.querySelector(".chips"), here = filter.querySelector(".when-links a[aria-current]");
+    if (row.scrollWidth <= row.clientWidth) return;  // A wide screen's bar, which isn't a row of its own.
+    const over = here && !venue.value ? row.scrollLeft + here.getBoundingClientRect().right + 16 - row.getBoundingClientRect().right : 0;
+    row.scrollLeft = Math.max(0, over);
+  };
   const address = page => {
     const kept = params();
     if (page > 1) kept.set("page", page);
@@ -4768,6 +4772,7 @@ INDEX_JS = """
     fitDetails();
   }
   showEvents();
+  settleRow();
   more.addEventListener("click", () => {
     const first = shownNow.find(li => pageOfNow.get(li) === loaded + 1);  // The next page's first day's first.
     history.replaceState(null, "", address(loaded + 1));
@@ -4798,6 +4803,7 @@ INDEX_JS = """
     show = here ? here.dataset.show : "all";
     fromAddress();
     showEvents();
+    settleRow();
   });
   // Choosing a venue shows all its events, whatever their kind. A kind's own page has only that kind's, so
   // there the choice goes to the home page, which has them all.
@@ -4810,6 +4816,7 @@ INDEX_JS = """
     if (kindPages) history.pushState(null, "", new URL(home.dataset.href, location.href).pathname + query());
     else history.replaceState(null, "", address(1));
     showEvents();
+    settleRow();
     toList();
   });
   search.addEventListener("input", () => {
@@ -4823,6 +4830,7 @@ INDEX_JS = """
     venue.value = "";
     history.replaceState(null, "", address(1));
     showEvents();
+    settleRow();
     toList();
   });
   // The ×, emptying the search and leaving it ready for another.
@@ -5403,13 +5411,21 @@ PIN_CSS = """
                                      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23777' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6l-12 12'/%3E%3Cpath d='M6 6l12 12'/%3E%3C/svg%3E") no-repeat center / 18px; }
     /* The chips: one row, out to the screen's edges, swiped along; one cut off at the edge says there's more.
        The kinds, a hairline, tonight and the weekends, and the venue's menu last. */
-    .filter .chips { display: flex; flex: 1 1 100%; align-items: center; gap: .4rem; min-width: 0; margin: 0 -1rem;
-                     overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+    .filter .chips { display: flex; flex: 1 1 100%; align-items: center; gap: .4rem; min-width: 0; margin: -6px -1rem;
+                     padding: 6px 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
     .filter .chips::-webkit-scrollbar { display: none; }
-    /* The column's margin at each end of the row, as room on its first and after its last rather than the row's
-       own padding, which not every browser keeps after the last when the row is swiped to its end. */
-    .filter .chips > :first-child { margin-left: 1rem; }
-    .filter .chips::after { content: ""; flex: none; width: .6rem; height: 1px; }
+    /* The column's margin at each end of the row, as room before its first and after its last rather than the
+       row's own padding, which not every browser keeps after the last when the row is swiped to its end. */
+    .filter .chips::before, .filter .chips::after { content: ""; flex: none; width: .6rem; height: 1px; }
+    .filter .chips::before { order: -2; }
+    /* A venue chosen is the row's first chip, ahead of the kinds, where it's seen without swiping: at the row's
+       end it would be off the screen, narrowing the list with nothing to say so. */
+    .filter .chips .pick-box.chosen { order: -1; }
+    /* A chip is pressed over more than is drawn of it: 44 pixels' height, the least a finger wants, and out to
+       halfway to the chips beside it. The row's own padding, taken back out of its margin, is the room for that,
+       since a row that's swiped along cuts off what's outside it. */
+    .filter .chips [data-show], .filter .when-links a { position: relative; }
+    .filter .chips [data-show]::after, .filter .when-links a::after { content: ""; position: absolute; inset: -7px -.2rem; }  /* From inside its border. */
     .when-links { display: contents; }
     .when-links::before { content: ""; flex: none; align-self: stretch; width: 1px; margin: .35rem .15rem; background: #2a2a2a; }
     .filter .chips [data-show], .filter .when-links a, .filter .chips .pick-box {
@@ -5428,8 +5444,9 @@ PIN_CSS = """
                            text-overflow: ellipsis; padding-right: 1em;
                            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em; }
     .pick-box.chosen .pick-said { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
-    .filter .chips .pick-box .pick { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
-                                     margin: 0; padding: 0; opacity: 0; font-size: 1rem; cursor: pointer; }
+    .filter .chips .pick-box .pick { position: absolute; inset: -7px -.2rem; width: calc(100% + .4rem); max-width: none;
+                                     height: calc(100% + 14px); margin: 0; padding: 0; opacity: 0; font-size: 1rem;
+                                     cursor: pointer; }
     .filter .chips .pick-box:focus-within { outline: 1px solid #555; outline-offset: 2px; }
     /* A chip's word in the middle of it, by the letters themselves: centering the line leaves the word wherever
        the font's own room over and under its letters puts it, a pixel or two high in some. Where a browser can
