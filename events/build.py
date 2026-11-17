@@ -3020,7 +3020,8 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<span class="finders">{said_over(when_menu, "When")}{said_over(venue_menu(venues, towns, events), "Where")}{shared.SEARCH}'
         '<button class="search-clear" type="button" aria-label="Clear the search" hidden></button></span></nav>\n'
         + "\n".join(sections)
-        + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
+        + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>'
+        '<button class="empty-clear" type="button" hidden></button>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
         # The address of each venue with events on this page, for adding one to a calendar.
         + EVENT_VIEW
@@ -3902,6 +3903,7 @@ INDEX_JS = """
   const more = pager.querySelector(".more");
   let loaded = 1, shownNow = [], pageOfNow = new Map();
   const empty = document.querySelector(".empty");
+  const emptyClear = document.querySelector(".empty-clear");
   empty.dataset.none = empty.textContent;  // What it says with nothing narrowing it, as the page wrote it.
   const plain = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const allRows = [...document.querySelectorAll(".day > ul > li")];
@@ -3915,7 +3917,8 @@ INDEX_JS = """
   const venue = document.querySelector(".filter .pick:not(.when-pick)");
   // On a phone, when (tonight, a weekend) is a menu rather than links: choosing in it goes to that page.
   const when = document.querySelector(".filter .when-pick");
-  if (when) when.addEventListener("change", () => { location.href = when.value; });
+  // The search and the venue go along, so a day narrows what's already chosen rather than starting over.
+  if (when) when.addEventListener("change", () => { location.href = when.value + query(); });
   // On a phone a menu shows a short word ("When", "Where") until something's chosen, and then what is, in white;
   // and tells a screen reader what's chosen, as a wide screen's menu says it itself.
   const sayChosen = (menu, word, label, chosen) => {
@@ -3996,7 +3999,7 @@ INDEX_JS = """
     return params;
   };
   const query = () => (params().toString() ? "?" + params() : "");
-  for (const a of filter.querySelectorAll("a[data-show]")) a.dataset.href = a.getAttribute("href");
+  for (const a of filter.querySelectorAll("a[data-show], .when-links a")) a.dataset.href = a.getAttribute("href");
   const address = page => {
     const kept = params();
     if (page > 1) kept.set("page", page);
@@ -4062,12 +4065,18 @@ INDEX_JS = """
     sayChosen(venue, "Where", "Venue", Boolean(venue.value));
     clearSearch.hidden = !search.value;
     empty.hidden = rows.length > 0;
+    // With nothing left because of the search or the venue, a way out of it under what the page says.
+    const narrowing = [words.length && "the search", venue.value && "the venue"].filter(Boolean);
+    emptyClear.hidden = rows.length > 0 || !narrowing.length;
+    emptyClear.textContent = "Clear " + narrowing.join(" and ");
     for (const b of filter.querySelectorAll("button[data-show]")) b.setAttribute("aria-pressed", b.dataset.show === show);
     for (const a of filter.querySelectorAll("a[data-show]")) {  // The kinds', not Tonight's or the weekend's.
       if (a.dataset.show === show) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
       a.setAttribute("href", a.dataset.href + query()); // A search goes along to the other pages.
     }
+    // And the search and the venue go along to tonight's and the weekend's, as they do from the phone's menu.
+    for (const a of filter.querySelectorAll(".when-links a")) a.setAttribute("href", a.dataset.href + query());
     document.querySelector("main").classList.add("paged");
     markStuck();
     // The home page, showing a kind in place, names it in the header, as that kind's own page does.
@@ -4127,6 +4136,14 @@ INDEX_JS = """
     toList();
   });
   search.addEventListener("input", () => {
+    history.replaceState(null, "", address(1));
+    showEvents();
+    toList();
+  });
+  // Under a page with nothing left, clearing what left nothing: the search and the venue; the kind stays.
+  emptyClear.addEventListener("click", () => {
+    search.value = "";
+    venue.value = "";
     history.replaceState(null, "", address(1));
     showEvents();
     toList();
@@ -4643,6 +4660,11 @@ PIN_CSS = """
   /* What the page says when nothing's left to show takes that pull-up too, with no day between them; it gets back
      the room a day's heading would have had. */
   .filter ~ .empty { margin-top: 2.6rem; }
+  /* Its way out, when a search or a venue left nothing: a quiet link under it, with room around it to press. */
+  .empty-clear { display: block; margin: -.15rem 0 -.5rem; padding: .5rem 0; border: 0; background: none;
+                 color: #999; font: inherit; font-size: .9rem; text-decoration: underline;
+                 text-decoration-color: #555; text-underline-offset: .2em; cursor: pointer; }
+  .empty-clear:hover { color: #fff; }
   /* The filter as a bar that stays at the top of the window while the listings scroll under it, black
      so they're hidden there. Each day's heading stays under it while its day is passing.
      The same room around it as before: padding now, where it's black, taken back out of its margins. */
