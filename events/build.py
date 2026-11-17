@@ -4656,11 +4656,12 @@ PIN_CSS = """
        taller or wider. */
     .filter { top: calc(-1 * var(--lift, 0px)); row-gap: .45rem; column-gap: .7rem; align-items: center; }
     .filter .finders { display: contents; }
-    /* The search's text 17 pixels, the page's own size: Safari on an iPhone zooms the page in on a field whose
-       text is any smaller than 16, and doesn't zoom back out. Its line the same as a day's heading's under it, so
-       the two read as the same weight; it brightens while it's being typed in. */
-    .filter .finders .search { order: -1; flex: 1 1 100%; width: auto; height: 42px; margin: 0;
-                               padding: 0; border-bottom-color: #1c1c1c; background: none; font-size: 17px; }
+    /* The search's text the kinds' size, which is over 16 pixels: Safari on an iPhone zooms the page in on a field
+       whose text is any smaller, and doesn't zoom back out. No taller than it needs, for a line that's pressed
+       anywhere along its width. Its line the same as a day's heading's under it, so the two read as the same
+       weight; it brightens while it's being typed in. */
+    .filter .finders .search { order: -1; flex: 1 1 100%; width: auto; height: 32px; margin: 0;
+                               padding: 0; border-bottom-color: #1c1c1c; background: none; font-size: 1.05rem; }
     .filter .finders .search:focus { border-bottom-color: #555; }
     /* The two at the end of the kinds' line, pushed there from the last kind, so their targets keep reaching out
        over the room around them: down to a 320-pixel screen, it all fits on the one line. */

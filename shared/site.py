@@ -145,8 +145,10 @@ HEADER_CSS = """
   /* Nothing scrolls the page sideways on a phone, whatever runs wide. On the page itself, which is the window's
      own scrolling, as well as the body: Safari on an iPhone doesn't carry the body's to the window, and lets the
      whole page slide sideways under a finger for anything a pixel too wide. Hidden on the page rather than
-     clipped, as a window's overflow is anyway; neither makes a box the sticky bar would stick inside instead. */
-  html { background: #000; overflow-x: hidden; }
+     clipped, as a window's overflow is anyway; neither makes a box the sticky bar would stick inside instead.
+     And text at the sizes set here: Safari on an iPhone otherwise enlarges some of a page's text by its own
+     guess, and its fields' text by another, so a search set the size of the words beside it can come out bigger. */
+  html { background: #000; overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { margin: 0; padding: 2rem 1.25rem 4rem; overflow-x: clip; color: #fff; background: #000;
          font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
   main { max-width: 46rem; margin: 0 auto; }
