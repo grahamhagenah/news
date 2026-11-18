@@ -3368,6 +3368,16 @@ def lead_day(day, built_at):
     return "Today" if day == here else "Tomorrow" if day == here + timedelta(days=1) else f"{day:%a, %b} {day.day}"
 
 
+def calm(title):
+    """A name its venue set all in capitals ("DRU CUTLER, ZAPBEETLE, HANA BOOKMAN"), in title case, for the few
+    announced over the listings, where three of them shouting is most of what's there. Only one that's nearly
+    all capitals: a band that writes itself that way among others that don't keeps its own ("SKORTS, Paper
+    Lady"), as every name does in the list below."""
+    letters = [letter for letter in title if letter.isalpha()]
+    shouted = len(letters) >= 6 and sum(letter.isupper() for letter in letters) >= .8 * len(letters)
+    return uncapped(title) if shouted else title
+
+
 def render_lead(events, built_at, before=""):
     """What's over the listings on the home page: the week's biggest film beside the newest few announced,
     each a way to its row in the list below. Either on its own where there's only it; nothing where there's
@@ -3396,8 +3406,11 @@ def render_lead(events, built_at, before=""):
     if fresh:
         rows = "".join(
             f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}">'
-            f'<b>{html.escape(item["title"])}</b>'
-            f'<span>{html.escape(item["venue"])} · {item["date"]:%b} {item["date"].day}</span></a></li>'
+            f'<b>{html.escape(calm(item["title"]))}</b>'
+            # Its day as the film's is said: Today or Tomorrow as of this build, which the script says again by the
+            # reader's day; any other with its weekday, which is how a night out is thought of ("Sat, Nov 21").
+            f'<span>{html.escape(item["venue"])} · <span class="lead-day" data-date="{item["date"].isoformat()}" '
+            f'data-said="{item["date"]:%a, %b} {item["date"].day}">{lead_day(item["date"], built_at)}</span></span></a></li>'
             for item in fresh)
         parts.append(
             f'<div class="fresh"><div class="fresh-head"><a class="lead-tag fresh-tag" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">'
@@ -5667,25 +5680,25 @@ CSS = """
   .biggest-about { overflow: hidden; color: #6e6e6e; font-size: .85rem; line-height: 1.45;
                    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   /* Just announced: its few a line each, the way the listings under it are — the name, then where and when in
-     grey after it. Where a line runs out, where and when are what's cut short, so the name always reads. The
-     way to the rest goes at the end of the heading, as it did when this was a line of its own. */
+     grey after it. Where a line runs out, where and when are what's cut short, so the name always reads (a
+     phone, where that was most lines, gives each two: below). The way to the rest goes at the end of the
+     heading, as it did when this was a line of its own. */
   .fresh { min-width: 0; }
   .fresh-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
   /* No taller than the heading beside it, which would set it lower than the film's opposite. */
   .fresh-more { flex: none; color: #888; font-size: .8rem; line-height: 1; }
   .fresh-more:hover { color: #fff; text-decoration: none; }
-  /* The heading goes to the rest too; on a phone, where See all would crowd the line, it's the only way there. */
+  /* The heading goes to the rest too. */
   .fresh-tag:hover { text-decoration: none; }
-  @media (max-width: 34rem) { .fresh-more { display: none; } }
   .fresh-list { margin: .45rem 0 0; padding: 0; list-style: none; }
   .fresh-list li + li { margin-top: .3rem; }
   .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; white-space: nowrap; }
-  .fresh-list b, .fresh-list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .fresh-list b, .fresh-list a > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* The name doesn't give up any room to where and when: sharing the squeeze at all, even a fraction of a
      pixel of it, is enough for its last word to become an ellipsis. Only a name longer than the whole line is
      cut short, and then where and when have none. */
   .fresh-list b { flex: none; max-width: 100%; color: #fff; font-size: .95rem; font-weight: 500; }
-  .fresh-list span { flex: 0 1 auto; color: #999; font-size: .8rem; }
+  .fresh-list a > span { flex: 0 1 auto; color: #999; font-size: .8rem; }
   .fresh-list a:hover { text-decoration: none; }
   .fresh-list a:hover b { text-decoration: underline; }
   @media (max-width: 46rem) {
@@ -5699,10 +5712,20 @@ CSS = """
     /* The filter as a whole a little nearer the listings than the film and what's announced above it, and the
        lead's room under it a little less than on a wide screen, where there's width to spare instead. */
     .lead { margin-bottom: 1.6rem; }
-    /* A still the width of the page over the words; a poster beside them, since the width of the page it would
-       be half the screen tall. */
-    .biggest:not(.standing) { flex-direction: column; align-items: stretch; }
-    .biggest:not(.standing) .biggest-picture { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+    /* A still small beside the film's words, as a poster is: the width of the page, it and what's announced
+       under it were most of a screen before the search and the first listing. Its sixteen by nine, and the
+       words level with its middle; what the film's about is left to its own view, a press away. */
+    .biggest { gap: .85rem; }
+    .biggest:not(.standing) { align-items: center; }
+    .biggest:not(.standing) .biggest-picture { width: 116px; height: 65px; min-height: 0; }
+    .biggest:not(.standing) .biggest-about { display: none; }
+    /* What's announced, two lines each rather than one cut short: the name, whole (two lines of it at most),
+       and under it where and when, which a single line seldom had room left to say. */
+    .fresh-list { margin-top: .6rem; }
+    .fresh-list li + li { margin-top: .7rem; }
+    .fresh-list a { display: block; white-space: normal; }
+    .fresh-list b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; white-space: normal; }
+    .fresh-list a > span { display: block; margin-top: .1rem; white-space: nowrap; }
   }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
   .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }

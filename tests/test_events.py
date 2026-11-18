@@ -1155,6 +1155,28 @@ class JustAnnounced(unittest.TestCase):
         found = build.newly_added([older, fresh, film, soonest], self.built)
         self.assertEqual([item["title"] for item in found], ["Sooner", "A show"], "this week's, soonest first; films stay out")
 
+    def test_a_name_all_in_capitals_is_calmed_over_the_listings(self):
+        """Three names shouting are most of what's announced there. Only one that's nearly all capitals: a band
+        that writes itself so among others that don't keeps its own, and the list below keeps every name."""
+        self.assertEqual(build.calm('PLASTIC, ANDREW DANFORTH, WARRN "TRAE" CRUDUP & AYUMI ISHITO'),
+                         'Plastic, Andrew Danforth, Warrn "Trae" Crudup & Ayumi Ishito')
+        for name in ("SKORTS, Paper Lady, Truman Flyer", "Sidney Gish Live Performance", "MGMT", "DJ Rekha",
+                     "BENEDICT KOH BIG BAND + durianhead"):  # Written with care, capitals and all: left as it is.
+            self.assertEqual(build.calm(name), name)
+        shouting = dict(self.listing(20, "DRU CUTLER, ZAPBEETLE, HANA BOOKMAN"), added="2026-09-15")
+        lead = build.render_lead([shouting], self.built)[0]
+        self.assertIn("<b>Dru Cutler, Zapbeetle, Hana Bookman</b>", lead)
+        self.assertIn("event=2026-09-20-dru-cutler-zapbeetle-hana-bookman-the-sinclair", lead, "its row is still the one it goes to")
+
+    def test_on_a_phone_the_film_is_small_and_whats_announced_has_two_lines_each(self):
+        page = build.render_index([dict(self.listing(20), added="2026-09-15")], [self.venue], [], [], self.built, public=True)
+        self.assertIn(".biggest:not(.standing) .biggest-picture { width: 116px; height: 65px; min-height: 0; }", page,
+                      "a still beside the film's words, not the width of the page over them")
+        self.assertIn(".fresh-list a { display: block; white-space: normal; }", page)
+        self.assertIn(".fresh-list a > span { display: block; margin-top: .1rem; white-space: nowrap; }", page,
+                      "where and when on a line of their own, under the name")
+        self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
+
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
         lead, film = build.render_lead(events, self.built)
@@ -1162,8 +1184,14 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
         self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN, "the newest few, in words")
         self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair"><b>Show 0</b>'
-                      f'<span>The Sinclair · Sep 20</span></a></li>', lead, "a line each: its name, then where and when")
+                      '<span>The Sinclair · <span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span>'
+                      '</span></a></li>', lead, "its name, then where and when, the day with its weekday")
         self.assertNotIn("<img", lead, "no pictures of what's announced")
+        # Today's and tomorrow's say so, as the film's day does; the script says them again by the reader's day.
+        soon = [dict(self.listing(15, "Tonight's"), added="2026-09-15"), dict(self.listing(16, "Tomorrow's"), added="2026-09-15")]
+        said = build.render_lead(soon, self.built)[0]
+        self.assertIn('<span class="lead-day" data-date="2026-09-15" data-said="Tue, Sep 15">Today</span>', said)
+        self.assertIn('<span class="lead-day" data-date="2026-09-16" data-said="Wed, Sep 16">Tomorrow</span>', said)
         self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><ul class="fresh-list">', lead,
                       "the way to the rest in the heading's line, not one of its own")
         # Nothing new and nothing big: nothing over the list at all.
