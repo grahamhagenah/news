@@ -5719,12 +5719,12 @@ CSS = """
     .biggest:not(.standing) { align-items: center; }
     .biggest:not(.standing) .biggest-picture { width: 116px; height: 65px; min-height: 0; }
     .biggest:not(.standing) .biggest-about { display: none; }
-    /* What's announced, two lines each rather than one cut short: the name, whole (two lines of it at most),
-       and under it where and when, which a single line seldom had room left to say. */
+    /* What's announced, two lines each rather than one cut short: the name, a line of its own (one too long
+       for it ends in "…"), and under it where and when, which a single shared line seldom had room left to say. */
     .fresh-list { margin-top: .6rem; }
     .fresh-list li + li { margin-top: .7rem; }
     .fresh-list a { display: block; white-space: normal; }
-    .fresh-list b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; white-space: normal; }
+    .fresh-list b { display: block; line-height: 1.3; white-space: nowrap; }
     .fresh-list a > span { display: block; margin-top: .1rem; white-space: nowrap; }
   }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */

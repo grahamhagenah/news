@@ -1173,6 +1173,8 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(".biggest:not(.standing) .biggest-picture { width: 116px; height: 65px; min-height: 0; }", page,
                       "a still beside the film's words, not the width of the page over them")
         self.assertIn(".fresh-list a { display: block; white-space: normal; }", page)
+        self.assertIn(".fresh-list b { display: block; line-height: 1.3; white-space: nowrap; }", page,
+                      "the name one line, cut short with an ellipsis")
         self.assertIn(".fresh-list a > span { display: block; margin-top: .1rem; white-space: nowrap; }", page,
                       "where and when on a line of their own, under the name")
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
