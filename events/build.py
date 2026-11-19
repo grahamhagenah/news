@@ -5669,7 +5669,7 @@ CSS = """
   .biggest-said { display: grid; gap: .2rem; min-width: 0; }
   /* Each heading in a color of its own: the film's amber, and for what's announced — concerts and talks, most
      of it music — music's violet. */
-  .biggest-tag { margin-bottom: 2px; color: var(--film); }
+  .biggest-tag { margin-bottom: 7px; color: var(--film); }
   .fresh-tag { color: var(--music); }
   /* Two lines at most, as the description under it has: a restoration's full billing ("Dr. Strangelove or: How
      I Learned to Stop Worrying… (50th Anniversary 4K Restoration)") would otherwise take four on a phone. */
@@ -5692,7 +5692,7 @@ CSS = """
   .fresh-tag:hover { text-decoration: none; }
   /* As far under its heading as the film's name is under the film's, by what's seen, the letters' bottoms to the
      tops of the next: the heading's line is taller here, with See all beside it, so it's less room to start with. */
-  .fresh-list { margin: 3px 0 0; padding: 0; list-style: none; }
+  .fresh-list { margin: 8px 0 0; padding: 0; list-style: none; }
   .fresh-list li + li { margin-top: .3rem; }
   .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; white-space: nowrap; }
   .fresh-list b, .fresh-list a > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
