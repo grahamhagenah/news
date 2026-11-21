@@ -3438,6 +3438,54 @@ def render_lead(events, built_at, before=""):
     return f'<div class="lead{" one" if len(parts) == 1 else ""}">\n' + "\n".join(parts) + "\n</div>\n", film["key"] if film else ""
 
 
+# When the evening starts, for a listing on both before and after it: such a listing is listed twice that day, at its
+# first showing and again at its first from then on, each row counting only its own part's times ("6:15pm +6"), so
+# someone looking down the evening's listings finds it there rather than only at noon. Each row opens to all of them.
+EVENING = 17
+
+
+def split_evenings(items):
+    """Each listing with showings both before and after EVENING as two: its day's part and its evening's."""
+    split = []
+    for item in items:
+        times = sorted({t for showing in item.get("showings", [item]) for t in showing["times"]})
+        day, evening = [t for t in times if t.hour < EVENING], [t for t in times if t.hour >= EVENING]
+        if day and evening:
+            split += [dict(item, part="day", part_times=day), dict(item, part="evening", part_times=evening)]
+        else:
+            split.append(item)
+    return split
+
+
+def part_times(item):
+    """A row's own times: its part's, where it's one of a listing's two, or all of the listing's."""
+    return item.get("part_times") or sorted(set(item["times"]))
+
+
+def part_attribute(item):
+    return f' data-part="{item["part"]}"' if "part" in item else ""
+
+
+def evening_start(rows):
+    """Where a day's list (in order, untimed first) is headed "Evening": its first row from EVENING on, where there's
+    something timed before it. A day all evening, or all before it, has no such heading. The page's script says it
+    again as what's shown changes."""
+    before = False
+    for at, item in enumerate(rows):
+        times = part_times(item)
+        if not times:
+            continue
+        if times[0].hour < EVENING:
+            before = True
+        else:
+            return at if before else None
+    return None
+
+
+def row_class(item):
+    return " evening-starts" if item.get("evening_starts") else ""
+
+
 def render_row(item):
     """Laid out like the newsfeed: the venue on the left, then the name with that day's times after it. With
     dated (Just announced, where the heading is the day it turned up), the day it's on comes first."""
@@ -3450,9 +3498,9 @@ def render_row(item):
     once = '<span class="once-tag">One night</span>' if item.get("once") else ""
     ident, series = listing_id(item["date"], item["title"], item["venue"])
     return (
-        f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
+        f'<li class="row{row_class(item)}" data-id="{ident}" data-series="{series}" data-category="{item["category"]}"{part_attribute(item)} '
         f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
-        f'{icon(item["category"])}{when}{render_clock(item["times"], sold_times(item))}'
+        f'{icon(item["category"])}{when}{render_clock(part_times(item), sold_times(item))}'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a> '
         + " ".join(part for part in (render_times(item["times"], sold_times(item)), once, detail) if part)
         + f'{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div> '
@@ -3464,7 +3512,7 @@ def render_combined(item):
     """A film at several places: one row reading "4 theaters … from 12:10pm" that opens to each place's times."""
     places = len({showing["venue"] for showing in item["showings"]})
     sources = "|".join(sorted({showing["source"] for showing in item["showings"]}))
-    first = item["times"][0] if item["times"] else None
+    first = part_times(item)[0] if item["times"] else None
     start = f'<span class="times">from <time class="from" data-time="{first:%H:%M}">{clock(first)}</time></span>' if first else ""
     showings = "".join(
         f'<li data-source="{html.escape(showing["source"])}">'
@@ -3474,11 +3522,11 @@ def render_combined(item):
     )
     ident, series = listing_id(item["showings"][0]["date"], item["title"])
     return (
-        f'<li class="row combined" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
+        f'<li class="row combined{row_class(item)}" data-id="{ident}" data-series="{series}" data-category="{item["category"]}"{part_attribute(item)} '
         f'data-sources="{html.escape(sources)}"{facts_attributes(item)}><details><summary>'
         f'{icon(item["category"])}'
         # Sold out at one theater isn't sold out: the film's first time is never struck here.
-        f'{render_clock([moment for showing in item["showings"] for moment in showing["times"]])}'
+        f'{render_clock(part_times(item) if "part" in item else [moment for showing in item["showings"] for moment in showing["times"]])}'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span> '
         f'<span class="tail">{start}</span>'
         f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div> '
@@ -3592,19 +3640,20 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             heading = '<section class="day" data-added><h2><span class="date">Recently added</span></h2>\n'
         else:
             # Untimed listings first, then by time, then by name.
-            rows = combine_films(days[day])
-            rows.sort(key=lambda item: (bool(item["times"]), item["times"][:1], item["title"].casefold()))
+            rows = split_evenings(combine_films(days[day]))
+            rows.sort(key=lambda item: (bool(item["times"]), part_times(item)[:1], item["title"].casefold()))
             heading = (f'<section class="day" data-date="{day.isoformat()}">'
                        # The day in full and the month short, "Thursday, Nov 19": a day's heading has a line of its
                        # own, and a whole month's name would take a long one, "Tomorrow Wednesday, September 30",
                        # onto two.
                        f'<h2><span class="relative">{relative.get(day, "")}</span><span class="date"><span class="weekday">{day:%A}</span>, '
                        f'{day:%b} {day.day}</span></h2>\n')
-        sections.append(heading + '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>")
+        start = None if added else evening_start(rows)
+        sections.append(heading + '<ul>\n' + "\n".join(render_row(dict(item, evening_starts=True) if at == start else item)
+                                                         for at, item in enumerate(rows)) + "\n</ul></section>")
 
-    # Each kind led by its mark, in its color: the list's times are in those colors, and with the rows' own marks
-    # gone (on a phone), the filter is where the colors are said. All has none.
-    mark = lambda key: "" if key == "all" else icon(key, decorative=True)
+    # The kinds' words alone, without their marks, so the bar stays narrow.
+    mark = lambda key: ""
     buttons = '<button data-show="all">All</button>' + "".join(
         f'<button data-show="{key}">{mark(key)}{label}</button>' for key, label in CATEGORIES.items()
     )
@@ -3633,8 +3682,11 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         now = PUBLIC_TONIGHT[0] if tonight else PUBLIC_WEEKENDS[weekend][0] if weekend is not None else None
         whens = [(PUBLIC_TONIGHT[0], "Tonight", "")] + [(path, name, ' class="later"' * (at > 0))
                                                          for at, (path, name, *_) in enumerate(PUBLIC_WEEKENDS)]
+        # This weekend is just "Weekend" where Next weekend isn't beside it (a wide screen's bar), to keep it narrow.
+        said = lambda label: (f'<span class="said-long">{label}</span><span class="said-short">Weekend</span>'
+                              if label == "This weekend" else label)
         when_links = '<span class="when-links">' + "".join(
-            f'<a{later} href="{root}{path}"{" aria-current=\"page\"" if path == now else ""}>{label}</a>'
+            f'<a{later} href="{root}{path}"{" aria-current=\"page\"" if path == now else ""}>{said(label)}</a>'
             for path, label, later in whens) + "</span>"
     names =", ".join(html.escape(source["name"]) for source in sources)
     # Notices of sources that didn't load, marked as such, last in the footer.
@@ -4460,6 +4512,9 @@ INDEX_JS = """
   // listings followed to their venue, showtimes added to a calendar, venues chosen. The personal events page
   // has no counter, so there these do nothing.
   const tally = (path, title) => window.goatcounter?.count?.({ path, title, event: true });
+  // A listing on both before and after the evening starts (EVENING in the build) is two rows that day, each going by
+  // only its own part's times: data-part="day" those before 17:00, "evening" those from then on.
+  const inPart = (li, time) => !li.dataset.part || (li.dataset.part === "evening") === (time.dataset.time >= "17:00");
   const venueOf = el => el.closest(".showings li")?.dataset.source || el.closest(".day > ul > li")?.dataset.sources || "";
   // Today and Tomorrow, from this device's clock, so an older build still reads right; days already
   // past are hidden until the next build drops them.
@@ -4498,9 +4553,11 @@ INDEX_JS = """
       for (const place of li.querySelectorAll(".showings li")) if (!place.querySelector("time")) place.remove();
       if (li.matches(".combined")) li.dataset.sources = [...li.querySelectorAll(".showings li")].map(place => place.dataset.source).join("|");
       if (times.length && !li.querySelector("time:not(.from)")) { li.remove(); continue; }
+      // A listing's day row goes once its day's showings have, though its evening's are still to come.
+      if (li.dataset.part && ![...li.querySelectorAll("time:not(.from)")].some(t => inPart(li, t))) { li.remove(); continue; }
       const from = li.querySelector("time.from");
       if (from) {
-        const next = [...li.querySelectorAll(".showings time")].sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1)[0];
+        const next = [...li.querySelectorAll(".showings time")].filter(t => inPart(li, t)).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1)[0];
         from.dataset.time = next.dataset.time;
         from.textContent = next.textContent;
         const places = li.querySelectorAll(".showings li");
@@ -4521,7 +4578,7 @@ INDEX_JS = """
     const column = li.querySelector(":scope > .clock, summary > .clock");
     if (!column) return;
     const times = [...li.querySelectorAll(li.matches(".combined") ? ".showings li:not([hidden]) time" : ".headline > .times time")]
-      .sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1);
+      .filter(t => inPart(li, t)).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1);
     const more = new Set(times.map(t => t.dataset.time)).size - 1;
     const struck = times[0]?.classList.contains("sold") && !li.matches(".combined") ? ' class="sold"' : "";
     column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small>+${more}</small>` : "") : "";
@@ -4760,7 +4817,7 @@ INDEX_JS = """
       const shown = places.filter(place => !place.hidden);
       if (!shown.length) continue;
       li.querySelector(".source > span").textContent = shown.length > 1 ? shown.length + " theaters" : shown[0].querySelector("a").textContent;
-      const first = shown.flatMap(place => [...place.querySelectorAll("time")]).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1)[0];
+      const first = shown.flatMap(place => [...place.querySelectorAll("time")]).filter(t => inPart(li, t)).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1)[0];
       const from = li.querySelector("time.from");
       if (first && from) { from.dataset.time = first.dataset.time; from.textContent = first.textContent; }
     }
@@ -4772,6 +4829,8 @@ INDEX_JS = """
     inOrder();
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
       && li.dataset.sources.split("|").some(inChosen)
+      // One of a listing's two rows with none of its part's times at the theaters chosen: the other row has them.
+      && !(li.dataset.part && !li.dataset.first)
       && words.every(word => searchable.get(li).includes(word)));
     // A new page only where a day begins, when that day wouldn't fit in what's left of the hundred: it starts the
     // next page instead of being cut in two. A day of more than a hundred has a page to itself.
@@ -4797,6 +4856,13 @@ INDEX_JS = """
       // the search leaves out has no page, and stays hidden.
       for (const li of lis) { li.hidden = !(pageOf.get(li) <= page); li.classList.toggle("passes", passing.has(li)); }
       day.hidden = ![...lis].some(li => !li.hidden);
+      // "Evening" over the first row shown from 17:00 on (EVENING in the build), where something timed is shown
+      // before it: not on a day all evening, or one whose daytime has passed or is filtered out. Not on Just
+      // announced, whose list isn't in order of time.
+      const timed = [...lis].filter(li => !li.hidden && li.dataset.first);
+      const starts = !("added" in day.dataset) && timed[0]?.dataset.first < "17:00"
+        ? timed.find(li => li.dataset.first >= "17:00") : null;
+      for (const li of lis) li.classList.toggle("evening-starts", li === starts);
     }
     loaded = page;
     shownNow = rows;
@@ -5028,7 +5094,10 @@ INDEX_JS = """
     part("place").replaceChildren(...(address ? [address, " · ", Object.assign(document.createElement("a"), {
       href: "https://www.google.com/maps/search/?" + new URLSearchParams({ api: 1, query: venue + ", " + address }), textContent: "Map ↗" })] : []));
     // The same show (or film, anywhere) on its other days.
-    const others = [...document.querySelectorAll(".day > ul > li[data-series]")].filter(other => other.dataset.series === li.dataset.series && other !== li);
+    // Each other day once: a listing on both before and after the evening is two rows of the same day (data-part).
+    const others = [...document.querySelectorAll(".day > ul > li[data-series]")]
+      .filter(other => other.dataset.series === li.dataset.series && other.dataset.id !== li.dataset.id)
+      .filter((other, at, all) => all.findIndex(o => o.dataset.id === other.dataset.id) === at);
     part("also").replaceChildren(...(others.length ? ["Also ", ...others.slice(0, 8).flatMap((other, i) => [i ? " · " : "",
       Object.assign(document.createElement("a"), { href: withEvent(other.dataset.id), textContent: dayName(other.dataset.id.slice(0, 10)) })])] : []));
     for (const [i, a] of part("also").querySelectorAll("a").entries()) a.addEventListener("click", event => {
@@ -5401,7 +5470,7 @@ PIN_CSS = """
   /* Tonight and this weekend: a pair of their own after the kinds, a hairline between, since they narrow by when
      and the kinds by what. */
   .when-links { display: flex; gap: inherit; padding-left: 1.1rem; border-left: 1px solid #262626; }
-  .when-links .later { display: none; }
+  .when-links .later, .when-links .said-short { display: none; }
   /* Each kind's mark before its word, in its color (.icon's own), set by the middle of the letters. */
   .filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2px; }
   .filter .chips [data-show] > .icon { flex: none; }  /* Next weekend: a phone's row has the room (below); here, the weekend's page links to it. */
@@ -5483,7 +5552,7 @@ PIN_CSS = """
                                      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23777' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6l-12 12'/%3E%3Cpath d='M6 6l12 12'/%3E%3C/svg%3E") no-repeat center / 18px; }
     /* The chips: one row, out to the screen's edges, swiped along; one cut off at the edge says there's more.
        The kinds, a hairline, tonight and the weekends, and the venue's menu last. */
-    .filter .chips { display: flex; flex: 1 1 100%; align-items: center; gap: .4rem; min-width: 0; margin: -6px -1rem;
+    .filter .chips { display: flex; flex: 1 1 100%; align-items: center; gap: .3rem; min-width: 0; margin: -6px -1rem;
                      padding: 6px 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
     .filter .chips::-webkit-scrollbar { display: none; }
     /* The column's margin at each end of the row, as room before its first and after its last rather than the
@@ -5501,7 +5570,7 @@ PIN_CSS = """
     .when-links { display: contents; }
     .when-links::before { content: ""; flex: none; align-self: stretch; width: 1px; margin: .35rem .15rem; background: #2a2a2a; }
     .filter .chips [data-show], .filter .when-links a, .filter .chips .pick-box {
-      display: inline-flex; flex: none; align-items: center; box-sizing: border-box; height: 2rem; padding: 0 .7rem;
+      display: inline-flex; flex: none; align-items: center; box-sizing: border-box; height: 2rem; padding: 0 .6rem;
       border: 1px solid #2a2a2a; border-radius: 999px; color: #999; font-size: .9rem; white-space: nowrap;
       text-decoration: none; }
     /* Under a pointer, in a narrow window on a computer: a brighter outline, not the wide screen's underline. */
@@ -5534,7 +5603,7 @@ PIN_CSS = """
        the tail of a "g", which its cutting off at the end would cut too. */
     @supports (text-box: trim-both cap alphabetic) {
       .filter .chips [data-show], .filter .when-links a, .filter .chips .pick-box {
-        display: block; height: auto; padding: calc((2rem - 2px - 1cap) / 2) .7rem; line-height: 1; }
+        display: block; height: auto; padding: calc((2rem - 2px - 1cap) / 2) .6rem; line-height: 1; }
       .filter .chips [data-show], .filter .when-links a, .pick-box .pick-said { text-box: trim-both cap alphabetic; }
       .pick-box .pick-said { padding-block: .4em; margin-block: -.4em; }
     }
@@ -5701,6 +5770,12 @@ CSS = """
   .clock small { color: #666; font-size: inherit; }
   .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .8rem; text-align: left; }
   .day .row .source::before { content: none; }
+  /* Where the evening starts in a day's list, a quiet label over its first row: a listing on both before and after
+     it is listed again under it. Quieter than the day's heading: no line under it, and not held at the top. */
+  .day > ul > li.row.evening-starts { margin-top: 1.9rem; }  /* Over the row's own margin, where it's lit under a pointer. */
+  .day > ul > li.row.evening-starts::before { content: "Evening"; position: absolute; bottom: 100%; left: 0; padding-left: inherit;
+                                          padding-bottom: .3rem; color: #666; font-size: .7rem; letter-spacing: .08em;
+                                          text-transform: uppercase; pointer-events: none; }
   .clock:not(:empty) ~ .source::before, .clock:not(:empty) ~ * .source::before { content: "·"; margin: 0 .35em; color: #555; }
   .day .headline { order: 3; flex-basis: 100%; }
   /* On Recently added, the day each is on leads the line: "Sat, Nov 21 · 7pm · Union Pool". */
@@ -5715,7 +5790,8 @@ CSS = """
     body .filter .finders { order: 1; flex: 1 0 9rem; max-width: 16rem; margin-left: auto; }
     body .filter .chips { flex: 0 1 auto; min-width: 0; margin-right: 0; }
     body .filter .chips::after { width: 0; }
-    body .filter .when-links .later { display: none; }
+    body .filter .when-links .later, body .filter .when-links .said-long { display: none; }
+    body .filter .when-links .said-short { display: inline; }
     /* The chips' height, so the line is one height. */
     body .filter .finders .search, body .filter .finders .search-clear { height: 2rem; }
     body .filter .finders .search-clear { width: 2rem; }
@@ -5779,7 +5855,7 @@ CSS = """
      color), the name what's cut short with "…" where the line runs out. Where and when at most most of the line,
      so a name always has some. */
   .fresh-list { margin: 0; padding: 0; list-style: none; }
-  .fresh-list li + li { margin-top: .45rem; }
+  .fresh-list li + li { margin-top: .5rem; }
   .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; color: inherit; white-space: nowrap; }
   .fresh-time { color: #d4d4d4; font-weight: 400; }
   .fresh-time::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: .4em; border-radius: 50%;
@@ -5788,13 +5864,11 @@ CSS = """
                 text-overflow: ellipsis; }
   .fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
-  /* Side by side, the two the same height under their headings: what's announced spread from the top of the film's
-     picture to its foot, rather than stopping short of it; and where it's what is taller, the film in its middle. */
+  /* Side by side: what's announced spaced as the listings below are, from the top, rather than spread to the foot of
+     the film's picture; and where it's what is taller, the film in its middle. */
   @media not all and (max-width: 46rem) {
     .biggest-part, .fresh { display: flex; flex-direction: column; }
     .biggest { flex: 1 1 auto; }
-    .fresh-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; gap: .45rem; }
-    .fresh-list li + li { margin-top: 0; }
   }
   /* The filter as a whole a little nearer the listings than the film and what's announced over it, on a phone. */
   @media (max-width: 34rem) { .lead { margin-bottom: 1.6rem; } }
@@ -5900,9 +5974,12 @@ CSS = """
   .event-image.whole img:first-child { position: relative; z-index: 1; object-fit: contain; }
   .event-image.whole .event-backdrop { display: block; position: absolute; inset: 0; object-fit: cover;
                                        filter: blur(24px) brightness(.45) saturate(1.15); transform: scale(1.3); }
-  dialog.event.shows-picture .event-tools button { background: rgba(0, 0, 0, .6); color: #fff; }
+  /* Over a picture, a light frosted tint rather than a dark disc, enough to read the mark on any picture without
+     sitting on top of it; darker under the pointer. */
+  dialog.event.shows-picture .event-tools button { background: rgba(0, 0, 0, .22); color: rgba(255, 255, 255, .85);
+                                                   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
   dialog.event.shows-picture .event-tools button:hover:not(:disabled),
-  dialog.event.shows-picture .event-tools button:focus-visible { background: rgba(0, 0, 0, .9); }
+  dialog.event.shows-picture .event-tools button:focus-visible { background: rgba(0, 0, 0, .5); color: #fff; }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
   .event-facts:empty { display: none; }
   /* Drawn as the list is, so a listing opened reads as the same thing, larger: its price and ages outlined as

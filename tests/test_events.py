@@ -1179,8 +1179,9 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(".fresh-name { order: -1; flex: 0 1 auto; min-width: 3em;", page)
         self.assertIn(".fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
-        # Side by side, what's announced spread over the height of the film beside it.
-        self.assertIn(".fresh-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between;", page)
+        # Spaced as the listings under it are, not spread over the height of the film beside it.
+        self.assertIn(".fresh-list li + li { margin-top: .5rem; }", page)
+        self.assertNotIn("justify-content: space-between; gap: .45rem;", page)
 
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
@@ -1696,14 +1697,17 @@ class HomePage(unittest.TestCase):
         R = build.PUBLIC_ROOT
         home = self.page()
         # Each says which weekend it is: a bare "Weekend" beside "Next weekend" had to be worked out.
-        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">This weekend</a>'
+        # On a wide screen, where Next weekend isn't beside it, This weekend is just "Weekend".
+        this = '<span class="said-long">This weekend</span><span class="said-short">Weekend</span>'
+        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">{this}</a>'
                       f'<a class="later" href="{R}weekend/next/">Next weekend</a></span>', home)
         self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', self.page(tonight=True))
-        self.assertIn(f'<a href="{R}weekend/" aria-current="page">This weekend</a>', self.page(weekend=0))
+        self.assertIn(f'<a href="{R}weekend/" aria-current="page">{this}</a>', self.page(weekend=0))
         following = self.page(weekend=1)
         self.assertNotIn('aria-current="page">This weekend', following, "next weekend's isn't this one")
         self.assertIn(f'<a class="later" href="{R}weekend/next/" aria-current="page">Next weekend</a>', following)
-        self.assertIn(".when-links .later { display: none; }", home)
+        self.assertIn(".when-links .later, .when-links .said-short { display: none; }", home)
+        self.assertIn("body .filter .when-links .later, body .filter .when-links .said-long { display: none; }", home)
         # The one the page is goes back to every day when it's pressed again.
         self.assertIn('filter.querySelectorAll(".when-links a[aria-current]")) a.dataset.href = new URL(SHARE_URL).pathname;',
                       build.INDEX_JS)
@@ -1729,14 +1733,12 @@ class HomePage(unittest.TestCase):
         # The bar is measured from a chip, not the row, whose padding isn't the bar's.
         self.assertIn('filter.querySelector(".chips [data-show]").getBoundingClientRect().top', build.INDEX_JS)
 
-    def test_each_kind_in_the_filter_is_led_by_its_mark(self):
-        """In its color, which the list's times are in: the filter is the key to them. All has none."""
+    def test_each_kind_in_the_filter_is_its_word_alone(self):
+        """No marks before the kinds' words, so the bar stays narrow."""
         home, R = self.page(), build.PUBLIC_ROOT
         self.assertIn(f'<a data-show="all" href="{R}" aria-current="page">All</a>', home)
-        self.assertIn(f'<a data-show="film" href="{R}film/"><svg class="icon" aria-hidden="true"><use href="#icon-film"/></svg>Film</a>', home)
-        tonight = self.page(tonight=True)
-        self.assertIn('<button data-show="music"><svg class="icon" aria-hidden="true"><use href="#icon-music"/></svg>Music</button>', tonight)
-        self.assertIn(".filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2px; }", home)
+        self.assertIn(f'<a data-show="film" href="{R}film/">Film</a>', home)
+        self.assertIn('<button data-show="music">Music</button>', self.page(tonight=True))
 
     def test_on_a_phone_the_filter_is_a_search_box_over_a_row_of_chips(self):
         """The kinds, when and where are wrapped together, to be one row a phone swipes along; the search after
@@ -2285,3 +2287,42 @@ class Page(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Evenings(unittest.TestCase):
+    """A listing on both before and after the evening starts is listed again at its first evening showing."""
+
+    def at(self, *clocks):
+        return [datetime(2026, 11, 21, int(c[:2]), int(c[3:])) for c in clocks]
+
+    def test_split_at_the_evening(self):
+        film = {"title": "I Play Rocky", "times": self.at("12:15"), "showings": [
+            {"venue": "Coolidge Corner", "times": self.at("12:15", "15:15", "18:15", "21:00")},
+            {"venue": "Capitol Theatre", "times": self.at("13:30", "19:30")}]}
+        day, evening = build.split_evenings([film])
+        self.assertEqual((day["part"], evening["part"]), ("day", "evening"))
+        self.assertEqual(day["part_times"], self.at("12:15", "13:30", "15:15"))
+        self.assertEqual(evening["part_times"], self.at("18:15", "19:30", "21:00"))
+        self.assertEqual(build.part_attribute(evening), ' data-part="evening"')
+
+    def test_only_one_part_stays_one_row(self):
+        late = {"title": "Late show", "times": self.at("19:00", "21:30")}
+        early = {"title": "Matinee", "times": self.at("11:00", "14:00")}
+        self.assertEqual(build.split_evenings([late, early]), [late, early])
+        self.assertEqual(build.part_times(late), self.at("19:00", "21:30"))
+
+    def test_the_page_counts_a_rows_own_part(self):
+        self.assertIn('const inPart = (li, time) => !li.dataset.part || (li.dataset.part === "evening") === (time.dataset.time >= "17:00");',
+                      build.INDEX_JS)
+        self.assertEqual(build.EVENING, 17, "the page's 17:00 is the build's EVENING")
+        self.assertIn("other.dataset.id !== li.dataset.id)", build.INDEX_JS, "its own other row isn't another day")
+
+    def test_evening_is_headed_where_it_starts(self):
+        timed = lambda title, *clocks: {"title": title, "times": self.at(*clocks)}
+        untimed = {"title": "All day", "times": []}
+        rows = [untimed, timed("Noon", "12:00"), timed("Six", "18:00"), timed("Eight", "20:00")]
+        self.assertEqual(build.evening_start(rows), 2)
+        self.assertIsNone(build.evening_start([untimed, timed("Six", "18:00")]), "nothing before the evening")
+        self.assertIsNone(build.evening_start([timed("Noon", "12:00")]), "nothing in the evening")
+        self.assertEqual(build.row_class(dict(rows[2], evening_starts=True)), " evening-starts")
+        self.assertIn('for (const li of lis) li.classList.toggle("evening-starts", li === starts);', build.INDEX_JS)
