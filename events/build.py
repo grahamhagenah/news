@@ -3140,6 +3140,20 @@ def render_times(moments, sold=()):
     return f'<span class="times">{times}</span>' if times else ""
 
 
+def render_clock(moments, sold=()):
+    """A listing's time in a column of its own before its name, where an eye running down the list finds it
+    without reading the names: its first showing, and how many more there are after it ("+6"), which its view
+    lists. None, a listing with no time given, is an empty column. The script says it again as today's showings
+    pass, and for the theaters chosen of a film at several. No <time>: the row's own times are what's counted."""
+    moments = sorted(set(moments))
+    if not moments:
+        return '<span class="clock"></span>'
+    first = moments[0]
+    struck = ' class="sold"' if f"{first:%H:%M}" in sold else ""
+    more = f"<small>+{len(moments) - 1}</small>" if len(moments) > 1 else ""
+    return f'<span class="clock"><b{struck}>{clock(first)}</b>{more}</span>'
+
+
 def zone_of(item):
     """The clock a listing's times are in: the one its city keeps, or Boston's for a listing saved before
     the cities kept their own."""
@@ -3436,7 +3450,7 @@ def render_row(item):
     return (
         f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
-        f'{icon(item["category"])}'
+        f'{icon(item["category"])}{render_clock(item["times"], sold_times(item))}'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a> '
         + " ".join(part for part in (when, render_times(item["times"], sold_times(item)), once, detail) if part)
         + f'{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div> '
@@ -3461,6 +3475,8 @@ def render_combined(item):
         f'<li class="row combined" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(sources)}"{facts_attributes(item)}><details><summary>'
         f'{icon(item["category"])}'
+        # Sold out at one theater isn't sold out: the film's first time is never struck here.
+        f'{render_clock([moment for showing in item["showings"] for moment in showing["times"]])}'
         f'<div class="headline"><span class="title">{html.escape(item["title"])}</span> '
         f'<span class="tail">{start}</span>'
         f'{shared.preview(item["title"], clip(item["about"], ABOUT_CHARS))}</div> '
@@ -4495,12 +4511,30 @@ INDEX_JS = """
     for (const list of todays.querySelectorAll(":scope > ul, .showings")) [...list.children].sort(byNext).forEach(el => list.append(el));
     if (!todays.querySelector("li")) todays.remove();
   }
-  // On a phone a row shows its first three times, then how many more ("+2"), so a film playing all day is two
-  // lines rather than three; its view has them all. Counted after today's have dropped off.
-  for (const times of document.querySelectorAll(".day .headline > .times")) {
-    const extra = times.querySelectorAll("time").length - 3;
-    if (extra > 0) times.insertAdjacentHTML("beforeend", `<span class="more-times"> +${extra}</span>`);
-  }
+  // A listing's time, in the column before its name: the first of its times still to come, and how many more
+  // ("+6"), which its view lists; for a film at several theaters, of those the venue menu leaves. Said again
+  // whenever what's shown changes, today's showings having dropped off as they pass.
+  const clockOf = li => {
+    const column = li.querySelector(":scope > .clock, summary > .clock");
+    if (!column) return;
+    const times = [...li.querySelectorAll(li.matches(".combined") ? ".showings li:not([hidden]) time" : ".headline > .times time")]
+      .sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1);
+    const more = new Set(times.map(t => t.dataset.time)).size - 1;
+    const struck = times[0]?.classList.contains("sold") && !li.matches(".combined") ? ' class="sold"' : "";
+    column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small>+${more}</small>` : "") : "";
+    li.dataset.first = times[0]?.dataset.time || "";
+  };
+  // Each day's rows in the order of the times in the column: a film at several theaters is placed by its first
+  // showing at any of them, and with a theater or a town chosen, its first there can be later than the rows
+  // after it. Those without a time first, as the build has them; a tie as it was. Not Recently added's, which
+  // is newest first, its column the time on the day each is.
+  const byFirst = (a, b) => a.dataset.first < b.dataset.first ? -1 : a.dataset.first > b.dataset.first ? 1 : 0;
+  const inOrder = () => {
+    for (const list of document.querySelectorAll(".day:not([data-added]) > ul")) {
+      const lis = allRows.filter(li => li.parentElement === list).sort(byFirst);
+      if (lis.some((li, at) => list.children[at] !== li)) lis.forEach(li => list.append(li));
+    }
+  };
   // On a phone, a row's "with …" (who else is on the bill) gives way before the row would run to a third line:
   // the names from the end, counted as the times are ("with Mark Erelli, Rose Cousins +2"), and if even the first
   // is too many, all of it. A detail that isn't a list is cut a word at a time ("…"). Where the row is three lines
@@ -4517,9 +4551,10 @@ INDEX_JS = """
       detail.textContent = full;
       detail.hidden = false;
       if (!width) continue;
-      const title = li.querySelector(".title"), source = li.querySelector(".source");
+      // The name and what's after it on two lines at most: the venue has a line of its own under them.
+      const title = li.querySelector(".title"), headline = li.querySelector(".headline");
       const lineHeight = parseFloat(getComputedStyle(title).lineHeight);
-      const fits = () => [...source.getClientRects()].pop().bottom - title.getClientRects()[0].top < 2.5 * lineHeight;
+      const fits = () => headline.getBoundingClientRect().bottom - title.getClientRects()[0].top < 2.5 * lineHeight;
       if (fits()) continue;
       const shorter = [];
       const names = (full.match(/^with (.+)$/)?.[1] || "").split(/,\\s*/);
@@ -4732,6 +4767,8 @@ INDEX_JS = """
   function showEvents() {
     const words = plain(search.offsetParent ? search.value : "").split(/\\s+/).filter(Boolean);
     narrow();
+    for (const li of allRows) clockOf(li);
+    inOrder();
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
       && li.dataset.sources.split("|").some(inChosen)
       && words.every(word => searchable.get(li).includes(word)));
@@ -5634,10 +5671,28 @@ CSS = """
   .times { flex: none; }
   /* A sold-out time, struck through; a listing with nothing left, a quiet tag after its times. */
   .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
-  .more-times { display: none; }
+  /* A listing's time, a column of its own after its kind's mark and before its name, like a timetable's: an eye
+     running down the list finds the times all in one place, rather than after names of every length. Its first
+     showing, and in grey how many more ("+6"), which its view lists. The times after the name are the row's
+     still, for its view, the search and the script, but not shown: the column says it. */
+  .day > ul > li.row, .combined > details > summary { grid-template-columns: auto 6.1rem minmax(0, 1fr) auto; }
+  .clock { display: flex; align-items: baseline; gap: .35em; min-width: 0; color: #fff; font-size: .9em;
+           font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .clock b { font-weight: 500; }
+  .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
+  .clock small { color: #666; font-size: .85em; }
+  .day .headline > .times, .day .headline .tail { display: none; }
+  /* On a phone, two columns: the time, and the name with the venue on a line of its own under it, in grey; the
+     time's "+6" under it beside the venue. Each set level with the line beside it, by their letters. */
   @media (max-width: 34rem) {
-    .headline > .times time:nth-of-type(n+4), .headline > .times .sep:nth-of-type(n+3) { display: none; }
-    .more-times { display: inline; }
+    .day > ul > li.row:not(.combined), .combined > details > summary {
+      display: grid; grid-template-columns: 4.85rem minmax(0, 1fr); gap: 0; align-items: baseline; }
+    .clock { display: contents; }
+    .clock b { grid-column: 1; grid-row: 1; font-size: .92rem; }
+    .clock small { grid-column: 1; grid-row: 2; color: #777; font-size: .78rem; }
+    .day .headline { grid-column: 2; grid-row: 1; }
+    .day .row .source { grid-column: 2; grid-row: 2; display: block; margin-top: .1rem; color: #888; font-size: .85rem; }
+    .day .row .source::before { content: none; }
   }
   .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }

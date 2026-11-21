@@ -1211,6 +1211,44 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(f"<loc>{build.PUBLIC_URL}new/</loc>", build.render_sitemap(self.built))
 
 
+class TimeColumn(unittest.TestCase):
+    """A listing's time in a column of its own before its name, so the eye runs down the times rather than
+    hunting for each after a name of its own length."""
+    venue = dict(source("ics", "x", "music", "The Sinclair"), public=True)
+    day = date(2026, 9, 15)
+    built = datetime(2026, 9, 13, tzinfo=timezone.utc)
+
+    def test_the_first_and_how_many_more(self):
+        self.assertEqual(build.render_clock([time(21), time(19), time(19)]), '<span class="clock"><b>7pm</b><small>+1</small></span>')
+        self.assertEqual(build.render_clock([time(20, 30)]), '<span class="clock"><b>8:30pm</b></span>')
+        self.assertEqual(build.render_clock([]), '<span class="clock"></span>', "no time given: an empty column")
+
+    def test_after_the_mark_and_before_the_name(self):
+        row = build.render_row(build.event(self.venue, "A Show", self.day, time(20)))
+        self.assertIn('</svg><span class="clock"><b>8pm</b></span><div class="headline">', row)
+        self.assertNotIn("<time", row[row.index('class="clock"'):row.index('class="headline"')],
+                         "no <time> in it: the row's own times are what the script counts and drops")
+
+    def test_a_film_at_several_theaters_counts_them_all(self):
+        film = dict(self.venue, category="film")
+        showings = [build.event(dict(film, name="Coolidge Corner"), "Wide Release", self.day, time(13)),
+                    build.event(dict(film, name="Brattle"), "Wide Release", self.day, time(16)),
+                    build.event(dict(film, name="Somerville"), "Wide Release", self.day, time(13))]
+        combined = [item for item in build.combine_films(showings) if "showings" in item]
+        self.assertEqual(len(combined), 1)
+        self.assertIn('<span class="clock"><b>1pm</b><small>+1</small></span><div class="headline"><span class="title">Wide Release',
+                      build.render_row(combined[0]), "1pm at two of them and 4pm at the third: 1pm, and one more")
+
+    def test_the_column_on_a_wide_screen_and_a_phone(self):
+        page = build.render_index([build.event(self.venue, "A Show", self.day, time(20))], [self.venue], [], [], self.built, public=True)
+        self.assertIn(".day > ul > li.row, .combined > details > summary { grid-template-columns: auto 6.1rem minmax(0, 1fr) auto; }", page)
+        self.assertIn(".day .headline > .times, .day .headline .tail { display: none; }", page, "said once, in the column")
+        self.assertIn(".day .row .source { grid-column: 2; grid-row: 2;", page, "the venue under the name on a phone")
+        # The script says it again as what's shown changes, and puts each day in the column's order.
+        self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
+        self.assertIn('document.querySelectorAll(".day:not([data-added]) > ul")', build.INDEX_JS, "not Recently added's, newest first")
+
+
 class SoldOut(unittest.TestCase):
     def test_marked_in_a_name(self):
         club = source("ics", "x")
@@ -1233,6 +1271,10 @@ class SoldOut(unittest.TestCase):
         self.assertTrue(build.is_sold_out(merged))
         own = build.event_pages([coolidge], [merged])["e/2026-09-15-union-county-coolidge-corner/index.html"]
         self.assertIn("Coolidge Corner · Tue, Sep 15 · 7:15pm, 7:45pm · Sold out", own)
+
+    def test_the_time_column_strikes_a_first_showing_sold_out(self):
+        self.assertEqual(build.render_clock([time(19, 45), time(19, 15)], ["19:15"]),
+                         '<span class="clock"><b class="sold">7:15pm</b><small>+1</small></span>')
 
     def test_coolidge_film_pages_are_fresher(self):
         page = ('<div class="film-showtime-list"><div class="datepicker "><span class="datepicker__day">Tue</span>'
