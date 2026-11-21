@@ -1179,6 +1179,8 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(".fresh-name { order: -1; flex: 0 1 auto; min-width: 3em;", page)
         self.assertIn(".fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
+        # Side by side, what's announced spread over the height of the film beside it.
+        self.assertIn(".fresh-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between;", page)
 
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]

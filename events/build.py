@@ -5788,6 +5788,14 @@ CSS = """
                 text-overflow: ellipsis; }
   .fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
+  /* Side by side, the two the same height under their headings: what's announced spread from the top of the film's
+     picture to its foot, rather than stopping short of it; and where it's what is taller, the film in its middle. */
+  @media not all and (max-width: 46rem) {
+    .biggest-part, .fresh { display: flex; flex-direction: column; }
+    .biggest { flex: 1 1 auto; }
+    .fresh-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; gap: .45rem; }
+    .fresh-list li + li { margin-top: 0; }
+  }
   /* The filter as a whole a little nearer the listings than the film and what's announced over it, on a phone. */
   @media (max-width: 34rem) { .lead { margin-bottom: 1.6rem; } }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
