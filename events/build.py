@@ -4631,9 +4631,11 @@ INDEX_JS = """
     }
     menu.setAttribute("aria-label", chosen ? `${label}: ${name}` : label);
   };
-  // The search's box has the room to say what can be searched for, on a phone and a wide screen alike. The page
-  // says just "Search" until the script has run.
-  search.setAttribute("placeholder", search.dataset.hint);
+  // The search's box says what can be searched for where it has the room, a phone's the width of the screen; a
+  // wide screen's, at the end of the chips' line, just "Search", as the page does until the script has run.
+  const hint = () => search.setAttribute("placeholder", search.closest(".finders").clientWidth > 280 ? search.dataset.hint : "Search");
+  addEventListener("resize", hint);
+  hint();
   // On a phone, an × in the search while it has something in it. A wide screen has Esc.
   const clearSearch = document.querySelector(".search-clear");
   const combined = [...document.querySelectorAll(".combined")];
@@ -5700,6 +5702,20 @@ CSS = """
   /* On Recently added, the day each is on leads the line: "Sat, Nov 21 · 7pm · Union Pool". */
   .day .row > .when { order: 0; margin: 0; color: #aaa; font-size: .8rem; }
   .day .row > .when::after { content: "·"; margin: 0 .35em; color: #555; }
+  /* Wider than a phone, the search at the end of the chips' line, as wide as is left of it, rather than a row the
+     page's width of its own; the whole bar stays at the top of the window, a line high. Next weekend is the
+     weekend's own page's to link to, as it was, for the room. Where the line hasn't room for all the chips and a
+     search, the chips are swiped along, as a phone's are. */
+  @media not all and (max-width: 34rem) {  /* "body": over the filter's own rules, which come later in the page. */
+    body .filter { flex-wrap: nowrap; column-gap: 1rem; }
+    body .filter .finders { order: 1; flex: 1 0 9rem; max-width: 16rem; margin-left: auto; }
+    body .filter .chips { flex: 0 1 auto; min-width: 0; margin-right: 0; }
+    body .filter .chips::after { width: 0; }
+    body .filter .when-links .later { display: none; }
+    /* The chips' height, so the line is one height. */
+    body .filter .finders .search, body .filter .finders .search-clear { height: 2rem; }
+    body .filter .finders .search-clear { width: 2rem; }
+  }
   /* Wider than a phone, a listing is a line of a timetable instead: its time in its own column, in its kind's
      color, its name, and the venue at the right, one column down the page. In a phone's blocks at that width, two
      columns of them were a page of two-line blocks and color, and one column of them half a screen of listings. */

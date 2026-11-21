@@ -1747,12 +1747,15 @@ class HomePage(unittest.TestCase):
         """The page says "Search"; the script, what for, the box having the width on a phone and a wide screen."""
         self.assertIn('<input class="search" type="search" placeholder="Search" data-hint="Search artists, films, venues" '
                       'aria-label="Search"', self.page())
-        self.assertIn('search.setAttribute("placeholder", search.dataset.hint);', build.INDEX_JS)
+        self.assertIn('search.closest(".finders").clientWidth > 280 ? search.dataset.hint : "Search"', build.INDEX_JS,
+                      "where its box has the room for it")
 
     def test_a_wide_screens_filter_is_a_phones(self):
         """The search's box over a row of chips at every width, and its line put away on the way down as a phone's is."""
         home = self.page()
         self.assertIn("@media all {\n    /* Two rows, each a shape of its own", home)
+        # But a wide screen's search at the end of the chips' line, not a row the page's width.
+        self.assertIn("body .filter .finders { order: 1; flex: 1 0 9rem; max-width: 16rem; margin-left: auto; }", home)
         self.assertIn("const lift = Math.max(0, Math.ceil(", build.INDEX_JS)
         self.assertNotIn("on = on && phone.matches;", build.INDEX_JS)
 
