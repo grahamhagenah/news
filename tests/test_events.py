@@ -1168,15 +1168,13 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn("<b>Dru Cutler, Zapbeetle, Hana Bookman</b>", lead)
         self.assertIn("event=2026-09-20-dru-cutler-zapbeetle-hana-bookman-the-sinclair", lead, "its row is still the one it goes to")
 
-    def test_on_a_phone_the_film_is_small_and_whats_announced_has_two_lines_each(self):
+    def test_on_a_phone_the_film_is_small_and_whats_announced_is_a_line_each(self):
         page = build.render_index([dict(self.listing(20), added="2026-09-15")], [self.venue], [], [], self.built, public=True)
         self.assertIn(".biggest:not(.standing) .biggest-picture { width: 116px; height: 65px; min-height: 0; }", page,
                       "a still beside the film's words, not the width of the page over them")
-        self.assertIn(".fresh-list a { display: block; white-space: normal; }", page)
-        self.assertIn(".fresh-list b { display: block; line-height: 1.3; white-space: nowrap; }", page,
-                      "the name one line, cut short with an ellipsis")
-        self.assertIn(".fresh-list a > span { display: block; margin-top: .1rem; white-space: nowrap; }", page,
-                      "where and when on a line of their own, under the name")
+        self.assertIn(".fresh-list b { flex: 0 1 auto; min-width: 3em; }", page, "the name what's cut short")
+        self.assertIn(".fresh-list a > span { flex: 0 0 auto; max-width: 62%; }", page,
+                      "where and when said whole after it, on the same line")
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
 
     def test_the_list_and_the_page(self):

@@ -5721,12 +5721,12 @@ CSS = """
     .biggest:not(.standing) { align-items: center; }
     .biggest:not(.standing) .biggest-picture { width: 116px; height: 65px; min-height: 0; }
     .biggest:not(.standing) .biggest-about { display: none; }
-    /* What's announced, two lines each rather than one cut short: the name, a line of its own (one too long
-       for it ends in "…"), and under it where and when, which a single shared line seldom had room left to say. */
-    .fresh-list li + li { margin-top: .7rem; }
-    .fresh-list a { display: block; white-space: normal; }
-    .fresh-list b { display: block; line-height: 1.3; white-space: nowrap; }
-    .fresh-list a > span { display: block; margin-top: .1rem; white-space: nowrap; }
+    /* What's announced, a line each, as on a wide screen, but where and when always said whole after the name,
+       and the name what's cut short ("…") where the line runs out: two lines each were tall, and a short name
+       left most of its line empty. Where and when at most most of the line, so a name always has some. */
+    .fresh-list li + li { margin-top: .5rem; }
+    .fresh-list b { flex: 0 1 auto; min-width: 3em; }
+    .fresh-list a > span { flex: 0 0 auto; max-width: 62%; }
   }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
   .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }
