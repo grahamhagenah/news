@@ -1262,6 +1262,8 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".day .row .source { order: 2; display: block; max-width: none;", page)
         self.assertIn(".day .headline { order: 3; flex-basis: 100%; }", page)
         self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }", page)
+        # A wide screen's: two columns a day, in a wider page of listings only.
+        self.assertIn("@media (min-width: 60rem) {\n    main:has(.filter) { max-width: 64rem; }\n    .day > ul { columns: 2;", page)
         # The script says it again as what's shown changes, and puts each day in the column's order.
         self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
         self.assertIn('document.querySelectorAll(".day:not([data-added]) > ul")', build.INDEX_JS, "not Recently added's, newest first")
@@ -1735,12 +1737,18 @@ class HomePage(unittest.TestCase):
         self.assertNotIn("when-pick", home)
         self.assertIn(".chips { display: contents; gap: inherit; }", home, "a wide screen's bar holds them itself")
 
-    def test_a_phones_search_says_what_can_be_searched_for(self):
-        """The field says "Search", which is all a wide screen's has room for; a phone's box has the width to say
-        what for, which the script swaps in there."""
+    def test_the_search_says_what_can_be_searched_for(self):
+        """The page says "Search"; the script, what for, the box having the width on a phone and a wide screen."""
         self.assertIn('<input class="search" type="search" placeholder="Search" data-hint="Search artists, films, venues" '
                       'aria-label="Search"', self.page())
-        self.assertIn('search.setAttribute("placeholder", phone.matches ? search.dataset.hint : "Search")', build.INDEX_JS)
+        self.assertIn('search.setAttribute("placeholder", search.dataset.hint);', build.INDEX_JS)
+
+    def test_a_wide_screens_filter_is_a_phones(self):
+        """The search's box over a row of chips at every width, and its line put away on the way down as a phone's is."""
+        home = self.page()
+        self.assertIn("@media all {\n    /* Two rows, each a shape of its own", home)
+        self.assertIn("const lift = Math.max(0, Math.ceil(", build.INDEX_JS)
+        self.assertNotIn("on = on && phone.matches;", build.INDEX_JS)
 
     def test_the_home_pages_line_is_in_its_header_and_a_kind_pages_under_it(self):
         home = self.page()

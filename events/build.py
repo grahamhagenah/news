@@ -4629,10 +4629,9 @@ INDEX_JS = """
     }
     menu.setAttribute("aria-label", chosen ? `${label}: ${name}` : label);
   };
-  // On a phone the search's box has the room to say what can be searched for; a wide screen's field, just "Search".
-  const hint = () => search.setAttribute("placeholder", phone.matches ? search.dataset.hint : "Search");
-  phone.addEventListener("change", hint);
-  hint();
+  // The search's box has the room to say what can be searched for, on a phone and a wide screen alike. The page
+  // says just "Search" until the script has run.
+  search.setAttribute("placeholder", search.dataset.hint);
   // On a phone, an × in the search while it has something in it. A wide screen has Esc.
   const clearSearch = document.querySelector(".search-clear");
   const combined = [...document.querySelectorAll(".combined")];
@@ -4645,15 +4644,15 @@ INDEX_JS = """
   fromAddress();
   // The bar: its height, for the day's heading to stick under it rather than behind it.
   // The bar's height, which a listing gone to is kept clear of.
-  // On a phone the search is the bar's first row, which scrolls away with the page: the bar sticks that much above
+  // The search is the bar's first row, which scrolls away with the page: the bar sticks that much above
   // the top of the window (--lift), so only the chips under it stay, with the room over them that the bar has
   // under them, whatever the room between them and the search.
   // Scrolling back up brings the search back down into the bar (revealed), to search again without going back to
   // the top; scrolling on down the list puts it away again.
   let revealed = false;
   const barHeight = () => {
-    const lift = phone.matches ? Math.max(0, Math.ceil(filter.querySelector(".chips [data-show]").getBoundingClientRect().top
-      - filter.getBoundingClientRect().top - parseFloat(getComputedStyle(filter).paddingBottom))) : 0;
+    const lift = Math.max(0, Math.ceil(filter.querySelector(".chips [data-show]").getBoundingClientRect().top
+      - filter.getBoundingClientRect().top - parseFloat(getComputedStyle(filter).paddingBottom)));
     document.documentElement.style.setProperty("--lift", lift + "px");
     document.documentElement.style.setProperty("--bar", Math.floor(filter.getBoundingClientRect().height - (revealed ? 0 : lift)) + "px");
     // A day's heading's too, which sticks under the bar.
@@ -4705,10 +4704,8 @@ INDEX_JS = """
   };
   addEventListener("scroll", markStuck, { passive: true });
   // Which way the page last went, by more than a nudge: up brings the search's line into the bar, down puts it
-  // away. Not while the search is being typed in, when the list changing under it moves the page, nor where there's
-  // no line to bring (a wide screen's bar has it all on one).
+  // away. Not while the search is being typed in, when the list changing under it moves the page.
   const reveal = on => {
-    on = on && phone.matches;
     if (on === revealed) return;
     revealed = on;
     filter.classList.toggle("revealed", on);
@@ -4722,7 +4719,6 @@ INDEX_JS = """
     if (document.activeElement === search) return;
     reveal(moved < 0 && scrollY > 0);
   }, { passive: true });
-  phone.addEventListener("change", () => reveal(false));
   // The bar and the heading under it slide to their places: check again once they're there.
   filter.addEventListener("transitionend", markStuck);
   const params = () => {
@@ -5426,9 +5422,9 @@ PIN_CSS = """
   .filter { position: sticky; top: 0; z-index: 3; padding: .55rem 0; margin-top: -1.3rem; margin-bottom: -1.85rem;
             background: #000; }
   h1.tagline + .bar-mark + .filter, .lead + .bar-mark + .filter { margin-top: -.55rem; }
-  /* On a phone, a slimmer bar, which is always there over a small screen: less padding, the same room around
-     it where it isn't stuck. */
-  @media (max-width: 34rem) {
+  /* The bar as a phone has it, on a wide screen too (below): less padding than a bar of one line had, the same
+     room around it where it isn't stuck. */
+  @media all {
     .filter { padding: .3rem 0; margin-bottom: -1.35rem; }
     h1.tagline + .bar-mark + .filter, .lead + .bar-mark + .filter { margin-top: -.3rem; }
   }
@@ -5454,7 +5450,9 @@ PIN_CSS = """
      short word (below), are a phone's alone: a wide screen's menu says what's chosen itself. */
   .search-clear, .pick-said { display: none; }
   .pick-box { display: contents; }
-  @media (max-width: 34rem) {
+  /* A phone's filter, and a wide screen's the same, so the two read as one design (what's before this is what a
+     wide screen's one line of words was, kept where it still says how a part looks). */
+  @media all {
     /* Two rows, each a shape of its own rather than more words: the search, a box the width of the column, which
        scrolls away with the page (the bar sticks --lift, its height, above the window, which the script
        measures); and under it a row of chips, the row that stays at the top of the window: the kinds, then
@@ -5626,14 +5624,15 @@ CSS = """
      weight, in their gray, with the day itself in white as the kind chosen is. */
   .day > h2 { margin: 1.6rem 0 0; padding: .65rem 0 .5rem; color: #666; font-size: .8rem; font-weight: 400;
               letter-spacing: 0; text-transform: none; }
-  @media (max-width: 34rem) { .day > h2 { margin-top: 1.8rem; padding: .25rem 0 .3rem; } }
+  .day > h2 { margin-top: 1.8rem; padding: .25rem 0 .3rem; }  /* A phone's, on a wide screen too. */
   /* Under it, a faint line the width of the list, the site's hairline, so where one day ends and the next starts
      is plain at a glance, and a little room between it and the first row. */
   .day > h2 { margin-bottom: .35rem; border-bottom: 1px solid #1c1c1c; }
-  @media (max-width: 34rem) { .day > h2 { padding-bottom: .45rem; } }
-  /* On a phone, a small label in capitals, "TODAY · TUESDAY, NOV 17": under a search box and a row of chips, a
-     heading the kinds' size read as a third row of controls. The day in a lighter gray than its date. */
-  @media (max-width: 34rem) {
+  .day > h2 { padding-bottom: .45rem; }
+  /* A small label in capitals, "TODAY · TUESDAY, NOV 17", on a phone and a wide screen alike: under a search box
+     and a row of chips, a heading the kinds' size read as a third row of controls. The day in a lighter gray than
+     its date. */
+  @media all {
     .day > h2 { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }
     .day > h2 .relative:not(:empty), .day > h2 .weekday, .day > h2 .relative:not(:empty) + .date .weekday { color: #bbb; }
     .day > h2 .relative:not(:empty) { margin-right: .45em; }
@@ -5699,6 +5698,14 @@ CSS = """
   /* On Recently added, the day each is on leads the line: "Sat, Nov 21 · 7pm · Union Pool". */
   .day .row > .when { order: 0; margin: 0; color: #aaa; font-size: .8rem; }
   .day .row > .when::after { content: "·"; margin: 0 .35em; color: #555; }
+  /* A wide screen's listings in two columns a day, down the first and on into the second, in a wider page: the
+     same blocks as a phone's, using the width rather than leaving most of it empty. Only a page of listings is
+     wider (the about page's prose stays a reading width), and only where both columns have room for a name. */
+  @media (min-width: 60rem) {
+    main:has(.filter) { max-width: 64rem; }
+    .day > ul { columns: 2; column-gap: 3.5rem; }
+    .day > ul > li { break-inside: avoid; }
+  }
   /* No room kept at the edge for a mark, on a phone; a pointer's band keeps its own. */
   @media (max-width: 34rem) { body .day > ul > li.row { padding-left: 0; } }
   @media (hover: hover) and (pointer: fine) and (max-width: 34rem) { body .day > ul > li.row { padding-left: .6rem; } }
