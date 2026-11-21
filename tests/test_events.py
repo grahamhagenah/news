@@ -1709,6 +1709,15 @@ class HomePage(unittest.TestCase):
         # The bar is measured from a chip, not the row, whose padding isn't the bar's.
         self.assertIn('filter.querySelector(".chips [data-show]").getBoundingClientRect().top', build.INDEX_JS)
 
+    def test_each_kind_in_the_filter_is_led_by_its_mark(self):
+        """In its color, which the list's times are in: the filter is the key to them. All has none."""
+        home, R = self.page(), build.PUBLIC_ROOT
+        self.assertIn(f'<a data-show="all" href="{R}" aria-current="page">All</a>', home)
+        self.assertIn(f'<a data-show="film" href="{R}film/"><svg class="icon" aria-hidden="true"><use href="#icon-film"/></svg>Film</a>', home)
+        tonight = self.page(tonight=True)
+        self.assertIn('<button data-show="music"><svg class="icon" aria-hidden="true"><use href="#icon-music"/></svg>Music</button>', tonight)
+        self.assertIn(".filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2px; }", home)
+
     def test_on_a_phone_the_filter_is_a_search_box_over_a_row_of_chips(self):
         """The kinds, when and where are wrapped together, to be one row a phone swipes along; the search after
         them, which a phone puts above. No menu for when: tonight and the weekends are chips of their own."""

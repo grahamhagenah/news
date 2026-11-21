@@ -3600,10 +3600,11 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
                        f'{day:%b} {day.day}</span></h2>\n')
         sections.append(heading + '<ul>\n' + "\n".join(render_row(item) for item in rows) + "\n</ul></section>")
 
-    # The kinds by name alone: each row's mark says its kind already, and the filter's words are plain enough
-    # without one beside them.
+    # Each kind led by its mark, in its color: the list's times are in those colors, and with the rows' own marks
+    # gone (on a phone), the filter is where the colors are said. All has none.
+    mark = lambda key: "" if key == "all" else icon(key, decorative=True)
     buttons = '<button data-show="all">All</button>' + "".join(
-        f'<button data-show="{key}">{label}</button>' for key, label in CATEGORIES.items()
+        f'<button data-show="{key}">{mark(key)}{label}</button>' for key, label in CATEGORIES.items()
     )
     filter_attributes = ""
     if public and (weekend is not None or tonight or added):
@@ -3616,7 +3617,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         links = [("all", root, "All")] + [(key, f"{root}{PUBLIC_PAGES[key][0]}/", html.escape(label))
                                                   for key, label in CATEGORIES.items()]
         marked = ' aria-current="page"'
-        buttons = "".join(f'<a data-show="{key}" href="{href}"{marked if key == current else ""}>{label}</a>'
+        buttons = "".join(f'<a data-show="{key}" href="{href}"{marked if key == current else ""}>{mark(key)}{label}</a>'
                           for key, href, label in links)
         filter_attributes = f' data-pages data-current="{current}"'
     # Tonight and this weekend beside the kinds, as a pair of their own: they narrow by when rather than by what,
@@ -5400,7 +5401,10 @@ PIN_CSS = """
   /* Tonight and this weekend: a pair of their own after the kinds, a hairline between, since they narrow by when
      and the kinds by what. */
   .when-links { display: flex; gap: inherit; padding-left: 1.1rem; border-left: 1px solid #262626; }
-  .when-links .later { display: none; }  /* Next weekend: a phone's row has the room (below); here, the weekend's page links to it. */
+  .when-links .later { display: none; }
+  /* Each kind's mark before its word, in its color (.icon's own), set by the middle of the letters. */
+  .filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2px; }
+  .filter .chips [data-show] > .icon { flex: none; }  /* Next weekend: a phone's row has the room (below); here, the weekend's page links to it. */
   /* The kinds, when and where are wrapped together for a phone's row of chips; on a wide screen they sit in the
      bar itself, the venue's menu at the end of it beside the search. */
   .chips { display: contents; gap: inherit; }  /* The bar's gap, for tonight and the weekend to take in turn. */
