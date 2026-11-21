@@ -5504,9 +5504,10 @@ PIN_CSS = """
       .filter .chips [data-show]:not([aria-current], [aria-pressed="true"]):hover,
       .filter .chips .when-links a:not([aria-current]):hover { border-color: #555; color: #ccc; }
     }
-    /* What's chosen, filled in: a kind, tonight or a weekend, a venue. */
+    /* What's chosen: a kind, tonight or a weekend, a venue. Its words white, its outline lighter and a shade of
+       grey behind it, rather than filled in white, which in a row of dark chips outshone everything under it. */
     .filter .chips [aria-current="page"], .filter .chips [aria-pressed="true"], .filter .chips .pick-box.chosen {
-      border-color: #fff; background: #fff; color: #000; }
+      border-color: #5a5a5a; background: #1c1c1c; color: #fff; }
     /* The venue's chip says "Where", or what's chosen ("Bushwick", "Union Pool", a long one ending in "…"), with a
        small arrow after it. The word is drawn over the menu itself, which is there in full but unseen, so a press
        opens the phone's own list of choices; a menu's own width would be its longest choice in Safari, a venue's
@@ -5515,7 +5516,7 @@ PIN_CSS = """
     .pick-box .pick-said { display: block; min-width: 0; max-width: 9rem; overflow: hidden; white-space: nowrap;
                            text-overflow: ellipsis; padding-right: 1em;
                            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center / .6em; }
-    .pick-box.chosen .pick-said { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+    .pick-box.chosen .pick-said { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23fff' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
     .filter .chips .pick-box .pick { position: absolute; inset: -7px -.2rem; width: calc(100% + .4rem); max-width: none;
                                      height: calc(100% + 14px); margin: 0; padding: 0; opacity: 0; font-size: 1rem;
                                      cursor: pointer; }
