@@ -1243,7 +1243,11 @@ class TimeColumn(unittest.TestCase):
         page = build.render_index([build.event(self.venue, "A Show", self.day, time(20))], [self.venue], [], [], self.built, public=True)
         self.assertIn(".day > ul > li.row, .combined > details > summary { grid-template-columns: auto 6.1rem minmax(0, 1fr) auto; }", page)
         self.assertIn(".day .headline > .times, .day .headline .tail { display: none; }", page, "said once, in the column")
-        self.assertIn(".day .row .source { grid-column: 2; grid-row: 2;", page, "the venue under the name on a phone")
+        # On a phone, one block: the time and the venue on a small line, the name under it, no mark.
+        self.assertIn(".clock { order: 1; gap: .3em; font-size: .8rem; }", page)
+        self.assertIn(".day .row .source { order: 2; color: #777; font-size: .8rem; }", page)
+        self.assertIn(".day .headline { order: 3; flex-basis: 100%; }", page)
+        self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }", page)
         # The script says it again as what's shown changes, and puts each day in the column's order.
         self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
         self.assertIn('document.querySelectorAll(".day:not([data-added]) > ul")', build.INDEX_JS, "not Recently added's, newest first")

@@ -5682,18 +5682,25 @@ CSS = """
   .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .clock small { color: #666; font-size: .85em; }
   .day .headline > .times, .day .headline .tail { display: none; }
-  /* On a phone, two columns: the time, and the name with the venue on a line of its own under it, in grey; the
-     time's "+6" under it beside the venue. Each set level with the line beside it, by their letters. */
+  /* On a phone, each listing one block from one edge rather than columns, which a narrow screen spread apart
+     (a short time left a gap before its name, different on every row): a small line with the time, in its
+     kind's color, its "+6", and the venue ("3:15pm · Metrograph"), and the name under it. Still a timetable:
+     every listing starts with its time. The kind's mark goes, its color being the time's. */
   @media (max-width: 34rem) {
     .day > ul > li.row:not(.combined), .combined > details > summary {
-      display: grid; grid-template-columns: 4.85rem minmax(0, 1fr); gap: 0; align-items: baseline; }
-    .clock { display: contents; }
-    .clock b { grid-column: 1; grid-row: 1; font-size: .92rem; }
-    .clock small { grid-column: 1; grid-row: 2; color: #777; font-size: .78rem; }
-    .day .headline { grid-column: 2; grid-row: 1; }
-    .day .row .source { grid-column: 2; grid-row: 2; display: block; margin-top: .1rem; color: #888; font-size: .85rem; }
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 0; }
+    body .day > ul > li.row { padding-left: 0; }
+    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }
+    .clock { order: 1; gap: .3em; font-size: .8rem; }
+    .clock b { color: var(--dot); }
+    .clock small { color: #666; font-size: inherit; }
+    .day .row .source { order: 2; color: #777; font-size: .8rem; }
     .day .row .source::before { content: none; }
+    .clock:not(:empty) ~ .source::before, .clock:not(:empty) ~ * .source::before { content: "·"; margin: 0 .35em; color: #555; }
+    .day .headline { order: 3; flex-basis: 100%; }
   }
+  /* A narrow window with a pointer: the band's room at the edge, where a phone has none. */
+  @media (hover: hover) and (pointer: fine) and (max-width: 34rem) { body .day > ul > li.row { padding-left: .6rem; } }
   .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* Over the listings on the home page: the week's biggest film beside the newest few announced. Ruled off
