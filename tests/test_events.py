@@ -1184,7 +1184,7 @@ class JustAnnounced(unittest.TestCase):
         self.assertEqual(film, "", "no film among them")
         self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
         self.assertEqual(lead.count('<a class="biggest'), 1, "one of them, drawn as the film is")
-        self.assertIn(f'<a class="biggest" data-category="music" href="{R}?event=2026-09-20-show-0-the-sinclair">'
+        self.assertIn(f'<a class="biggest standing" data-category="music" href="{R}?event=2026-09-20-show-0-the-sinclair">'
                       '<span class="biggest-said"><span class="biggest-facts">'
                       '<span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span> · '
                       '<b class="fresh-time">8pm</b> · The Sinclair</span><b class="biggest-title">Show 0</b></span></a>', lead,
@@ -1196,7 +1196,7 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn('<span class="lead-day" data-date="2026-09-15" data-said="Tue, Sep 15">Today</span>', said)
         said = build.render_lead(soon[1:], self.built)[0]
         self.assertIn('<span class="lead-day" data-date="2026-09-16" data-said="Wed, Sep 16">Tomorrow</span>', said)
-        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><a class="biggest"', lead,
+        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><a class="biggest standing"', lead,
                       "the way to the rest in the heading's line, not one of its own")
         # Nothing new and nothing big: nothing over the list at all.
         self.assertEqual(build.render_lead([dict(self.listing(20), added="2026-09-01")], self.built), ("", ""))
@@ -2353,9 +2353,9 @@ class FreshPick(unittest.TestCase):
 
     def test_drawn_with_its_picture(self):
         item = self.announced(1, "Pictured", image="https://x/pictured.jpg", about=["A night of it."])
-        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg), \
-                mock.patch.object(build, "picture_shape", return_value=(1600, 900)):
+        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg):
             lead = build.render_lead([item], self.built)[0]
         self.assertIn('<img class="biggest-picture" src="', lead)
-        self.assertIn('width="160" height="90"', lead, "a photograph lying on its side")
+        self.assertIn('<a class="biggest standing"', lead)
+        self.assertIn('width="76" height="114"', lead, "in a poster's shape, the same size as the film's beside it")
         self.assertIn('<span class="biggest-about">A night of it.</span>', lead)

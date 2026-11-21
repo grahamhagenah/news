@@ -3444,12 +3444,12 @@ def render_lead(events, built_at, before=""):
     if fresh:
         # One of what's just announced, drawn as the film is: its picture beside when and where, its name and a line
         # about it. The rest are a press of See all away.
+        # Its picture always in a poster's shape, cut from the middle of a photograph, so it's the same size as the
+        # film's beside it and the two read as a pair.
         item, url = fresh
-        shape = picture_shape(url) if url else None
-        standing = bool(shape) and shape[1] > shape[0] * 1.2
-        box = (76, 114) if standing else (160, 90)
+        standing = True
         picture = (f'<img class="biggest-picture" src="{html.escape(kept_picture(url))}" alt="" '
-                   f'width="{box[0]}" height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if url else ""
+                   'width="76" height="114" decoding="async" referrerpolicy="no-referrer">') if url else ""
         about = clip(item.get("about", []), 150, most=1)
         ident = listing_id(item["date"], item["title"], item["venue"])[0]
         parts.append(
