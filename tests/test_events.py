@@ -1211,6 +1211,17 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(f"<loc>{build.PUBLIC_URL}new/</loc>", build.render_sitemap(self.built))
 
 
+class ViewHoldsThePage(unittest.TestCase):
+    def test_the_page_behind_an_open_view_doesnt_scroll(self):
+        """The root hides its sideways overflow, so hiding the body's doesn't reach the window's scrolling: the
+        root's is hidden too, and the view's scrolling stops at its ends rather than carrying on into the page."""
+        venue = dict(source("ics", "x", "music", "The Sinclair"), public=True)
+        page = build.render_index([build.event(venue, "A Show", date(2026, 9, 15), time(20))], [venue], [], [],
+                                  datetime(2026, 9, 13, tzinfo=timezone.utc), public=True)
+        self.assertIn("body.viewing, html:has(> body.viewing) { overflow: hidden; }", page)
+        self.assertIn("dialog.event, .event-body { overscroll-behavior: contain; }", page)
+
+
 class TimeColumn(unittest.TestCase):
     """A listing's time in a column of its own before its name, so the eye runs down the times rather than
     hunting for each after a name of its own length."""

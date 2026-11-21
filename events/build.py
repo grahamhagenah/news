@@ -5827,7 +5827,12 @@ CSS = """
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
      way to the venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
-  body.viewing { overflow: hidden; }
+  /* The page held still behind it. The page's scrolling is the window's, which hiding the body's overflow doesn't
+     reach here: the root hides its sideways overflow itself, so the body's is the body's own. So the root's too;
+     and the view's own scrolling stops at its ends rather than carrying on into the page under it, a flick at the
+     end of a description or on a view too short to scroll at all moving the list behind it. */
+  body.viewing, html:has(> body.viewing) { overflow: hidden; }
+  dialog.event, .event-body { overscroll-behavior: contain; }
   /* Down the side of the screen, so it's the same size whatever's in it and stepping through the list doesn't
      move it around; what doesn't fit scrolls inside it, under the buttons at its top. */
   dialog.event { width: min(32rem, 100%); height: 100dvh; max-height: none; margin: 0 0 0 auto; box-sizing: border-box;
