@@ -3408,10 +3408,11 @@ def render_lead(events, built_at, before=""):
     # Each part headed as a day is, and each listing in it drawn as the list's are: a small line saying when and
     # where, over its name.
     if film:
-        # Its picture standing on its end, beside its words, whether it's a poster or a still from the film, which
-        # is cut to the poster's shape, its middle kept.
+        # Its picture beside its words, in its own shape: a poster standing on its end, a still from the film lying
+        # on its side. Cut to a poster's shape, a still lost most of its scene, and what was left was seldom a face.
+        box = (76, 114) if film["standing"] else (160, 90)
         picture = (f'<img class="biggest-picture" src="{html.escape(kept_picture(film["image"]))}" alt="" '
-                   'width="76" height="114" decoding="async" referrerpolicy="no-referrer">') if film["image"] else ""
+                   f'width="{box[0]}" height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if film["image"] else ""
         parts.append(
             '<div class="biggest-part"><div class="lead-head"><span class="lead-tag">Playing everywhere</span></div>'
             f'<a class="biggest{" standing" if film["standing"] else ""}" data-category="film" '
@@ -5727,10 +5728,13 @@ CSS = """
   .fresh-tag:hover { color: #bbb; text-decoration: none; }
   .fresh-more { flex: none; color: #777; font-size: .74rem; letter-spacing: .04em; text-transform: uppercase; }
   .fresh-more:hover { color: #fff; text-decoration: none; }
-  /* The film: its picture standing beside its words, a poster's shape, a still cut to it with its middle kept. */
+  /* The film: its picture beside its words in its own shape, a poster standing, a still lying on its side, a
+     little smaller on a phone, where the words beside it have less room. */
   .biggest { display: flex; align-items: center; gap: .9rem; color: inherit; }
   .biggest:hover, .fresh-list a:hover { text-decoration: none; }
-  .biggest-picture { flex: none; width: 76px; height: 114px; border-radius: 4px; object-fit: cover; background: #161616; }
+  .biggest-picture { flex: none; width: 160px; height: 90px; border-radius: 4px; object-fit: cover; background: #161616; }
+  .biggest.standing .biggest-picture { width: 76px; height: 114px; }
+  @media (max-width: 34rem) { .biggest:not(.standing) .biggest-picture { width: 120px; height: 68px; } }
   .biggest-said { display: grid; gap: .15rem; min-width: 0; }
   .biggest-facts, .fresh-meta { display: block; color: #777; font-size: .8rem; line-height: 1.4; }
   .biggest-facts .lead-day, .fresh-meta .lead-day { color: #aaa; }

@@ -1945,8 +1945,8 @@ class Biggest(unittest.TestCase):
         with mock.patch.object(build, "picture_shape", return_value=None):  # It wouldn't load, so no shape.
             self.assertNotIn("<img", build.render_lead(poster, self.built)[0])
 
-    def test_a_poster_and_a_still_both_stand_on_end(self):
-        """A poster's shape either way, a still cut to it: the film's picture is the same shape every week."""
+    def test_a_poster_and_a_still_each_get_their_own_shape(self):
+        """A poster stands on its end, a still lies on its side: cut to a poster's shape, a still lost its scene."""
         events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         standing, _ = build.render_lead(events, self.built)
         self.assertIn('class="biggest standing"', standing)
@@ -1954,9 +1954,10 @@ class Biggest(unittest.TestCase):
         with mock.patch.object(build, "picture_shape", return_value=(1920, 1080)):
             lying, _ = build.render_lead(events, self.built)
         self.assertIn('class="biggest" data-category="film"', lying)
-        self.assertIn('width="76" height="114"', lying)
-        self.assertIn(".biggest-picture { flex: none; width: 76px; height: 114px; border-radius: 4px; object-fit: cover;",
-                      build.render_index(events, [], [], [], self.built, public=True))
+        self.assertIn('width="160" height="90"', lying)
+        page = build.render_index(events, [], [], [], self.built, public=True)
+        self.assertIn(".biggest.standing .biggest-picture { width: 76px; height: 114px; }", page)
+        self.assertIn(".biggest:not(.standing) .biggest-picture { width: 120px; height: 68px; }", page, "a phone's, a little smaller")
 
     def test_the_poster_is_copied_into_the_site(self):
         """So it loads with the page, not after it from a theater's server; a new poster is a new file."""
