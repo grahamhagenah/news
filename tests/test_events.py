@@ -1165,16 +1165,17 @@ class JustAnnounced(unittest.TestCase):
             self.assertEqual(build.calm(name), name)
         shouting = dict(self.listing(20, "DRU CUTLER, ZAPBEETLE, HANA BOOKMAN"), added="2026-09-15")
         lead = build.render_lead([shouting], self.built)[0]
-        self.assertIn("<b>Dru Cutler, Zapbeetle, Hana Bookman</b>", lead)
+        self.assertIn('<b class="fresh-name">Dru Cutler, Zapbeetle, Hana Bookman</b>', lead)
         self.assertIn("event=2026-09-20-dru-cutler-zapbeetle-hana-bookman-the-sinclair", lead, "its row is still the one it goes to")
 
-    def test_on_a_phone_the_film_is_small_and_whats_announced_is_a_line_each(self):
+    def test_headed_and_drawn_as_the_list_is(self):
+        """Each part headed as a day is, a small grey label over a hairline, with no mark or color of its own; and
+        on a wide screen the two over the list's two columns."""
         page = build.render_index([dict(self.listing(20), added="2026-09-15")], [self.venue], [], [], self.built, public=True)
-        self.assertIn(".biggest:not(.standing) .biggest-picture { width: 116px; height: 65px; min-height: 0; }", page,
-                      "a still beside the film's words, not the width of the page over them")
-        self.assertIn(".fresh-list b { flex: 0 1 auto; min-width: 3em; }", page, "the name what's cut short")
-        self.assertIn(".fresh-list a > span { flex: 0 0 auto; max-width: 62%; }", page,
-                      "where and when said whole after it, on the same line")
+        self.assertIn('<div class="lead-head"><a class="lead-tag fresh-tag" href="', page)
+        self.assertIn(".lead-tag { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }", page)
+        self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem 3.5rem;", page)
+        self.assertIn(".fresh-name { display: block;", page, "the name a line of its own, under when and where")
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
 
     def test_the_list_and_the_page(self):
@@ -1183,9 +1184,10 @@ class JustAnnounced(unittest.TestCase):
         self.assertEqual(film, "", "no film among them")
         self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
         self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN, "the newest few, in words")
-        self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair"><b>Show 0</b>'
-                      '<span>The Sinclair · <span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span>'
-                      '</span></a></li>', lead, "its name, then where and when, the day with its weekday")
+        self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music"><span class="fresh-meta">'
+                      '<span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span> · '
+                      '<b class="fresh-time">8pm</b> · The Sinclair</span><b class="fresh-name">Show 0</b></a></li>', lead,
+                      "as the list's listings are: a small line of when and where, the day with its weekday, over its name")
         self.assertNotIn("<img", lead, "no pictures of what's announced")
         # Today's and tomorrow's say so, as the film's day does; the script says them again by the reader's day.
         soon = [dict(self.listing(15, "Tonight's"), added="2026-09-15"), dict(self.listing(16, "Tomorrow's"), added="2026-09-15")]
@@ -1841,7 +1843,8 @@ class Biggest(unittest.TestCase):
         goes back to the date itself (data-said) for a page read after midnight."""
         events = [self.showing("Wide Release", f"Theater {n}") for n in range(4)]
         lead, _ = build.render_lead(events, self.built)
-        self.assertIn('4 theaters · <span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Today</span>', lead)
+        self.assertIn('<span class="biggest-facts"><span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Today</span>'
+                      ' · 4 theaters</span>', lead, "the day first, as a listing's small line has it")
         later, _ = build.render_lead(events, self.built - timedelta(days=2))
         self.assertIn('data-said="Sun, Sep 20">Sun, Sep 20</span>', later, "not today or tomorrow: the date")
         self.assertIn('document.querySelectorAll(".lead-day")', build.INDEX_JS)
@@ -1942,15 +1945,18 @@ class Biggest(unittest.TestCase):
         with mock.patch.object(build, "picture_shape", return_value=None):  # It wouldn't load, so no shape.
             self.assertNotIn("<img", build.render_lead(poster, self.built)[0])
 
-    def test_a_poster_and_a_still_each_get_their_own_shape(self):
+    def test_a_poster_and_a_still_both_stand_on_end(self):
+        """A poster's shape either way, a still cut to it: the film's picture is the same shape every week."""
         events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         standing, _ = build.render_lead(events, self.built)
         self.assertIn('class="biggest standing"', standing)
         self.assertIn('width="76" height="114"', standing)
         with mock.patch.object(build, "picture_shape", return_value=(1920, 1080)):
             lying, _ = build.render_lead(events, self.built)
-        self.assertIn('class="biggest"', lying)
-        self.assertIn('width="160" height="90"', lying)
+        self.assertIn('class="biggest" data-category="film"', lying)
+        self.assertIn('width="76" height="114"', lying)
+        self.assertIn(".biggest-picture { flex: none; width: 76px; height: 114px; border-radius: 4px; object-fit: cover;",
+                      build.render_index(events, [], [], [], self.built, public=True))
 
     def test_the_poster_is_copied_into_the_site(self):
         """So it loads with the page, not after it from a theater's server; a new poster is a new file."""
