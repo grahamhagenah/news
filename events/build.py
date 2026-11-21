@@ -3150,7 +3150,9 @@ def render_clock(moments, sold=()):
         return '<span class="clock"></span>'
     first = moments[0]
     struck = ' class="sold"' if f"{first:%H:%M}" in sold else ""
-    more = f"<small>+{len(moments) - 1}</small>" if len(moments) > 1 else ""
+    # "+6 more": a bare "+6" read as a price or an age as often as as more showtimes.
+    count = len(moments) - 1
+    more = f'<small title="{count} more showtime{"s" * (count > 1)}">+{count} more</small>' if count else ""
     return f'<span class="clock"><b{struck}>{clock(first)}</b>{more}</span>'
 
 
@@ -3652,8 +3654,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         sections.append(heading + '<ul>\n' + "\n".join(render_row(dict(item, evening_starts=True) if at == start else item)
                                                          for at, item in enumerate(rows)) + "\n</ul></section>")
 
-    # The kinds' words alone, without their marks, so the bar stays narrow.
-    mark = lambda key: ""
+    # Each kind led by its mark, in its color: the list's times are in those colors, and with the rows' own marks
+    # gone (on a phone), the filter is where the colors are said. All has none.
+    mark = lambda key: "" if key == "all" else icon(key, decorative=True)
     buttons = '<button data-show="all">All</button>' + "".join(
         f'<button data-show="{key}">{mark(key)}{label}</button>' for key, label in CATEGORIES.items()
     )
@@ -4581,7 +4584,7 @@ INDEX_JS = """
       .filter(t => inPart(li, t)).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1);
     const more = new Set(times.map(t => t.dataset.time)).size - 1;
     const struck = times[0]?.classList.contains("sold") && !li.matches(".combined") ? ' class="sold"' : "";
-    column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small>+${more}</small>` : "") : "";
+    column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small title="${more} more showtime${more > 1 ? "s" : ""}">+${more} more</small>` : "") : "";
     li.dataset.first = times[0]?.dataset.time || "";
   };
   // Each day's rows in the order of the times in the column: a film at several theaters is placed by its first
@@ -5801,13 +5804,13 @@ CSS = """
      columns of them were a page of two-line blocks and color, and one column of them half a screen of listings. */
   @media not all and (max-width: 34rem) {
     .day > ul > li.row:not(.combined), .combined > details > summary {
-      display: grid; grid-template-columns: 5.7rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
+      display: grid; grid-template-columns: 7.8rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
     .clock { grid-column: 1; grid-row: 1; font-size: .85rem; }
     .day .headline { grid-column: 2; grid-row: 1; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
     /* Recently added: the day each is on a column of its own, before its time. */
-    .day[data-added] > ul > li.row { grid-template-columns: 6.2rem 5.7rem minmax(0, 1fr) auto; }
+    .day[data-added] > ul > li.row { grid-template-columns: 6.2rem 7.8rem minmax(0, 1fr) auto; }
     .day[data-added] .row > .when { grid-column: 1; grid-row: 1; }
     .day[data-added] .row > .when::after { content: none; }
     .day[data-added] .clock { grid-column: 2; }

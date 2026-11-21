@@ -1238,7 +1238,7 @@ class TimeColumn(unittest.TestCase):
     built = datetime(2026, 9, 13, tzinfo=timezone.utc)
 
     def test_the_first_and_how_many_more(self):
-        self.assertEqual(build.render_clock([time(21), time(19), time(19)]), '<span class="clock"><b>7pm</b><small>+1</small></span>')
+        self.assertEqual(build.render_clock([time(21), time(19), time(19)]), '<span class="clock"><b>7pm</b><small title="1 more showtime">+1 more</small></span>')
         self.assertEqual(build.render_clock([time(20, 30)]), '<span class="clock"><b>8:30pm</b></span>')
         self.assertEqual(build.render_clock([]), '<span class="clock"></span>', "no time given: an empty column")
 
@@ -1255,7 +1255,7 @@ class TimeColumn(unittest.TestCase):
                     build.event(dict(film, name="Somerville"), "Wide Release", self.day, time(13))]
         combined = [item for item in build.combine_films(showings) if "showings" in item]
         self.assertEqual(len(combined), 1)
-        self.assertIn('<span class="clock"><b>1pm</b><small>+1</small></span><div class="headline"><span class="title">Wide Release',
+        self.assertIn('<span class="clock"><b>1pm</b><small title="1 more showtime">+1 more</small></span><div class="headline"><span class="title">Wide Release',
                       build.render_row(combined[0]), "1pm at two of them and 4pm at the third: 1pm, and one more")
 
     def test_each_listing_one_block_on_a_phone_and_a_timetables_line_wider(self):
@@ -1271,7 +1271,7 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }", page)
         # Wider than a phone, one column of a timetable's lines: the time, the name, the venue at the right.
         self.assertIn("@media not all and (max-width: 34rem) {\n    .day > ul > li.row:not(.combined), .combined > details > summary {\n"
-                      "      display: grid; grid-template-columns: 5.7rem minmax(0, 1fr) auto;", page)
+                      "      display: grid; grid-template-columns: 7.8rem minmax(0, 1fr) auto;", page)
         self.assertNotIn("max-width: 64rem", page, "not two columns in a wider page")
         # The time grey, its kind a small dot in its color before it, not the whole time in color.
         self.assertIn(".clock b { color: #d4d4d4; font-weight: 400; }", page)
@@ -1310,7 +1310,7 @@ class SoldOut(unittest.TestCase):
 
     def test_the_time_column_strikes_a_first_showing_sold_out(self):
         self.assertEqual(build.render_clock([time(19, 45), time(19, 15)], ["19:15"]),
-                         '<span class="clock"><b class="sold">7:15pm</b><small>+1</small></span>')
+                         '<span class="clock"><b class="sold">7:15pm</b><small title="1 more showtime">+1 more</small></span>')
 
     def test_coolidge_film_pages_are_fresher(self):
         page = ('<div class="film-showtime-list"><div class="datepicker "><span class="datepicker__day">Tue</span>'
@@ -1733,12 +1733,14 @@ class HomePage(unittest.TestCase):
         # The bar is measured from a chip, not the row, whose padding isn't the bar's.
         self.assertIn('filter.querySelector(".chips [data-show]").getBoundingClientRect().top', build.INDEX_JS)
 
-    def test_each_kind_in_the_filter_is_its_word_alone(self):
-        """No marks before the kinds' words, so the bar stays narrow."""
+    def test_each_kind_in_the_filter_is_led_by_its_mark(self):
+        """In its color, which the list's times are in: the filter is the key to them. All has none."""
         home, R = self.page(), build.PUBLIC_ROOT
         self.assertIn(f'<a data-show="all" href="{R}" aria-current="page">All</a>', home)
-        self.assertIn(f'<a data-show="film" href="{R}film/">Film</a>', home)
-        self.assertIn('<button data-show="music">Music</button>', self.page(tonight=True))
+        self.assertIn(f'<a data-show="film" href="{R}film/"><svg class="icon" aria-hidden="true"><use href="#icon-film"/></svg>Film</a>', home)
+        tonight = self.page(tonight=True)
+        self.assertIn('<button data-show="music"><svg class="icon" aria-hidden="true"><use href="#icon-music"/></svg>Music</button>', tonight)
+        self.assertIn(".filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2px; }", home)
 
     def test_on_a_phone_the_filter_is_a_search_box_over_a_row_of_chips(self):
         """The kinds, when and where are wrapped together, to be one row a phone swipes along; the search after
