@@ -5700,13 +5700,23 @@ CSS = """
   /* On Recently added, the day each is on leads the line: "Sat, Nov 21 · 7pm · Union Pool". */
   .day .row > .when { order: 0; margin: 0; color: #aaa; font-size: .8rem; }
   .day .row > .when::after { content: "·"; margin: 0 .35em; color: #555; }
-  /* A wide screen's listings in two columns a day, down the first and on into the second, in a wider page: the
-     same blocks as a phone's, using the width rather than leaving most of it empty. Only a page of listings is
-     wider (the about page's prose stays a reading width), and only where both columns have room for a name. */
-  @media (min-width: 60rem) {
-    main:has(.filter) { max-width: 64rem; }
-    .day > ul { columns: 2; column-gap: 3.5rem; }
-    .day > ul > li { break-inside: avoid; }
+  /* Wider than a phone, a listing is a line of a timetable instead: its time in its own column, in its kind's
+     color, its name, and the venue at the right, one column down the page. In a phone's blocks at that width, two
+     columns of them were a page of two-line blocks and color, and one column of them half a screen of listings. */
+  @media not all and (max-width: 34rem) {
+    .day > ul > li.row:not(.combined), .combined > details > summary {
+      display: grid; grid-template-columns: 5.2rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
+    .clock { grid-column: 1; grid-row: 1; font-size: .85rem; }
+    .day .headline { grid-column: 2; grid-row: 1; }
+    .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
+    .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
+    /* Recently added: the day each is on a column of its own, before its time. */
+    .day[data-added] > ul > li.row { grid-template-columns: 6.2rem 5.2rem minmax(0, 1fr) auto; }
+    .day[data-added] .row > .when { grid-column: 1; grid-row: 1; }
+    .day[data-added] .row > .when::after { content: none; }
+    .day[data-added] .clock { grid-column: 2; }
+    .day[data-added] .headline { grid-column: 3; }
+    .day[data-added] .row .source { grid-column: 4; }
   }
   /* No room kept at the edge for a mark, on a phone; a pointer's band keeps its own. */
   @media (max-width: 34rem) { body .day > ul > li.row { padding-left: 0; } }
@@ -5745,13 +5755,16 @@ CSS = """
   .biggest-about { overflow: hidden; color: #6c6c6c; font-size: .85rem; line-height: 1.4;
                    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .biggest:hover .biggest-title, .fresh-list a:hover .fresh-name { text-decoration: underline; }
-  /* What's announced, each name a line of its own, one too long ending in "…", under its line of when and where. */
+  /* What's announced, a line each: its name, and after it when and where, said whole (the time in its kind's
+     color), the name what's cut short with "…" where the line runs out. Where and when at most most of the line,
+     so a name always has some. */
   .fresh-list { margin: 0; padding: 0; list-style: none; }
-  .fresh-list li + li { margin-top: .75rem; }
-  .fresh-list a { display: block; min-width: 0; color: inherit; }
+  .fresh-list li + li { margin-top: .45rem; }
+  .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; color: inherit; white-space: nowrap; }
   .fresh-time { color: var(--dot); font-weight: 500; }
-  .fresh-name { display: block; margin-top: .15rem; overflow: hidden; color: #fff; font-weight: 400; line-height: 1.35;
-                white-space: nowrap; text-overflow: ellipsis; }
+  .fresh-name { order: -1; flex: 0 1 auto; min-width: 3em; overflow: hidden; color: #fff; font-weight: 400; line-height: 1.35;
+                text-overflow: ellipsis; }
+  .fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
   /* The filter as a whole a little nearer the listings than the film and what's announced over it, on a phone. */
   @media (max-width: 34rem) { .lead { margin-bottom: 1.6rem; } }

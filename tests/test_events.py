@@ -1175,7 +1175,9 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn('<div class="lead-head"><a class="lead-tag fresh-tag" href="', page)
         self.assertIn(".lead-tag { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }", page)
         self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem 3.5rem;", page)
-        self.assertIn(".fresh-name { display: block;", page, "the name a line of its own, under when and where")
+        # A line each: the name, cut short where it must be, and when and where after it, said whole.
+        self.assertIn(".fresh-name { order: -1; flex: 0 1 auto; min-width: 3em;", page)
+        self.assertIn(".fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
 
     def test_the_list_and_the_page(self):
@@ -1253,7 +1255,7 @@ class TimeColumn(unittest.TestCase):
         self.assertIn('<span class="clock"><b>1pm</b><small>+1</small></span><div class="headline"><span class="title">Wide Release',
                       build.render_row(combined[0]), "1pm at two of them and 4pm at the third: 1pm, and one more")
 
-    def test_each_listing_one_block_on_a_phone_and_a_wide_screen(self):
+    def test_each_listing_one_block_on_a_phone_and_a_timetables_line_wider(self):
         page = build.render_index([build.event(self.venue, "A Show", self.day, time(20))], [self.venue], [], [], self.built, public=True)
         self.assertIn(".day .headline > .times, .day .headline .tail { display: none; }", page, "said once, on the small line")
         # One block at every width, not in a phone's rules alone: the time and the venue on a small line, the name
@@ -1264,8 +1266,10 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".day .row .source { order: 2; display: block; max-width: none;", page)
         self.assertIn(".day .headline { order: 3; flex-basis: 100%; }", page)
         self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }", page)
-        # A wide screen's: two columns a day, in a wider page of listings only.
-        self.assertIn("@media (min-width: 60rem) {\n    main:has(.filter) { max-width: 64rem; }\n    .day > ul { columns: 2;", page)
+        # Wider than a phone, one column of a timetable's lines: the time, the name, the venue at the right.
+        self.assertIn("@media not all and (max-width: 34rem) {\n    .day > ul > li.row:not(.combined), .combined > details > summary {\n"
+                      "      display: grid; grid-template-columns: 5.2rem minmax(0, 1fr) auto;", page)
+        self.assertNotIn("max-width: 64rem", page, "not two columns in a wider page")
         # The script says it again as what's shown changes, and puts each day in the column's order.
         self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
         self.assertIn('document.querySelectorAll(".day:not([data-added]) > ul")', build.INDEX_JS, "not Recently added's, newest first")
