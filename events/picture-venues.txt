@@ -1,0 +1,33 @@
+# Venues whose pictures Just announced may show, one per line, named as Pushpin names them (as the list's right-hand
+# column says). A venue that isn't here can still be what's announced, in words: its flyers are too often made in
+# a hurry to put at the top of the page. Add a venue once its pictures have looked good for a while; to hide one
+# picture of a venue that's here, use picture-skip.txt.
+ICA
+The Burren
+Adams Street Library
+Arts at the Armory
+Berklee Performance Center
+Boston Public Library
+Brighton Library
+Brighton Music Hall
+Club Passim
+Connolly Library
+Crystal Ballroom
+Deep Cuts
+French Library
+Harvard Art Museums
+House of Blues
+Jamaica Plain Library
+Lizard Lounge
+MFA
+Middle East
+MIT
+Paradise
+Roadrunner
+Royale
+Sonia
+South End Library
+SoWa
+The Lilypad
+The Rockwell
+The Sinclair

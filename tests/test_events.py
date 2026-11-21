@@ -30,7 +30,8 @@ ROUTES = [
     ("24hourmusic.com/include/widgets/events/performancelist.asp?venue=1&", "burren.json"),
     ("berklee.edu/BPC/full-calendar-of-events-at-the-bpc", "berklee.html"),
     ("lilypadinman.com/home?format=json", "lilypad.json"),
-    ("passim.org/live-music", "passim.html"),  # Its other shows' pages: no show time on them, so door times.
+    ("passim.org/live-music", "passim.html"),
+    ("sallyobriensbar.com/music", "sally.html"),  # Its other shows' pages: no show time on them, so door times.
     ("mideastclub.com", "mideast.html"),
     ("brattlefilm.org", "brattle.html"),
     ("houseofblues.com", "houseofblues.html"),
@@ -209,6 +210,27 @@ class Readers(unittest.TestCase):
         self.assertEqual(first["link"], "https://www.lilypadinman.com/home/2026/bach-and-beer-with-aaron-larget-caplan")
         self.assertTrue(first["about"][0].startswith("$25 admission"))
         self.assertFalse(any("--sqs" in line or "{" in line for item in found for line in item["about"]), "not its styles")
+
+    def test_sally_obriens_nights_from_its_handwritten_page(self):
+        class November(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 11, 19, 12, tzinfo=tz)
+        with mock.patch.object(build, "datetime", November):
+            found = self.read("sally", "https://www.sallyobriensbar.com/music/", "music", "Sally O'Brien's")
+        # Two shows the 21st, "followed by ..." between them; not Thanksgiving, when there's no band.
+        self.assertEqual([(item["date"], item["times"], item["title"], item["price"]) for item in found], [
+            (date(2026, 11, 19), [time(19, 30)], "Universal Union", "Free"),
+            (date(2026, 11, 20), [time(19, 30)], "Mule Variations", "$10"),
+            (date(2026, 11, 21), [time(12, 0)], "Benefit to Fight Parkinson's Disease", ""),
+            (date(2026, 11, 21), [time(19, 30)], "Tim Gearan Band", "$10"),
+            (date(2026, 11, 22), [time(21, 30)], "Dub Apocalypse", "Free"),
+            (date(2026, 12, 2), [time(19, 30)], "Fandango featuring Brian Templeton", "Free"),
+            (date(2026, 12, 4), [time(19, 30)], "Chris Cote and his Band of These Guys", "$10"),
+        ])
+        self.assertTrue(found[0]["image"].startswith("https://images.getbento.com/"), "its own poster")
+        self.assertEqual(found[3]["image"], "", "the night's picture is its first show's")
+        self.assertEqual(found[1]["link"], "https://www.sallyobriensbar.com/music/")
 
     def test_passim_club_shows_once_each(self):
         found = self.read("passim", "https://www.passim.org/live-music/")
@@ -2333,6 +2355,12 @@ class FreshPick(unittest.TestCase):
     venue = source("aeg", "https://example.com", name="The Sinclair")
     jpeg = b"\xff\xd8\xff" + b"\x00" * 64
 
+    def setUp(self):
+        for name, value in (("picture_venues", {"The Sinclair"}), ("skipped_pictures", set())):
+            patcher = mock.patch.object(build, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def announced(self, days_ahead, title, image="", about=()):
         item = build.event(self.venue, title, date(2026, 9, 15) + timedelta(days=days_ahead), time(20), image=image)
         return dict(item, added="2026-09-15", about=list(about))
@@ -2359,3 +2387,20 @@ class FreshPick(unittest.TestCase):
         self.assertIn('<a class="biggest standing"', lead)
         self.assertIn('width="76" height="114"', lead, "in a poster's shape, the same size as the film's beside it")
         self.assertIn('<span class="biggest-about">A night of it.</span>', lead)
+
+    def test_only_a_listed_venues_and_not_a_skipped_one(self):
+        item = self.announced(1, "Pictured", image="https://x/pictured.jpg")
+        ident = build.listing_id(item["date"], item["title"], item["venue"])[0]
+        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg):
+            self.assertEqual(build.fresh_pick([item], self.built)[1], "https://x/pictured.jpg")
+            with mock.patch.object(build, "picture_venues", return_value={"ICA"}):
+                self.assertEqual(build.fresh_pick([item], self.built), (item, ""), "a venue not listed: in words")
+            for skipped in (ident, "https://x/pictured.jpg"):
+                with mock.patch.object(build, "skipped_pictures", return_value={skipped}):
+                    self.assertEqual(build.fresh_pick([item], self.built), (item, ""), f"skipped by {skipped}")
+
+    def test_the_lists_are_read_without_their_comments(self):
+        self.assertIn("ICA", build.listed(build.PICTURE_VENUES_FILE))
+        self.assertFalse(any(line.startswith("#") for line in build.listed(build.PICTURE_VENUES_FILE)))
+        self.assertTrue(build.PICTURE_SKIP_FILE.exists())
+        self.assertEqual(build.listed(Path("/nonexistent")), set())

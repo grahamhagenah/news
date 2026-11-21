@@ -1,0 +1,4 @@
+# Pictures Just announced never shows, one per line: a listing's id, as its address has it after ?event=
+# (2026-11-21-bill-t-jones-arnie-zane-company-collage-revisited-and-story-ica), or the picture's own address. The
+# listing can still be what's announced, in words. For a venue whose pictures are seldom good, take it out of
+# picture-venues.txt instead.

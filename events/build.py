@@ -25,6 +25,8 @@ from shared import site as shared
 ROOT = Path(__file__).parent
 SOURCES_FILE = ROOT / "sources.txt"  # Boston's; each city has its own (CITIES).
 SKIP_FILE = ROOT / "skip.txt"
+PICTURE_VENUES_FILE = ROOT / "picture-venues.txt"  # Whose pictures Just announced may show.
+PICTURE_SKIP_FILE = ROOT / "picture-skip.txt"  # Pictures it never shows.
 OUT_DIR = ROOT.parent / "dist" / "events"
 REPO_URL = "https://github.com/grahamhagenah/news"
 NEW_DAYS = 7  # How long a listing counts as just announced, after the day it first turned up.
@@ -88,6 +90,7 @@ VENUE_ADDRESSES = {
     "Deep Cuts": ("21 Main St", "Medford", "02155"),
     "Midway Cafe": ("3496 Washington St", "Boston", "02130"),
     "Lizard Lounge": ("1667 Massachusetts Ave", "Cambridge", "02138"),
+    "Sally O'Brien's": ("335 Somerville Ave", "Somerville", "02143"),
     "The Rockwell": ("255 Elm St", "Somerville", "02144"),
     "The Lilypad": ("1353 Cambridge St", "Cambridge", "02139"),
     "Club Passim": ("47 Palmer St", "Cambridge", "02138"),
@@ -1142,6 +1145,53 @@ def read_passim(source):
         events.append(event(source, title, date.fromisoformat(day), start, link=field("link"), detail=field("detail"),
                             image=urljoin("https://www.passim.org/", picture) if picture else "",
                             sold_out='class="tickets sold-out"' in show))
+    return events
+
+
+# Sally O'Brien's page, written by hand: "Friday November 20 730pm", "Sunday November 29 500pm", "1200pm".
+SALLY_DAY = re.compile(r"\b(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,? ([A-Z][a-z]+) (\d{1,2}),? +(\d{1,2}):?(\d{2})? *([ap])\.?m\b", re.I)
+# A line about the show rather than its name: its cover, a residency, or the "followed by ..." between two shows.
+SALLY_NOTE = re.compile(r"^(followed by\b|free show\b|no[- ]cover\b|.*\bresidency\b|\$\d)", re.I)
+# A night it's open with no band: "Happy Thanksgiving!", or closed.
+SALLY_NOT_SHOW = re.compile(r"^happy\b|\bclosed\b", re.I)
+
+
+def read_sally(source):
+    """Sally O'Brien's music calendar, a page on its BentoBox site written by hand: a section for each night, its
+    day and time ("Friday November 20 730pm"), the band's name in bold, then a line for the cover ("$10", "No cover
+    !!", "No-Cover Residency !!"), or the cover after the name ("Mule Variations  $10"). A night with two shows has
+    both in one section, "followed by ..." between them; the picture in a section is its first show's. No year:
+    this year's day, or next year's in the new year (yearless)."""
+    today = datetime.now(source.get("zone", BOSTON)).date()
+    events = []
+    for section in re.findall(r'(?s)<section class="c-one-col--text[^"]*">(.*?)</section>', fetch(source["url"])):
+        pictures = [picture for picture in re.findall(r'<img[^>]+src="([^"]+)"', section)
+                    if not re.search(r"facebook|instagram|twitter", picture, re.I)]
+        shows = []
+        for paragraph in re.findall(r"(?s)<p[^>]*>(.*?)</p>", section):
+            # A day's words can be split by the editor's markup ("Novem<span>ber"): read it with nothing between.
+            when = SALLY_DAY.search(re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", paragraph))))
+            line = text(paragraph)
+            if when:
+                day = yearless(when.group(1), when.group(2), today, "%B")
+                shows.append({"day": day, "start": clock_of(when.group(3), when.group(4), when.group(5)),
+                               "name": [], "notes": []})
+            elif line and shows:
+                cover = re.search(r"\s+(\$\d+(?:\.\d\d)?)\s*$", line)
+                if cover:
+                    line, shows[-1]["notes"] = line[:cover.start()], shows[-1]["notes"] + [cover.group(1)]
+                if SALLY_NOTE.match(line):
+                    if not line.lower().startswith("followed by"):
+                        note = re.sub(r"(?i)^no-cover", "No cover", line.rstrip(" !"))
+                        shows[-1]["notes"].append(note[:1].upper() + note[1:])
+                elif line:
+                    shows[-1]["name"].append(line)
+        for at, show in enumerate(shows):
+            name = " ".join(show["name"])
+            if not show["day"] or not name or SALLY_NOT_SHOW.search(name):
+                continue
+            events.append(event(source, name, show["day"], show["start"], detail=" · ".join(show["notes"]),
+                                image=pictures[0] if pictures and at == 0 else ""))
     return events
 
 
@@ -2864,6 +2914,7 @@ READERS = {
     "ics": read_ics,
     "armory": read_armory,
     "showare": read_showare,
+    "sally": read_sally,
     "berklee": read_berklee,
     "squarespace": read_squarespace,
     "passim": read_passim,
@@ -3378,18 +3429,41 @@ def biggest_film(events, built_at, before=""):
             "about": said[0] if said else "", "image": picture, "standing": height > width * 1.2}
 
 
+def listed(path):
+    """A list file's lines, without its # comments and blank lines."""
+    lines = path.read_text().splitlines() if path.exists() else []
+    return {line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")}
+
+
+def picture_venues():
+    """The venues whose pictures Just announced may show (picture-venues.txt): an event's poster is whatever its
+    author made, and some are made in a hurry, so only venues whose pictures have looked good get one."""
+    return listed(PICTURE_VENUES_FILE)
+
+
+def skipped_pictures():
+    """Listings' ids and pictures' addresses whose pictures Just announced never shows (picture-skip.txt)."""
+    return listed(PICTURE_SKIP_FILE)
+
+
 def fresh_pick(events, built_at):
     """The one announcement shown over the listings, and its picture: of the newest few (FRESH_LOOK), the newest
-    with a picture that can be copied in with the page (kept_picture), and of those one with a line about it if
-    there's one; else the newest, in words. A picture that can't be copied is left out, as the film's is, rather
+    with a picture that may be shown (a venue in picture-venues.txt, not in picture-skip.txt) and can be copied in
+    with the page (kept_picture), and of those one with a line about it if there's one; else the newest, in words. A picture that can't be copied is left out, as the film's is, rather
     than loaded from a venue's server. None where nothing's new."""
     newest = newly_added(events, built_at)[:FRESH_LOOK]
     if not newest:
         return None
 
+    venues, skipped = picture_venues(), skipped_pictures()
+
     def picture(item):
-        url = lighter(item["image"]) if item.get("image") else ""
-        return url if url and picture_kind(picture_bytes(url) or b"") else ""
+        if not item.get("image") or item["venue"] not in venues:
+            return ""
+        url = lighter(item["image"])
+        if {listing_id(item["date"], item["title"], item["venue"])[0], item["image"], url} & skipped:
+            return ""
+        return url if picture_kind(picture_bytes(url) or b"") else ""
 
     # min keeps the first of equals, the newest.
     item = min(newest, key=lambda item: (not picture(item), not item.get("about")))
