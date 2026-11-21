@@ -3450,9 +3450,9 @@ def render_row(item):
     return (
         f'<li class="row" data-id="{ident}" data-series="{series}" data-category="{item["category"]}" '
         f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
-        f'{icon(item["category"])}{render_clock(item["times"], sold_times(item))}'
+        f'{icon(item["category"])}{when}{render_clock(item["times"], sold_times(item))}'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a> '
-        + " ".join(part for part in (when, render_times(item["times"], sold_times(item)), once, detail) if part)
+        + " ".join(part for part in (render_times(item["times"], sold_times(item)), once, detail) if part)
         + f'{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div> '
         f'<span class="source"><span>{html.escape(item["venue"])}</span></span></li>'
     )
@@ -5676,35 +5676,31 @@ CSS = """
   .times { flex: none; }
   /* A sold-out time, struck through; a listing with nothing left, a quiet tag after its times. */
   .times time.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
-  /* A listing's time, a column of its own after its kind's mark and before its name, like a timetable's: an eye
-     running down the list finds the times all in one place, rather than after names of every length. Its first
-     showing, and in grey how many more ("+6"), which its view lists. The times after the name are the row's
-     still, for its view, the search and the script, but not shown: the column says it. */
-  .day > ul > li.row, .combined > details > summary { grid-template-columns: auto 6.1rem minmax(0, 1fr) auto; }
-  .clock { display: flex; align-items: baseline; gap: .35em; min-width: 0; color: #fff; font-size: .9em;
-           font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .clock b { font-weight: 500; }
-  .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
-  .clock small { color: #666; font-size: .85em; }
+  /* Each listing one block from one edge, on a phone and a wide screen alike: a small line with its time, in its
+     kind's color, how many more times ("+6", which its view lists), and the venue ("3:15pm · Metrograph"), and the
+     name under it. Every listing starts with its time, so an eye runs down the times as down a timetable's,
+     rather than finding each after a name of its own length; in columns, a narrow screen spread a row apart, a
+     short time leaving a gap before its name that was different on every row. The kind's mark goes, its color
+     being the time's, which the filter's marks are the key to. The times after the name are the row's still, for
+     its view, the search and the script, but not shown: the small line says it. */
+  .day > ul > li.row:not(.combined), .combined > details > summary {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 0; }
+  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }
   .day .headline > .times, .day .headline .tail { display: none; }
-  /* On a phone, each listing one block from one edge rather than columns, which a narrow screen spread apart
-     (a short time left a gap before its name, different on every row): a small line with the time, in its
-     kind's color, its "+6", and the venue ("3:15pm · Metrograph"), and the name under it. Still a timetable:
-     every listing starts with its time. The kind's mark goes, its color being the time's. */
-  @media (max-width: 34rem) {
-    .day > ul > li.row:not(.combined), .combined > details > summary {
-      display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 0; }
-    body .day > ul > li.row { padding-left: 0; }
-    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }
-    .clock { order: 1; gap: .3em; font-size: .8rem; }
-    .clock b { color: var(--dot); }
-    .clock small { color: #666; font-size: inherit; }
-    .day .row .source { order: 2; color: #777; font-size: .8rem; }
-    .day .row .source::before { content: none; }
-    .clock:not(:empty) ~ .source::before, .clock:not(:empty) ~ * .source::before { content: "·"; margin: 0 .35em; color: #555; }
-    .day .headline { order: 3; flex-basis: 100%; }
-  }
-  /* A narrow window with a pointer: the band's room at the edge, where a phone has none. */
+  .clock { order: 1; display: flex; align-items: baseline; gap: .3em; min-width: 0; font-size: .8rem;
+           font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .clock b { color: var(--dot); font-weight: 500; }
+  .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
+  .clock small { color: #666; font-size: inherit; }
+  .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .8rem; text-align: left; }
+  .day .row .source::before { content: none; }
+  .clock:not(:empty) ~ .source::before, .clock:not(:empty) ~ * .source::before { content: "·"; margin: 0 .35em; color: #555; }
+  .day .headline { order: 3; flex-basis: 100%; }
+  /* On Recently added, the day each is on leads the line: "Sat, Nov 21 · 7pm · Union Pool". */
+  .day .row > .when { order: 0; margin: 0; color: #aaa; font-size: .8rem; }
+  .day .row > .when::after { content: "·"; margin: 0 .35em; color: #555; }
+  /* No room kept at the edge for a mark, on a phone; a pointer's band keeps its own. */
+  @media (max-width: 34rem) { body .day > ul > li.row { padding-left: 0; } }
   @media (hover: hover) and (pointer: fine) and (max-width: 34rem) { body .day > ul > li.row { padding-left: .6rem; } }
   .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }

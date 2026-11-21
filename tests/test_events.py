@@ -1199,7 +1199,8 @@ class JustAnnounced(unittest.TestCase):
         page = build.render_index(events, [self.venue], [], [], self.built, public=True, added=True)
         self.assertIn('<section class="day" data-added><h2><span class="date">Recently added</span></h2>', page)
         self.assertEqual(page.count('<section class="day"'), 1, "one list, newest first")
-        self.assertIn('<span class="when">Sun, Sep 20</span>', page, "the day each is on, beside its name")
+        self.assertIn('</svg><span class="when">Sun, Sep 20</span><span class="clock">', page,
+                      "the day each is on, leading the small line over its name")
         self.assertIn("<title>Just announced in Boston · Pushpin Boston</title>", page)
         self.assertIn('data-narrowed="Nothing added in the last week">No new events this week. Check back as venues announce more.</p>', page)
         home = build.render_index([], [self.venue], [], [], self.built, public=True)
@@ -1250,13 +1251,15 @@ class TimeColumn(unittest.TestCase):
         self.assertIn('<span class="clock"><b>1pm</b><small>+1</small></span><div class="headline"><span class="title">Wide Release',
                       build.render_row(combined[0]), "1pm at two of them and 4pm at the third: 1pm, and one more")
 
-    def test_the_column_on_a_wide_screen_and_a_phone(self):
+    def test_each_listing_one_block_on_a_phone_and_a_wide_screen(self):
         page = build.render_index([build.event(self.venue, "A Show", self.day, time(20))], [self.venue], [], [], self.built, public=True)
-        self.assertIn(".day > ul > li.row, .combined > details > summary { grid-template-columns: auto 6.1rem minmax(0, 1fr) auto; }", page)
-        self.assertIn(".day .headline > .times, .day .headline .tail { display: none; }", page, "said once, in the column")
-        # On a phone, one block: the time and the venue on a small line, the name under it, no mark.
-        self.assertIn(".clock { order: 1; gap: .3em; font-size: .8rem; }", page)
-        self.assertIn(".day .row .source { order: 2; color: #777; font-size: .8rem; }", page)
+        self.assertIn(".day .headline > .times, .day .headline .tail { display: none; }", page, "said once, on the small line")
+        # One block at every width, not in a phone's rules alone: the time and the venue on a small line, the name
+        # under it, no mark.
+        block = page.index(".day > ul > li.row:not(.combined), .combined > details > summary {\n    display: flex;")
+        self.assertNotIn("@media", page[page.rindex("}", 0, block) - 40:block], "outside any @media")
+        self.assertIn(".clock { order: 1; display: flex;", page)
+        self.assertIn(".day .row .source { order: 2; display: block; max-width: none;", page)
         self.assertIn(".day .headline { order: 3; flex-basis: 100%; }", page)
         self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }", page)
         # The script says it again as what's shown changes, and puts each day in the column's order.
