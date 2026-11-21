@@ -1268,8 +1268,15 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }", page)
         # Wider than a phone, one column of a timetable's lines: the time, the name, the venue at the right.
         self.assertIn("@media not all and (max-width: 34rem) {\n    .day > ul > li.row:not(.combined), .combined > details > summary {\n"
-                      "      display: grid; grid-template-columns: 5.2rem minmax(0, 1fr) auto;", page)
+                      "      display: grid; grid-template-columns: 5.7rem minmax(0, 1fr) auto;", page)
         self.assertNotIn("max-width: 64rem", page, "not two columns in a wider page")
+        # The time grey, its kind a small dot in its color before it, not the whole time in color.
+        self.assertIn(".clock b { color: #d4d4d4; font-weight: 400; }", page)
+        self.assertIn(".clock::before { content: \"\"; flex: none; align-self: center; width: 6px; height: 6px;", page)
+        # A listing opened drawn as the list is: its day a small line led by that dot, the name the list's weight,
+        # no mark beside it.
+        self.assertIn(".event-where::before { content: \"\"; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }", page)
+        self.assertIn(".event-title .event-icon { display: none; }", page)
         # The script says it again as what's shown changes, and puts each day in the column's order.
         self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
         self.assertIn('document.querySelectorAll(".day:not([data-added]) > ul")', build.INDEX_JS, "not Recently added's, newest first")

@@ -5692,7 +5692,11 @@ CSS = """
   .day .headline > .times, .day .headline .tail { display: none; }
   .clock { order: 1; display: flex; align-items: baseline; gap: .3em; min-width: 0; font-size: .8rem;
            font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .clock b { color: var(--dot); font-weight: 500; }
+  /* The time in grey, and before it a small dot in its kind's color: the kind at a glance, a mark rather than a
+     whole word in color, the venue and the filter saying the rest. A listing with no time has the dot alone. */
+  .clock b { color: #d4d4d4; font-weight: 400; }
+  .clock::before { content: ""; flex: none; align-self: center; width: 6px; height: 6px; margin-right: .15em;
+                   border-radius: 50%; background: var(--dot); }
   .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .clock small { color: #666; font-size: inherit; }
   .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .8rem; text-align: left; }
@@ -5721,13 +5725,13 @@ CSS = """
      columns of them were a page of two-line blocks and color, and one column of them half a screen of listings. */
   @media not all and (max-width: 34rem) {
     .day > ul > li.row:not(.combined), .combined > details > summary {
-      display: grid; grid-template-columns: 5.2rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
+      display: grid; grid-template-columns: 5.7rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
     .clock { grid-column: 1; grid-row: 1; font-size: .85rem; }
     .day .headline { grid-column: 2; grid-row: 1; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
     /* Recently added: the day each is on a column of its own, before its time. */
-    .day[data-added] > ul > li.row { grid-template-columns: 6.2rem 5.2rem minmax(0, 1fr) auto; }
+    .day[data-added] > ul > li.row { grid-template-columns: 6.2rem 5.7rem minmax(0, 1fr) auto; }
     .day[data-added] .row > .when { grid-column: 1; grid-row: 1; }
     .day[data-added] .row > .when::after { content: none; }
     .day[data-added] .clock { grid-column: 2; }
@@ -5777,7 +5781,9 @@ CSS = """
   .fresh-list { margin: 0; padding: 0; list-style: none; }
   .fresh-list li + li { margin-top: .45rem; }
   .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; color: inherit; white-space: nowrap; }
-  .fresh-time { color: var(--dot); font-weight: 500; }
+  .fresh-time { color: #d4d4d4; font-weight: 400; }
+  .fresh-time::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: .4em; border-radius: 50%;
+                        background: var(--dot); vertical-align: 1px; }
   .fresh-name { order: -1; flex: 0 1 auto; min-width: 3em; overflow: hidden; color: #fff; font-weight: 400; line-height: 1.35;
                 text-overflow: ellipsis; }
   .fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; }
@@ -5891,32 +5897,32 @@ CSS = """
   dialog.event.shows-picture .event-tools button:focus-visible { background: rgba(0, 0, 0, .9); }
   .event-facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .45rem 0 .5rem; }
   .event-facts:empty { display: none; }
-  .event-fact { padding: .15rem .6rem; border-radius: 999px; background: #1c1c1c; color: #eee; font-size: .8rem; font-weight: 600;
-                font-variant-numeric: tabular-nums; }
-  /* Set as the days are over the list, so the echo is meant rather than nearly. */
-  .event-where { margin: 0 2.5rem .4rem 0; color: #888; font-size: .72rem; font-weight: 600; letter-spacing: .08em;
-                 text-transform: uppercase; }
-  /* The kind's mark before the name, level with its first line, a hanging indent so a name that wraps stays
-     square under itself. */
-  .event-title { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5em; align-items: baseline; }
-  .event-title .icon { width: 18px; height: 18px; transform: translateY(2px); }
-  .event-title { margin: 0 2rem .3rem 0; color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em;
-                 line-height: 1.25; text-transform: none; }
+  /* Drawn as the list is, so a listing opened reads as the same thing, larger: its price and ages outlined as
+     the filter's chips are, not filled in. */
+  .event-fact { padding: .1rem .6rem; border-radius: 999px; box-shadow: inset 0 0 0 1px #2a2a2a; color: #999;
+                font-size: .8rem; font-variant-numeric: tabular-nums; }
+  /* Its day as a listing's small line says it, over the name, led by the dot in its kind's color the list has. */
+  .event-where { display: flex; align-items: center; gap: .45em; margin: 0 2.5rem .35rem 0; color: #777; font-size: .85rem; }
+  .event-where::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }
+  /* The name, the list's own weight, larger; the dot over it says its kind, so no mark beside it. */
+  .event-title .event-icon { display: none; }
+  .event-title { margin: 0 2rem .35rem 0; color: #fff; font-size: 1.4rem; font-weight: 400; letter-spacing: -.01em;
+                 line-height: 1.3; text-transform: none; }
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
   .event-detail:empty, .event-note:empty, .event-place:empty, .event-also:empty, .event-places:empty { display: none; }
   .event-note { color: #bbb; }
   /* Each place it's at, a link to its page (for tickets), with its times to the right, going on to another line
      there, not under it, when there are more than fit. */
-  .event-time { color: #ddd; font-size: .9rem; font-variant-numeric: tabular-nums; }
+  .event-time { color: #d4d4d4; font-size: .9rem; font-variant-numeric: tabular-nums; }
   .event-time.sold { color: #666; text-decoration: line-through; }
-  .event-fact.sold { background: none; box-shadow: inset 0 0 0 1px #3a3a3a; color: #bbb; }
+  .event-fact.sold { color: #bbb; box-shadow: inset 0 0 0 1px #444; }
   .event-places { margin: 1.1rem 0 1rem; }
   .event-group { display: flex; flex-wrap: wrap; gap: .2rem .9rem; }
   .event-places li { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .45rem .75rem; padding: .55rem 0;
                      border-top: 1px solid #1c1c1c; }
   .event-places .event-group { justify-content: flex-end; }
   .event-places li:last-child { border-bottom: 1px solid #1c1c1c; }
-  .event-places a { color: #fff; font-weight: 600; }
+  .event-places a { color: #fff; }
   .event-about p { margin: 0 0 .8em; color: #bbb; }
   .event-about.clamped { max-height: 7.5em; overflow: hidden; /* About five lines. */
                          -webkit-mask-image: linear-gradient(#000 calc(100% - 3em), transparent);
@@ -5931,10 +5937,10 @@ CSS = """
      bottom when a short listing leaves room. */
   .event-foot { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: auto; padding-top: 1.2rem; }
   .event-share, .event-add { display: inline-flex; align-items: center; gap: .35rem;
-                padding: .4rem .9rem; border: 1px solid #333;
-                border-radius: 999px; background: none; color: #ddd; font: inherit; font-size: .9rem; cursor: pointer; }
+                height: 2.2rem; box-sizing: border-box; padding: 0 .85rem; border: 1px solid #2a2a2a;
+                border-radius: 999px; background: none; color: #999; font: inherit; font-size: .9rem; cursor: pointer; }
   .event-share:hover, .event-share:focus-visible, .event-share.copied, .event-add:hover, .event-add:focus-visible,
-  .event-adder:has(.event-showing:hover) .event-add, .event-adder:has(.event-showing:focus-visible) .event-add { border-color: #888; color: #fff; }
+  .event-adder:has(.event-showing:hover) .event-add, .event-adder:has(.event-showing:focus-visible) .event-add { border-color: #555; color: #ddd; }
   .share-mark, .check-mark, .calendar-mark { width: 15px; height: 15px; }
   /* A listing with several showings: the menu of them over the button, unseen, so a press on the button opens it.
      At 16px, since iPhones zoom in on a smaller one when it's tapped. */
