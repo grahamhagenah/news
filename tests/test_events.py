@@ -1195,7 +1195,7 @@ class JustAnnounced(unittest.TestCase):
         on a wide screen the two over the list's two columns."""
         page = build.render_index([dict(self.listing(20), added="2026-09-15")], [self.venue], [], [], self.built, public=True)
         self.assertIn('<div class="lead-head"><a class="lead-tag fresh-tag" href="', page)
-        self.assertIn(".lead-tag { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }", page)
+        self.assertIn(".lead-tag { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }", page)
         self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem 3.5rem;", page)
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
         self.assertNotIn("fresh-list", page, "one announcement, drawn as the film is, not a list")

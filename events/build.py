@@ -4309,7 +4309,7 @@ def site_page(path, title, description, said, body, styles=""):
 
 
 CITIES_CSS = ('  section { margin-bottom: 2rem; }\n'
-              '  h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }\n'
+              '  h2 { margin: 0 0 .7rem; color: #666; font-size: .75rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }\n'
               '  ul { margin: 0; padding: 0; list-style: none; }\n'
               '  li { padding: .9rem 0; border-top: 1px solid #1c1c1c; }\n'
               '  li:last-child { border-bottom: 1px solid #1c1c1c; }\n'
@@ -5781,7 +5781,7 @@ PUBLIC_CSS = """
   footer { margin-top: 3.5rem; padding-top: 2.25rem; border-top: 1px solid rgba(255, 255, 255, .09); }
   /* The footer's lists of the site's pages: three short columns (two on a phone), under small, faint headings. */
   .site-links { display: grid; grid-template-columns: repeat(3, minmax(0, 11rem)); gap: 1.75rem 2.5rem; margin: .5rem 0 2rem; }
-  .site-links h2 { margin: 0 0 .7rem; color: #555; font-size: .65rem; font-weight: 500; letter-spacing: .1em; }
+  .site-links h2 { margin: 0 0 .7rem; color: #666; font-size: .75rem; font-weight: 500; letter-spacing: .1em; }
   .site-links ul { display: grid; gap: .45rem; }
   footer .site-links a, footer .site-links a:visited { color: #999; font-size: .95rem; text-decoration: none; }
   footer .site-links a:hover { color: #fff; }
@@ -5812,7 +5812,7 @@ CSS = """
      and a row of chips, a heading the kinds' size read as a third row of controls. The day in a lighter gray than
      its date. */
   @media all {
-    .day > h2 { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }
+    .day > h2 { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
     .day > h2 .relative:not(:empty), .day > h2 .weekday, .day > h2 .relative:not(:empty) + .date .weekday { color: #bbb; }
     .day > h2 .relative:not(:empty) { margin-right: .45em; }
     .day > h2 .relative:not(:empty)::after { content: " ·"; color: #555; }
@@ -5865,7 +5865,7 @@ CSS = """
     display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 0; }
   .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }
   .day .headline > .times, .day .headline .tail { display: none; }
-  .clock { order: 1; display: flex; align-items: baseline; gap: .3em; min-width: 0; font-size: .8rem;
+  .clock { order: 1; display: flex; align-items: baseline; gap: .3em; min-width: 0; font-size: .9rem;
            font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* The time in grey, and before it a small dot in its kind's color: the kind at a glance, a mark rather than a
      whole word in color, the venue and the filter saying the rest. A listing with no time has the dot alone. */
@@ -5874,18 +5874,18 @@ CSS = """
                    border-radius: 50%; background: var(--dot); }
   .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .clock small { color: #666; font-size: inherit; }
-  .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .8rem; text-align: left; }
+  .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .9rem; text-align: left; }
   .day .row .source::before { content: none; }
   /* Where the evening starts in a day's list, a quiet label over its first row: a listing on both before and after
      it is listed again under it. Quieter than the day's heading: no line under it, and not held at the top. */
   .day > ul > li.row.evening-starts { margin-top: 1.9rem; }  /* Over the row's own margin, where it's lit under a pointer. */
   .day > ul > li.row.evening-starts::before { content: "Evening"; position: absolute; bottom: 100%; left: 0; padding-left: inherit;
-                                          padding-bottom: .3rem; color: #666; font-size: .7rem; letter-spacing: .08em;
+                                          padding-bottom: .3rem; color: #666; font-size: .75rem; letter-spacing: .08em;
                                           text-transform: uppercase; pointer-events: none; }
   .clock:not(:empty) ~ .source::before, .clock:not(:empty) ~ * .source::before { content: "·"; margin: 0 .35em; color: #555; }
   .day .headline { order: 3; flex-basis: 100%; }
   /* On Recently added, the day each is on leads the line: "Sat, Nov 21 · 7pm · Union Pool". */
-  .day .row > .when { order: 0; margin: 0; color: #aaa; font-size: .8rem; }
+  .day .row > .when { order: 0; margin: 0; color: #aaa; font-size: .9rem; }
   .day .row > .when::after { content: "·"; margin: 0 .35em; color: #555; }
   /* Wider than a phone, the search at the end of the chips' line, as wide as is left of it, rather than a row the
      page's width of its own; the whole bar stays at the top of the window, a line high. Next weekend is the
@@ -5908,7 +5908,8 @@ CSS = """
   @media not all and (max-width: 34rem) {
     .day > ul > li.row:not(.combined), .combined > details > summary {
       display: grid; grid-template-columns: 7.8rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
-    .clock { grid-column: 1; grid-row: 1; font-size: .85rem; }
+    .clock, .lead .biggest-facts { font-size: .85rem; }  /* .lead: over the card's own rule, which comes later. */
+    .clock { grid-column: 1; grid-row: 1; }
     .day .headline { grid-column: 2; grid-row: 1; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
@@ -5920,11 +5921,14 @@ CSS = """
     .day[data-added] .headline { grid-column: 3; }
     .day[data-added] .row .source { grid-column: 4; }
   }
+  /* A name a little larger on a phone, where it's a line of its own with room to spare, than in a wide screen's
+     timetable, where it shares its line with the time and the venue. */
+  @media (max-width: 34rem) { .day .headline .title, .biggest-title { font-size: 1.125rem; } }
   /* No room kept at the edge for a mark, on a phone; a pointer's band keeps its own. */
   @media (max-width: 34rem) { body .day > ul > li.row { padding-left: 0; } }
   @media (hover: hover) and (pointer: fine) and (max-width: 34rem) { body .day > ul > li.row { padding-left: .6rem; } }
   .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
-              font-size: .72rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
+              font-size: .75rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* Over the listings on the home page: the week's biggest film beside the newest few announced, drawn as the list
      under them is, so the page reads as one: each part headed as a day is, a small grey label in capitals over a
      hairline, and each listing a small line saying when and where, the time in its kind's color, over its name. On
@@ -5934,11 +5938,11 @@ CSS = """
   .lead > * { min-width: 0; }
   .lead-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .75rem;
                padding: .25rem 0 .45rem; border-bottom: 1px solid #1c1c1c; }
-  .lead-tag { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }
+  .lead-tag { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
   .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
   /* The heading goes to the rest of what's announced too, as See all at the end of its line does. */
   .fresh-tag:hover { color: #bbb; text-decoration: none; }
-  .fresh-more { flex: none; color: #777; font-size: .74rem; letter-spacing: .04em; text-transform: uppercase; }
+  .fresh-more { flex: none; color: #777; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
   .fresh-more:hover { color: #fff; text-decoration: none; }
   /* The film: its picture beside its words in its own shape, a poster standing, a still lying on its side, a
      little smaller on a phone, where the words beside it have less room. */
@@ -5948,7 +5952,7 @@ CSS = """
   .biggest.standing .biggest-picture { width: 76px; height: 114px; }
   @media (max-width: 34rem) { .biggest:not(.standing) .biggest-picture { width: 120px; height: 68px; } }
   .biggest-said { display: grid; gap: .15rem; min-width: 0; }
-  .biggest-facts { display: block; color: #777; font-size: .8rem; line-height: 1.4; }
+  .biggest-facts { display: block; color: #777; font-size: .9rem; line-height: 1.4; }  /* As a listing's line of when and where. */
   .biggest-facts .lead-day { color: #aaa; }
   /* Two lines at most, as what it's about under it has: a restoration's full billing ("Dr. Strangelove or: How I
      Learned to Stop Worrying… (50th Anniversary 4K Restoration)") would otherwise take four on a phone. */
