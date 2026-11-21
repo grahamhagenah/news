@@ -1165,7 +1165,7 @@ class JustAnnounced(unittest.TestCase):
             self.assertEqual(build.calm(name), name)
         shouting = dict(self.listing(20, "DRU CUTLER, ZAPBEETLE, HANA BOOKMAN"), added="2026-09-15")
         lead = build.render_lead([shouting], self.built)[0]
-        self.assertIn('<b class="fresh-name">Dru Cutler, Zapbeetle, Hana Bookman</b>', lead)
+        self.assertIn('<b class="biggest-title">Dru Cutler, Zapbeetle, Hana Bookman</b>', lead)
         self.assertIn("event=2026-09-20-dru-cutler-zapbeetle-hana-bookman-the-sinclair", lead, "its row is still the one it goes to")
 
     def test_headed_and_drawn_as_the_list_is(self):
@@ -1175,31 +1175,28 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn('<div class="lead-head"><a class="lead-tag fresh-tag" href="', page)
         self.assertIn(".lead-tag { color: #777; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }", page)
         self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem 3.5rem;", page)
-        # A line each: the name, cut short where it must be, and when and where after it, said whole.
-        self.assertIn(".fresh-name { order: -1; flex: 0 1 auto; min-width: 3em;", page)
-        self.assertIn(".fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
-        # Spaced as the listings under it are, not spread over the height of the film beside it.
-        self.assertIn(".fresh-list li + li { margin-top: .5rem; }", page)
-        self.assertNotIn("justify-content: space-between; gap: .45rem;", page)
+        self.assertNotIn("fresh-list", page, "one announcement, drawn as the film is, not a list")
 
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
         lead, film = build.render_lead(events, self.built)
         self.assertEqual(film, "", "no film among them")
         self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
-        self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN, "the newest few, in words")
-        self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music"><span class="fresh-meta">'
+        self.assertEqual(lead.count('<a class="biggest'), 1, "one of them, drawn as the film is")
+        self.assertIn(f'<a class="biggest" data-category="music" href="{R}?event=2026-09-20-show-0-the-sinclair">'
+                      '<span class="biggest-said"><span class="biggest-facts">'
                       '<span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span> · '
-                      '<b class="fresh-time">8pm</b> · The Sinclair</span><b class="fresh-name">Show 0</b></a></li>', lead,
-                      "as the list's listings are: a small line of when and where, the day with its weekday, over its name")
-        self.assertNotIn("<img", lead, "no pictures of what's announced")
+                      '<b class="fresh-time">8pm</b> · The Sinclair</span><b class="biggest-title">Show 0</b></span></a>', lead,
+                      "the newest, with no picture to show: when and where over its name")
+        self.assertNotIn("<img", lead, "no picture where none was given")
         # Today's and tomorrow's say so, as the film's day does; the script says them again by the reader's day.
         soon = [dict(self.listing(15, "Tonight's"), added="2026-09-15"), dict(self.listing(16, "Tomorrow's"), added="2026-09-15")]
-        said = build.render_lead(soon, self.built)[0]
+        said = build.render_lead(soon[:1], self.built)[0]
         self.assertIn('<span class="lead-day" data-date="2026-09-15" data-said="Tue, Sep 15">Today</span>', said)
+        said = build.render_lead(soon[1:], self.built)[0]
         self.assertIn('<span class="lead-day" data-date="2026-09-16" data-said="Wed, Sep 16">Tomorrow</span>', said)
-        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><ul class="fresh-list">', lead,
+        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><a class="biggest"', lead,
                       "the way to the rest in the heading's line, not one of its own")
         # Nothing new and nothing big: nothing over the list at all.
         self.assertEqual(build.render_lead([dict(self.listing(20), added="2026-09-01")], self.built), ("", ""))
@@ -1740,7 +1737,7 @@ class HomePage(unittest.TestCase):
         self.assertIn(f'<a data-show="film" href="{R}film/"><svg class="icon" aria-hidden="true"><use href="#icon-film"/></svg>Film</a>', home)
         tonight = self.page(tonight=True)
         self.assertIn('<button data-show="music"><svg class="icon" aria-hidden="true"><use href="#icon-music"/></svg>Music</button>', tonight)
-        self.assertIn(".filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2px; }", home)
+        self.assertIn(".filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2.5px; }", home)
 
     def test_on_a_phone_the_filter_is_a_search_box_over_a_row_of_chips(self):
         """The kinds, when and where are wrapped together, to be one row a phone swipes along; the search after
@@ -2008,8 +2005,8 @@ class Biggest(unittest.TestCase):
         self.assertIn('<div class="lead">', lead)
         self.assertLess(lead.index('class="biggest'), lead.index('class="fresh"'), "the film first")
         self.assertIn("Playing everywhere</span>", lead, "named for what's counted: how many theaters have it")
-        self.assertEqual(lead.count("<img"), 1, "the poster, and no other picture")
-        self.assertNotIn("band.jpg", lead, "not the band's photograph")
+        self.assertEqual(lead.count("<img"), 1, "the poster, and the band's photograph only where it could be copied")
+        self.assertNotIn("band.jpg", lead, "not loaded from the venue's server")
         self.assertNotIn("<script", lead, "and nothing that turns")
 
 
@@ -2328,3 +2325,37 @@ class Evenings(unittest.TestCase):
         self.assertIsNone(build.evening_start([timed("Noon", "12:00")]), "nothing in the evening")
         self.assertEqual(build.row_class(dict(rows[2], evening_starts=True)), " evening-starts")
         self.assertIn('for (const li of lis) li.classList.toggle("evening-starts", li === starts);', build.INDEX_JS)
+
+
+class FreshPick(unittest.TestCase):
+    """The one announcement over the listings: the newest with a picture that can be copied in, and a line about it."""
+    built = datetime(2026, 9, 15, 16, 0, tzinfo=timezone.utc)
+    venue = source("aeg", "https://example.com", name="The Sinclair")
+    jpeg = b"\xff\xd8\xff" + b"\x00" * 64
+
+    def announced(self, days_ahead, title, image="", about=()):
+        item = build.event(self.venue, title, date(2026, 9, 15) + timedelta(days=days_ahead), time(20), image=image)
+        return dict(item, added="2026-09-15", about=list(about))
+
+    def test_newest_with_a_picture_and_words(self):
+        bare = self.announced(1, "Bare")
+        pictured = self.announced(2, "Pictured", image="https://x/pictured.jpg")
+        described = self.announced(3, "Described", image="https://x/described.jpg", about=["A night of it."])
+        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg):
+            item, url = build.fresh_pick([bare, pictured, described], self.built)
+        self.assertEqual((item["title"], url), ("Described", "https://x/described.jpg"))
+
+    def test_a_picture_that_cant_be_copied_is_left_out(self):
+        pictured = self.announced(1, "Pictured", image="https://x/too-big.jpg")
+        with mock.patch.object(build, "picture_bytes", return_value=None):
+            self.assertEqual(build.fresh_pick([pictured], self.built), (pictured, ""))
+        self.assertIsNone(build.fresh_pick([], self.built))
+
+    def test_drawn_with_its_picture(self):
+        item = self.announced(1, "Pictured", image="https://x/pictured.jpg", about=["A night of it."])
+        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg), \
+                mock.patch.object(build, "picture_shape", return_value=(1600, 900)):
+            lead = build.render_lead([item], self.built)[0]
+        self.assertIn('<img class="biggest-picture" src="', lead)
+        self.assertIn('width="160" height="90"', lead, "a photograph lying on its side")
+        self.assertIn('<span class="biggest-about">A night of it.</span>', lead)

@@ -3219,7 +3219,7 @@ BIGGEST_DAYS = 7  # How far ahead to look for the biggest film.
 # no film reaches it there's no biggest film that week, and none is shown.
 BIGGEST_SHARE = 3
 BIGGEST_FLOOR = 3
-FRESH_SHOWN = 3  # How many of the newest announcements are listed.
+FRESH_LOOK = 6  # How far down the newest announcements to look for one with a picture to show.
 # Where a film's own art comes from, in the order they're preferred (a poster from any of them still comes before
 # a still from any): a film database's or a chain's own, never a theater's photograph, as often its lobby as the film.
 PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
@@ -3378,6 +3378,24 @@ def biggest_film(events, built_at, before=""):
             "about": said[0] if said else "", "image": picture, "standing": height > width * 1.2}
 
 
+def fresh_pick(events, built_at):
+    """The one announcement shown over the listings, and its picture: of the newest few (FRESH_LOOK), the newest
+    with a picture that can be copied in with the page (kept_picture), and of those one with a line about it if
+    there's one; else the newest, in words. A picture that can't be copied is left out, as the film's is, rather
+    than loaded from a venue's server. None where nothing's new."""
+    newest = newly_added(events, built_at)[:FRESH_LOOK]
+    if not newest:
+        return None
+
+    def picture(item):
+        url = lighter(item["image"]) if item.get("image") else ""
+        return url if url and picture_kind(picture_bytes(url) or b"") else ""
+
+    # min keeps the first of equals, the newest.
+    item = min(newest, key=lambda item: (not picture(item), not item.get("about")))
+    return item, picture(item)
+
+
 def lead_day(day, built_at):
     """The film's day as the lead says it: Today, Tomorrow, or "Thu, Nov 19", as of this build by the city's clock."""
     here = built_at.astimezone(PUBLIC_ZONE).date()
@@ -3399,7 +3417,7 @@ def render_lead(events, built_at, before=""):
     each a way to its row in the list below. Either on its own where there's only it; nothing where there's
     neither. Nothing moves: the film is the biggest there is until something bigger turns up, and what's
     announced is the newest, in the order it was."""
-    film, fresh = biggest_film(events, built_at, before), newly_added(events, built_at)[:FRESH_SHOWN]
+    film, fresh = biggest_film(events, built_at, before), fresh_pick(events, built_at)
     parts = []
     # A day as a listing's is said: Today or Tomorrow as of this build, there as the page first shows, which the
     # script says again by the reader's day, going back to the date itself (data-said) for a page read the day
@@ -3424,17 +3442,27 @@ def render_lead(events, built_at, before=""):
             + (f'<span class="biggest-about">{html.escape(film["about"])}</span>' if film["about"] else "")
             + '</span></a></div>')
     if fresh:
-        rows = "".join(
-            f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}" '
-            f'data-category="{item["category"]}"><span class="fresh-meta">{said(item["date"])} · '
-            + (f'<b class="fresh-time">{clock(item["times"][0])}</b> · ' if item["times"] else "")
-            + f'{html.escape(item["venue"])}</span><b class="fresh-name">{html.escape(calm(item["title"]))}</b></a></li>'
-            for item in fresh)
+        # One of what's just announced, drawn as the film is: its picture beside when and where, its name and a line
+        # about it. The rest are a press of See all away.
+        item, url = fresh
+        shape = picture_shape(url) if url else None
+        standing = bool(shape) and shape[1] > shape[0] * 1.2
+        box = (76, 114) if standing else (160, 90)
+        picture = (f'<img class="biggest-picture" src="{html.escape(kept_picture(url))}" alt="" '
+                   f'width="{box[0]}" height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if url else ""
+        about = clip(item.get("about", []), 150, most=1)
+        ident = listing_id(item["date"], item["title"], item["venue"])[0]
         parts.append(
             f'<div class="fresh"><div class="lead-head"><a class="lead-tag fresh-tag" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">'
             'Just announced</a>'
             f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></div>'
-            f'<ul class="fresh-list">{rows}</ul></div>')
+            f'<a class="biggest{" standing" if standing else ""}" data-category="{item["category"]}" '
+            f'href="{PUBLIC_ROOT}?{urlencode({"event": ident})}">{picture}'
+            f'<span class="biggest-said"><span class="biggest-facts">{said(item["date"])} · '
+            + (f'<b class="fresh-time">{clock(item["times"][0])}</b> · ' if item["times"] else "")
+            + f'{html.escape(item["venue"])}</span><b class="biggest-title">{html.escape(calm(item["title"]))}</b>'
+            + (f'<span class="biggest-about">{html.escape(about[0])}</span>' if about else "")
+            + '</span></a></div>')
     if not parts:
         return "", ""
     return f'<div class="lead{" one" if len(parts) == 1 else ""}">\n' + "\n".join(parts) + "\n</div>\n", film["key"] if film else ""
@@ -5475,7 +5503,8 @@ PIN_CSS = """
   .when-links { display: flex; gap: inherit; padding-left: 1.1rem; border-left: 1px solid #262626; }
   .when-links .later, .when-links .said-short { display: none; }
   /* Each kind's mark before its word, in its color (.icon's own), set by the middle of the letters. */
-  .filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2px; }
+  /* Centered on the word's capitals: at -2px, the marks' drawings sat half a pixel high of them. */
+  .filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2.5px; }
   .filter .chips [data-show] > .icon { flex: none; }  /* Next weekend: a phone's row has the room (below); here, the weekend's page links to it. */
   /* The kinds, when and where are wrapped together for a phone's row of chips; on a wide screen they sit in the
      bar itself, the venue's menu at the end of it beside the search. */
@@ -5840,35 +5869,26 @@ CSS = """
   /* The film: its picture beside its words in its own shape, a poster standing, a still lying on its side, a
      little smaller on a phone, where the words beside it have less room. */
   .biggest { display: flex; align-items: center; gap: .9rem; color: inherit; }
-  .biggest:hover, .fresh-list a:hover { text-decoration: none; }
+  .biggest:hover { text-decoration: none; }
   .biggest-picture { flex: none; width: 160px; height: 90px; border-radius: 4px; object-fit: cover; background: #161616; }
   .biggest.standing .biggest-picture { width: 76px; height: 114px; }
   @media (max-width: 34rem) { .biggest:not(.standing) .biggest-picture { width: 120px; height: 68px; } }
   .biggest-said { display: grid; gap: .15rem; min-width: 0; }
-  .biggest-facts, .fresh-meta { display: block; color: #777; font-size: .8rem; line-height: 1.4; }
-  .biggest-facts .lead-day, .fresh-meta .lead-day { color: #aaa; }
+  .biggest-facts { display: block; color: #777; font-size: .8rem; line-height: 1.4; }
+  .biggest-facts .lead-day { color: #aaa; }
   /* Two lines at most, as what it's about under it has: a restoration's full billing ("Dr. Strangelove or: How I
      Learned to Stop Worrying… (50th Anniversary 4K Restoration)") would otherwise take four on a phone. */
   .biggest-title { overflow: hidden; color: #fff; font-weight: 400; line-height: 1.35;
                    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .biggest-about { overflow: hidden; color: #6c6c6c; font-size: .85rem; line-height: 1.4;
                    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .biggest:hover .biggest-title, .fresh-list a:hover .fresh-name { text-decoration: underline; }
-  /* What's announced, a line each: its name, and after it when and where, said whole (the time in its kind's
-     color), the name what's cut short with "…" where the line runs out. Where and when at most most of the line,
-     so a name always has some. */
-  .fresh-list { margin: 0; padding: 0; list-style: none; }
-  .fresh-list li + li { margin-top: .5rem; }
-  .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; color: inherit; white-space: nowrap; }
+  .biggest:hover .biggest-title { text-decoration: underline; }
+  /* What's announced: its time in its kind's color. */
   .fresh-time { color: #d4d4d4; font-weight: 400; }
   .fresh-time::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: .4em; border-radius: 50%;
                         background: var(--dot); vertical-align: 1px; }
-  .fresh-name { order: -1; flex: 0 1 auto; min-width: 3em; overflow: hidden; color: #fff; font-weight: 400; line-height: 1.35;
-                text-overflow: ellipsis; }
-  .fresh-list .fresh-meta { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
-  /* Side by side: what's announced spaced as the listings below are, from the top, rather than spread to the foot of
-     the film's picture; and where it's what is taller, the film in its middle. */
+  /* Side by side, the two the same height under their headings, each in the middle of its part. */
   @media not all and (max-width: 46rem) {
     .biggest-part, .fresh { display: flex; flex-direction: column; }
     .biggest { flex: 1 1 auto; }
