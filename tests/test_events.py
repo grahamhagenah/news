@@ -1300,7 +1300,7 @@ class JustAnnounced(unittest.TestCase):
         # film's card on a wide screen.
         self.assertIn(".fresh-name { flex: 0 1 auto; min-width: 3em;", page)
         self.assertIn(".fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
-        self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);", page)
+        self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);", page)
         # Room between the listings, and on a phone alone a hairline: not over the first the filter leaves.
         self.assertIn(".day > ul > li.row { padding-top: .45rem; padding-bottom: .45rem; }", page)
         self.assertIn("    .day > ul > li.row { padding-top: .65rem; padding-bottom: .65rem; }\n"

@@ -6174,7 +6174,8 @@ CSS = """
   /* Over the listings on the home page: the newest few announced, in words, a line each; and beside them on a wide
      screen (under them on a phone), the film playing everywhere, a card with its picture. Each headed as a day is, a
      small grey label in capitals over a hairline. */
-  .lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem 3.5rem; margin: 0 0 2rem; }
+  /* The film's card two parts, what's announced three: its lines are long and the card's words wrap. */
+  .lead { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 1.6rem 3.5rem; margin: 0 0 2rem; }
   .lead.one { grid-template-columns: minmax(0, 1fr); }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
   .lead > * { min-width: 0; }
