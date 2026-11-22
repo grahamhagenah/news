@@ -1383,7 +1383,13 @@ class TimeColumn(unittest.TestCase):
 
     def test_each_listing_one_block_on_a_phone_and_a_timetables_line_wider(self):
         page = build.render_index([build.event(self.venue, "A Show", self.day, time(20))], [self.venue], [], [], self.built, public=True)
-        self.assertIn(".day .headline > .times, .day .headline .tail { display: none; }", page, "said once, on the small line")
+        self.assertIn(".day .headline > .times, .day .headline .tail, .day .headline > .later { display: none; }", page,
+                      "said once, on the small line")
+        # A wide screen's row says its next two showings after its name, the time's column only its first.
+        self.assertIn(".day .headline > .later { display: inline; margin-left: .7em; color: #777;", page)
+        self.assertIn(".day .row .clock small { display: none; }", page)
+        self.assertIn("const LATER_SHOWN = 2;", page)
+        self.assertIn('headline.querySelector(":scope > .title").after(line);', page)
         # One block at every width, not in a phone's rules alone: the time and the venue on a small line, the name
         # under it, no mark.
         block = page.index(".day > ul > li.row:not(.combined), .combined > details > summary {\n    display: flex;")

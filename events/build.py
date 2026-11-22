@@ -4805,7 +4805,22 @@ INDEX_JS = """
     column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small title="${more} more showtime${more > 1 ? "s" : ""}">+${more} more</small>` : "")
       : column.dataset.untimed ? `<i class="untimed">${column.dataset.untimed}</i>` : "";
     li.dataset.first = times[0]?.dataset.time || "";
+    // A wide screen says what those more are, after the name: the next two of them, and how many past those
+    // ("1:30pm · 4:45pm +3"), more of them a crowd; for a film at several theaters, the times it
+    // starts at any of them, its view saying which. Of the row's part of the day: an evening's are its own row's.
+    const later = [...new Map(times.slice(1).map(t => [t.dataset.time, t])).values()].filter(t => t.dataset.time !== times[0].dataset.time);
+    const headline = li.querySelector(":scope > .headline, summary > .headline");
+    let line = headline?.querySelector(":scope > .later");
+    if (!later.length || !headline) { line?.remove(); return; }
+    if (!line) {
+      line = Object.assign(document.createElement("span"), { className: "later" });
+      headline.querySelector(":scope > .title").after(line);
+    }
+    const shown = later.slice(0, LATER_SHOWN);
+    line.innerHTML = shown.map(t => `<span${t.classList.contains("sold") && !li.matches(".combined") ? ' class="sold"' : ""}>${t.textContent}</span>`).join('<i> · </i>')
+      + (later.length > shown.length ? `<small>+${later.length - shown.length}</small>` : "");
   };
+  const LATER_SHOWN = 2;
   // Each day's rows in the order of the times in the column: a film at several theaters is placed by its first
   // showing at any of them, and with a theater or a town chosen, its first there can be later than the rows
   // after it. Those without a time last, as the build has them; a tie as it was. Not Recently added's, which
@@ -6002,7 +6017,7 @@ CSS = """
      so the key to them is in the bar over the list. */
   .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
     display: block; order: 1; position: static; align-self: center; margin-right: .45em; }
-  .day .headline > .times, .day .headline .tail { display: none; }
+  .day .headline > .times, .day .headline .tail, .day .headline > .later { display: none; }
   .clock { order: 1; display: flex; align-items: baseline; gap: .3em; min-width: 0; font-size: .9rem;
            font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* The time in grey, after its kind's mark. */
@@ -6051,6 +6066,13 @@ CSS = """
     .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
       grid-column: 1; grid-row: 1; position: relative; top: 1.2px; }
     .day .headline { grid-column: 2; grid-row: 1; }
+    /* A listing's later showings after its name, in grey, the time's column saying only its first. */
+    .day .headline > .later { display: inline; margin-left: .7em; color: #777; font-size: .85rem; white-space: nowrap;
+                              font-variant-numeric: tabular-nums; }
+    .day .headline > .later i { color: #444; font-style: normal; }
+    .day .headline > .later small { margin-left: .45em; color: #555; font-size: inherit; }
+    .day .headline > .later .sold { color: #444; text-decoration: line-through; }
+    .day .row .clock small { display: none; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
     /* Recently added: the day each is on a column of its own, before its time. */
