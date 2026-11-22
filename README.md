@@ -19,6 +19,7 @@ Run everything from this top folder, with only the Python standard library:
 
 - `python3 -m news.build` and `python3 -m events.build` write `dist/news` and `dist/events`; open their `index.html`. `python3 -m housing.build` writes `dist/housing`, `python3 -m jobs.build` writes `dist/jobs`.
 - `python3 -m unittest` runs the tests.
+- `.claude/launch.json` serves Pushpin's build, `dist/public`, at http://localhost:8000/ (the `pushpin` entry), for the Claude app's preview: build it first.
 
 ## The newsfeed
 
