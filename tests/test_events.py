@@ -27,6 +27,7 @@ ROUTES = [
     ("sinclaircambridge.com/events/detail/1460677", "sinclair_show.html"),
     ("sinclaircambridge.com", "sinclair.html"),
     ("artsatthearmory.org/events.ics", "armory.ics"),
+    ("api.membershipworks.com/v2/events", "membershipworks.xml"),
     ("24hourmusic.com/include/widgets/events/performancelist.asp?venue=1&", "burren.json"),
     ("berklee.edu/BPC/full-calendar-of-events-at-the-bpc", "berklee.html"),
     ("lilypadinman.com/home?format=json", "lilypad.json"),
@@ -192,6 +193,24 @@ class Readers(unittest.TestCase):
                 mock.patch.object(build, "today", lambda: date(2026, 6, 1)):  # Its sample's shows are all past the window then.
             build.read_axs(source("axs", "https://www.sinclaircambridge.com/events/all", "music", "The Sinclair"))
         self.assertEqual(asked, ["https://www.sinclaircambridge.com/events/all"])
+
+    def test_membershipworks_keeps_the_lines_kind(self):
+        """Arts Collaborative Medford's events, from its MembershipWorks feed: its concerts and its jam, at their
+        times, with their pictures; not its discussion groups, markets or meetings."""
+        url = "https://api.membershipworks.com/v2/events?_op=rss&org=35160&grp=2"
+        found = build.read_membershipworks(source("membershipworks", url, "music", "Arts Collaborative Medford"))
+        self.assertEqual([(item["title"], item["date"], item["times"]) for item in found], [
+            ("An Evening of Scottish Fiddle", date(2026, 12, 11), [time(19, 30)]),
+            ("Blizzard of Blues", date(2026, 12, 12), [time(19, 0)]),
+            ("The Jam Down By Riverside (potluck)", date(2026, 12, 13), [time(13, 0)]),
+        ])
+        fiddle = found[0]
+        self.assertEqual(fiddle["link"], "https://artscollabmedford.org/eventscalendar#!event/2026/12/11/an-evening-of-scottish-fiddle")
+        self.assertTrue(fiddle["image"].startswith("https://d1tif55lvfk8gc.cloudfront.net/"))
+        self.assertIn("Isabel Oliart", " ".join(fiddle["about"]))
+        talks = build.read_membershipworks(source("membershipworks", url, "art", "Arts Collaborative Medford"))
+        self.assertEqual([item["title"] for item in talks], ["World Poetry Salon", "Drawn Together: Art of Aging"],
+                         "an art line would keep its talks, still not its markets or meetings")
 
     def test_armory_by_kind(self):
         found = build.read_armory(source("armory", "https://artsatthearmory.org/events.ics", "music", "Arts at the Armory"))

@@ -36,6 +36,8 @@
 #              build. Films and live shows are sorted by what the site files each under.
 #   ics        an iCalendar feed (Midway Cafe's, from its Tockify calendar)
 #   armory     Arts at the Armory's calendar feed, sorted into its concerts, readings and talks, and screenings
+#   membershipworks  an arts center's MembershipWorks calendar feed, kept to the group holding its events
+#              (grp=2) and to the line's kind: Arts Collaborative Medford's concerts, not its talks or workshops
 #   showare    a venue's shows on an accesso ShoWare ticket site, from the list its performance page loads,
 #              ending ?venue=<its id> (The Burren, on 24 Hour Music's; the id is in that site's venue listing)
 #   sally      Sally O'Brien's music page, written by hand on its BentoBox site: a section for each night
@@ -91,6 +93,7 @@ tribe      https://therockwell.org/wp-json/tribe/events/v1/events?categories=mus
 squarespace  https://www.lilypadinman.com/home   music   The Lilypad
 passim     https://www.passim.org/live-music/   music   Club Passim
 armory     https://artsatthearmory.org/events.ics   music   Arts at the Armory
+membershipworks  https://api.membershipworks.com/v2/events?_op=rss&org=35160&grp=2   music   Arts Collaborative Medford
 showare    https://tickets.24hourmusic.com/include/widgets/events/performancelist.asp?venue=1   music   The Burren
 sally      https://www.sallyobriensbar.com/music/   music   Sally O'Brien's
 plough     https://calendar.ploughandstars.com/events/calendar   music   The Plough and Stars

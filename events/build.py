@@ -1110,7 +1110,8 @@ EVENT_NS = {"ev": "http://purl.org/rss/1.0/modules/event/", "content": "http://p
 def read_membershipworks(source):
     """An arts center's events from its MembershipWorks calendar's feed (Arts Collaborative Medford's), with
     ?grp= kept to the group that holds its events rather than its workshops and classes. Each sorted into music or
-    art and talks by what it is; its markets and meetings left out."""
+    art and talks by what it is, and only those of its line's kind kept: Arts Collaborative Medford's concerts,
+    not its discussion groups; its markets and meetings left out either way."""
     from xml.etree import ElementTree
     feed = ElementTree.fromstring(re.sub(r"^\s*<\?xml[^>]*\?>", "", fetch(source["url"])))
     events = []
@@ -1124,8 +1125,8 @@ def read_membershipworks(source):
         picture = item.find("media:content", EVENT_NS)
         listing = event(source, title, day, start, link=item.findtext("link") or "", about=about(described),
                         image=picture.get("url", "") if picture is not None else "")
-        listing["category"] = "music" if MEMBERSHIPWORKS_MUSIC.search(said) else "art"
-        events.append(listing)
+        if ("music" if MEMBERSHIPWORKS_MUSIC.search(said) else "art") == source["category"]:
+            events.append(listing)
     return events
 
 
