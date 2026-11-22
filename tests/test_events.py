@@ -1302,7 +1302,9 @@ class JustAnnounced(unittest.TestCase):
         start = page.index('<script>document.documentElement.classList.add("settling");')
         self.assertLess(start, page.index('class="filter"'), "marked before any of it is read")
         self.assertIn('addEventListener("DOMContentLoaded", () => document.documentElement.classList.remove("settling"));', page)
-        self.assertIn(".settling main > :not(header):not(.tagline) { visibility: hidden; }", page)
+        self.assertIn(".settling main > :not(header):not(.tagline):not(.lead):not(.bar-mark):not(.filter):not(.skeleton) "
+                      "{ visibility: hidden; }", page, "the listings; what's over them shows at once")
+        self.assertIn('</nav>\n<div class="skeleton" aria-hidden="true">', page, "an outline in their place meanwhile")
 
     def test_sally_obriens_is_never_announced(self):
         """Its page is written by hand, and a night's name there is as often notes and set times as a band's."""
@@ -1346,14 +1348,14 @@ class JustAnnounced(unittest.TestCase):
         lead, film = build.render_lead(events, self.built)
         self.assertEqual(film, "", "no film among them")
         self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
-        self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN + build.FRESH_SPARE,
+        self.assertEqual(lead.count("<li data-ends="), build.FRESH_SHOWN + build.FRESH_SPARE,
                          "the newest few, a line each, and spares for any that's started by the time it's read")
         page = build.render_index(events, [self.venue], [], [], self.built, public=True)
         self.assertIn(f".fresh-list li:nth-child(n+{build.FRESH_SHOWN + 1}) {{ display: none; }}", page,
                       "the spares unseen until one before them goes")
         # One whose listing the page has dropped goes, rather than opening a listing that's not there.
         self.assertIn('if (link.closest(".fresh-list")) link.closest("li").remove();', page)
-        self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music">'
+        self.assertIn(f'<li data-ends="2026-09-20T20:00"><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music">'
                       '<svg class="icon" role="img" aria-label="Music"><use href="#icon-music"/></svg>'
                       '<span class="fresh-name">Show 0</span><span class="fresh-meta">'
                       '<span class="lead-day" data-date="2026-09-20" data-said="Sep 20">Sep 20</span> · '
@@ -2192,7 +2194,9 @@ class Biggest(unittest.TestCase):
         self.assertIn("Playing everywhere</span>", lead, "named for what's counted: how many theaters have it")
         self.assertEqual(lead.count("<img"), 1, "the film's poster, and no picture of what's announced")
         self.assertNotIn("band.jpg", lead)
-        self.assertNotIn("<script", lead, "and nothing that turns")
+        self.assertNotIn("setInterval", lead, "and nothing that turns")
+        # Its days and what's started put right as it's read, before it's painted, not when the page's script runs.
+        self.assertTrue(lead.endswith(build.LEAD_NOW.replace("ZONE", '"America/New_York"')))
 
     def test_a_poster_and_a_still_each_get_their_own_shape(self):
         """A poster stands on its end, a still lies on its side: cut to a poster's shape, a still lost its scene."""

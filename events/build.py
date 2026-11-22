@@ -3713,7 +3713,10 @@ def render_lead(events, built_at, before=""):
     # announcement where a list shows a few; three lines stand as tall as the film's card beside them.
     if fresh:
         rows = "".join(
-            f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}" '
+            # data-ends: when its last showing starts, by the city's clock, after which the page drops its listing
+            # (one with no time, at the end of its day), and the script after the lead drops its line before it's seen.
+            f'<li data-ends="{item["date"].isoformat()}T{max(item["times"]).strftime("%H:%M") if item["times"] else "24:00"}">'
+            f'<a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}" '
             f'data-category="{item["category"]}">{icon(item["category"])}<span class="fresh-name">{html.escape(calm(item["title"]))}</span>'
             # When and where, its day and venue: not its time, which took the room a name wants, and is its view's to say.
             f'<span class="fresh-meta">{said(item["date"], weekday=False)} · {html.escape(item["venue"])}</span></a></li>'
@@ -3739,7 +3742,37 @@ def render_lead(events, built_at, before=""):
             + '</span></a></div>')
     if not parts:
         return "", ""
-    return f'<div class="lead{" one" if len(parts) == 1 else ""}">\n' + "\n".join(parts) + "\n</div>\n", film["key"] if film else ""
+    return (f'<div class="lead{" one" if len(parts) == 1 else ""}">\n' + "\n".join(parts) + "\n</div>\n"
+            + LEAD_NOW.replace("ZONE", json.dumps(str(PUBLIC_ZONE))), film["key"] if film else "")
+
+
+# What stands in for the listings until the page's script has put them right (render_index): a day's heading and
+# eight rows, in outline.
+SKELETON = ('<div class="skeleton" aria-hidden="true"><div class="sk-day"><i></i></div>'
+            + '<div class="sk-row"><i class="sk-when"></i><i class="sk-name"></i><i class="sk-where"></i></div>' * 8
+            + '</div>\n')
+
+
+# Right after the lead, before it's painted (the page's own script comes at its end, two megabytes on): its days
+# said by the reader's clock ("Today"), and an announcement whose last showing has started dropped, as the page will
+# drop its listing, with the next of the spares in its place, so the lead shows as it stands, at once, and doesn't
+# change after. The page's script still checks it once the list is in (render_lead's rows can name a listing a day
+# part apart), which this makes all but never matter.
+LEAD_NOW = """<script>(() => {
+  const lead = document.currentScript.previousElementSibling, zone = ZONE, now = new Date();
+  const key = d => d.toLocaleDateString("en-CA", { timeZone: zone });
+  const today = key(now), tomorrow = key(new Date(now.getTime() + 86400000));
+  const stamp = today + "T" + now.toLocaleTimeString("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit" });
+  for (const li of lead.querySelectorAll(".fresh-list li[data-ends]")) if (li.dataset.ends < stamp) li.remove();
+  if (!lead.querySelector(".fresh-list li")) lead.querySelector(".fresh")?.remove();
+  if (!lead.children.length) return lead.remove();
+  lead.classList.toggle("one", lead.children.length === 1);
+  for (const when of lead.querySelectorAll(".lead-day")) {
+    const date = when.dataset.date;
+    when.textContent = date === today ? "Today" : date === tomorrow ? "Tomorrow" : when.dataset.said;
+  }
+})();</script>
+"""
 
 
 # When the evening starts, for a listing on both before and after it: such a listing is listed twice that day, at its
@@ -4051,11 +4084,13 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
-        # Nothing below the header is painted until the script at the end has run: a page is two megabytes, which a
-        # phone shows as it arrives, and the script then drops what's passed since the build (hours of it, by its
-        # last), puts today's in the order of what's next and hides what's past the first page, so what showed
-        # first would move under the reader. Hidden rather than gone, so it keeps its room and nothing jumps when
-        # it shows. It shows once the page is all read, even if the script fails.
+        # The listings aren't painted until the script at the end has run: a page is two megabytes, which a phone
+        # shows as it arrives, and the script then drops what's passed since the build (hours of it, by its last),
+        # puts today's in the order of what's next and hides what's past the first page, so what showed first would
+        # move under the reader. Hidden rather than gone, so they keep their room and nothing jumps when they show,
+        # and a faint outline of a day's rows stands in their place meanwhile (SKELETON). They show once the page is
+        # all read, even if the script fails. What's over them shows at once: the header and the filter, which the
+        # script only wires up, and the lead, which its own script puts right as it's read (LEAD_NOW).
         '<script>document.documentElement.classList.add("settling");'
         'addEventListener("DOMContentLoaded", () => document.documentElement.classList.remove("settling"));</script>'
         # The kinds, when and where together (a phone's row of chips), then the search (its box, on a line above).
@@ -4063,7 +4098,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         f'<span class="chips">{buttons}{when_links}{said_over(venue_menu(venues, towns, events), "Where")}</span>'
         f'<span class="finders">{SEARCH}'
         '<button class="search-clear" type="button" aria-label="Clear the search" hidden></button></span></nav>\n'
-        + "\n".join(sections)
+        + SKELETON + "\n".join(sections)
         + f'\n<p class="empty" hidden data-narrowed="{html.escape(narrowed)}">{html.escape(empty)}</p>'
         '<button class="empty-clear" type="button" hidden></button>\n<nav class="pager" hidden><button class="more" type="button">Load more</button></nav>\n'
         + others + footer
@@ -6048,7 +6083,34 @@ PUBLIC_CSS = """
 CSS = """
   /* Until the page's script has run, everything under the header and the page's line about itself unpainted,
      though in its place (render_index). */
-  .settling main > :not(header):not(.tagline) { visibility: hidden; }
+  .settling main > :not(header):not(.tagline):not(.lead):not(.bar-mark):not(.filter):not(.skeleton) { visibility: hidden; }
+  /* Meanwhile, an outline of a day's rows where they'll be: a heading and its line, and rows drawn as the list's
+     are (a phone's small line over a name, a wide screen's time, name and venue), faintly pulsing. Taking no room
+     of its own, it lies over the hidden list, so nothing moves when the list takes its place. */
+  .skeleton { display: none; }
+  .settling .skeleton { display: block; height: 0; overflow: visible; }
+  .skeleton i { display: block; height: .7rem; border-radius: 4px; background: #151515;
+                animation: sk-pulse 1.1s ease-in-out infinite alternate; }
+  @keyframes sk-pulse { from { opacity: .5; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .skeleton i { animation: none; } }
+  .sk-day { padding: 1.8rem 0 1.15rem; border-bottom: 1px solid #1c1c1c; }
+  .sk-day i { width: 9.5rem; height: .6rem; }
+  .sk-row { padding: .75rem 0; }
+  .sk-day + .sk-row { margin-top: .35rem; }
+  .sk-when { width: 8.5rem; height: .6rem !important; margin-bottom: .6rem; }
+  .sk-name { width: 72%; height: .9rem !important; }
+  .sk-row:nth-child(3n) .sk-name { width: 54%; }
+  .sk-row:nth-child(3n+1) .sk-name { width: 63%; }
+  .sk-where { display: none !important; }
+  @media (max-width: 34rem) { .sk-row + .sk-row { border-top: 1px solid #161616; } }
+  @media not all and (max-width: 34rem) {
+    .sk-row { display: grid; grid-template-columns: 7.8rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: center; }
+    .sk-when { width: 3.6rem; margin: 0; }
+    .sk-name { width: 46%; }
+    .sk-row:nth-child(3n) .sk-name { width: 33%; }
+    .sk-row:nth-child(3n+1) .sk-name { width: 40%; }
+    .sk-where { display: block !important; width: 7rem; }
+  }
   /* Category colors, for the marks in the list and on the filter: violet music, amber film, blue art & talks. */
   :root { --music: #a78bfa; --film: #fbbf24; --art: #60a5fa; }
   .icon { color: var(--dot); }
