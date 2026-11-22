@@ -1197,17 +1197,17 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn('<div class="lead-head"><a class="lead-tag fresh-tag" href="', page)
         self.assertIn(".lead-tag { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }", page)
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
-        # A line each: the name, cut short where it must be, and when and where after it, said whole; two columns
-        # of them on a wide screen.
+        # A line each: the name, cut short where it must be, and when and where after it, said whole; beside the
+        # film's card on a wide screen.
         self.assertIn(".fresh-name { flex: 0 1 auto; min-width: 3em;", page)
         self.assertIn(".fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
-        self.assertIn(".fresh-list { columns: 2; column-gap: 3.5rem; }", page)
+        self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);", page)
 
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
         lead, film = build.render_lead(events, self.built)
         self.assertEqual(film, "", "no film among them")
-        self.assertNotIn("lead-film", lead, "no film big enough to go under them")
+        self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
         self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN, "the newest few, a line each")
         self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music">'
                       '<span class="fresh-name">Show 0</span><span class="fresh-meta">'
@@ -1885,7 +1885,7 @@ class Biggest(unittest.TestCase):
         goes back to the date itself (data-said) for a page read after midnight."""
         events = [self.showing("Wide Release", f"Theater {n}") for n in range(4)]
         lead, _ = build.render_lead(events, self.built)
-        self.assertIn('<span class="lead-film-facts"><span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Today</span>'
+        self.assertIn('<span class="biggest-facts"><span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Today</span>'
                       ' · 4 theaters</span>', lead, "the day first, as a listing's small line has it")
         later, _ = build.render_lead(events, self.built - timedelta(days=2))
         self.assertIn('data-said="Sun, Sep 20">Sun, Sep 20</span>', later, "not today or tomorrow: the date")
@@ -1987,20 +1987,31 @@ class Biggest(unittest.TestCase):
         with mock.patch.object(build, "picture_shape", return_value=None):  # It wouldn't load, so no shape.
             self.assertNotIn("<img", build.render_lead(poster, self.built)[0])
 
-    def test_the_film_a_line_under_whats_announced(self):
-        """Words alone: what's announced, then the film playing everywhere a line of its own, with no picture."""
+    def test_the_film_a_card_beside_whats_announced(self):
+        """What's announced in words, first; the film a card with its poster, after it: on its right on a wide
+        screen, under it on a phone."""
         films = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         announced = [dict(build.event(source("aeg", "x", "music", "The Sinclair"), "A show", date(2026, 9, 22), time(20),
                                       image="https://x/band.jpg"), added="2026-09-19")]
         lead, film = build.render_lead(films + announced, self.built)
         self.assertEqual(film, "wide release", "what the next build keeps, unless something's bigger")
         self.assertIn('<div class="lead">', lead)
-        self.assertLess(lead.index('class="fresh"'), lead.index('class="lead-film"'), "what's announced first")
-        self.assertIn('<a class="lead-film" data-category="film" href="/?event=2026-09-20-wide-release">'
-                      '<span class="lead-tag">Playing everywhere</span><span class="lead-film-line">'
-                      '<span class="lead-film-name">Wide Release</span>', lead)
-        self.assertNotIn("<img", lead, "no pictures")
+        self.assertLess(lead.index('class="fresh"'), lead.index('class="biggest-part"'), "what's announced first, the film after")
+        self.assertIn("Playing everywhere</span>", lead, "named for what's counted: how many theaters have it")
+        self.assertEqual(lead.count("<img"), 1, "the film's poster, and no picture of what's announced")
+        self.assertNotIn("band.jpg", lead)
         self.assertNotIn("<script", lead, "and nothing that turns")
+
+    def test_a_poster_and_a_still_each_get_their_own_shape(self):
+        """A poster stands on its end, a still lies on its side: cut to a poster's shape, a still lost its scene."""
+        events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
+        standing, _ = build.render_lead(events, self.built)
+        self.assertIn('class="biggest standing"', standing)
+        self.assertIn('width="76" height="114"', standing)
+        with mock.patch.object(build, "picture_shape", return_value=(1920, 1080)):
+            lying, _ = build.render_lead(events, self.built)
+        self.assertIn('class="biggest" data-category="film"', lying)
+        self.assertIn('width="160" height="90"', lying)
 
 
 class Fallback(unittest.TestCase):
