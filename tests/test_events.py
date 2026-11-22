@@ -1187,7 +1187,7 @@ class JustAnnounced(unittest.TestCase):
             self.assertEqual(build.calm(name), name)
         shouting = dict(self.listing(20, "DRU CUTLER, ZAPBEETLE, HANA BOOKMAN"), added="2026-09-15")
         lead = build.render_lead([shouting], self.built)[0]
-        self.assertIn('<b class="biggest-title">Dru Cutler, Zapbeetle, Hana Bookman</b>', lead)
+        self.assertIn('<span class="fresh-name">Dru Cutler, Zapbeetle, Hana Bookman</span>', lead)
         self.assertIn("event=2026-09-20-dru-cutler-zapbeetle-hana-bookman-the-sinclair", lead, "its row is still the one it goes to")
 
     def test_headed_and_drawn_as_the_list_is(self):
@@ -1196,29 +1196,32 @@ class JustAnnounced(unittest.TestCase):
         page = build.render_index([dict(self.listing(20), added="2026-09-15")], [self.venue], [], [], self.built, public=True)
         self.assertIn('<div class="lead-head"><a class="lead-tag fresh-tag" href="', page)
         self.assertIn(".lead-tag { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }", page)
-        self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem 3.5rem;", page)
         self.assertNotIn(".fresh-more { display: none; }", page, "See all is there on a phone too")
-        self.assertNotIn("fresh-list", page, "one announcement, drawn as the film is, not a list")
+        # A line each: the name, cut short where it must be, and when and where after it, said whole; two columns
+        # of them on a wide screen.
+        self.assertIn(".fresh-name { flex: 0 1 auto; min-width: 3em;", page)
+        self.assertIn(".fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
+        self.assertIn(".fresh-list { columns: 2; column-gap: 3.5rem; }", page)
 
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
         lead, film = build.render_lead(events, self.built)
         self.assertEqual(film, "", "no film among them")
-        self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
-        self.assertEqual(lead.count('<a class="biggest'), 1, "one of them, drawn as the film is")
-        self.assertIn(f'<a class="biggest standing" data-category="music" href="{R}?event=2026-09-20-show-0-the-sinclair">'
-                      '<span class="biggest-said"><span class="biggest-facts">'
+        self.assertNotIn("lead-film", lead, "no film big enough to go under them")
+        self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN, "the newest few, a line each")
+        self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music">'
+                      '<span class="fresh-name">Show 0</span><span class="fresh-meta">'
                       '<span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span> · '
-                      '<b class="fresh-time">8pm</b> · The Sinclair</span><b class="biggest-title">Show 0</b></span></a>', lead,
-                      "the newest, with no picture to show: when and where over its name")
-        self.assertNotIn("<img", lead, "no picture where none was given")
+                      '<b class="fresh-time">8pm</b> · The Sinclair</span></a></li>', lead,
+                      "its name, and after it when and where")
+        self.assertNotIn("<img", lead, "words alone")
         # Today's and tomorrow's say so, as the film's day does; the script says them again by the reader's day.
         soon = [dict(self.listing(15, "Tonight's"), added="2026-09-15"), dict(self.listing(16, "Tomorrow's"), added="2026-09-15")]
         said = build.render_lead(soon[:1], self.built)[0]
         self.assertIn('<span class="lead-day" data-date="2026-09-15" data-said="Tue, Sep 15">Today</span>', said)
         said = build.render_lead(soon[1:], self.built)[0]
         self.assertIn('<span class="lead-day" data-date="2026-09-16" data-said="Wed, Sep 16">Tomorrow</span>', said)
-        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><a class="biggest standing"', lead,
+        self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><ul class="fresh-list">', lead,
                       "the way to the rest in the heading's line, not one of its own")
         # Nothing new and nothing big: nothing over the list at all.
         self.assertEqual(build.render_lead([dict(self.listing(20), added="2026-09-01")], self.built), ("", ""))
@@ -1882,7 +1885,7 @@ class Biggest(unittest.TestCase):
         goes back to the date itself (data-said) for a page read after midnight."""
         events = [self.showing("Wide Release", f"Theater {n}") for n in range(4)]
         lead, _ = build.render_lead(events, self.built)
-        self.assertIn('<span class="biggest-facts"><span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Today</span>'
+        self.assertIn('<span class="lead-film-facts"><span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Today</span>'
                       ' · 4 theaters</span>', lead, "the day first, as a listing's small line has it")
         later, _ = build.render_lead(events, self.built - timedelta(days=2))
         self.assertIn('data-said="Sun, Sep 20">Sun, Sep 20</span>', later, "not today or tomorrow: the date")
@@ -1984,51 +1987,19 @@ class Biggest(unittest.TestCase):
         with mock.patch.object(build, "picture_shape", return_value=None):  # It wouldn't load, so no shape.
             self.assertNotIn("<img", build.render_lead(poster, self.built)[0])
 
-    def test_a_poster_and_a_still_each_get_their_own_shape(self):
-        """A poster stands on its end, a still lies on its side: cut to a poster's shape, a still lost its scene."""
-        events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
-        standing, _ = build.render_lead(events, self.built)
-        self.assertIn('class="biggest standing"', standing)
-        self.assertIn('width="76" height="114"', standing)
-        with mock.patch.object(build, "picture_shape", return_value=(1920, 1080)):
-            lying, _ = build.render_lead(events, self.built)
-        self.assertIn('class="biggest" data-category="film"', lying)
-        self.assertIn('width="160" height="90"', lying)
-        page = build.render_index(events, [], [], [], self.built, public=True)
-        self.assertIn(".biggest.standing .biggest-picture { width: 76px; height: 114px; }", page)
-        self.assertIn(".biggest:not(.standing) .biggest-picture { width: 120px; height: 68px; }", page, "a phone's, a little smaller")
-
-    def test_the_poster_is_copied_into_the_site(self):
-        """So it loads with the page, not after it from a theater's server; a new poster is a new file."""
-        poster = b"\xff\xd8\xff\xe0" + b"a poster"
-        events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
-        with mock.patch.object(build, "picture_bytes", return_value=poster):
-            lead, _ = build.render_lead(events, self.built)
-        [(name, data)] = build.KEPT_PICTURES.items()
-        self.assertRegex(name, r"^pictures/[0-9a-f]{16}\.jpg$")
-        self.assertEqual(data, poster)
-        self.assertIn(f'src="{build.PUBLIC_ROOT}{name}"', lead)
-        self.assertNotIn(POSTER, lead)
-
-    def test_a_poster_that_wont_copy_stays_where_it_is(self):
-        events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
-        lead, _ = build.render_lead(events, self.built)  # picture_bytes gives nothing, as when it won't load.
-        self.assertIn(f'src="{POSTER}"', lead)
-        self.assertEqual(build.KEPT_PICTURES, {})
-        with mock.patch.object(build, "picture_bytes", return_value=b"GIF89a..."):
-            self.assertEqual(build.kept_picture("https://x/poster.gif"), "https://x/poster.gif", "not one to copy")
-
-    def test_the_film_beside_whats_announced(self):
+    def test_the_film_a_line_under_whats_announced(self):
+        """Words alone: what's announced, then the film playing everywhere a line of its own, with no picture."""
         films = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         announced = [dict(build.event(source("aeg", "x", "music", "The Sinclair"), "A show", date(2026, 9, 22), time(20),
                                       image="https://x/band.jpg"), added="2026-09-19")]
         lead, film = build.render_lead(films + announced, self.built)
         self.assertEqual(film, "wide release", "what the next build keeps, unless something's bigger")
         self.assertIn('<div class="lead">', lead)
-        self.assertLess(lead.index('class="biggest'), lead.index('class="fresh"'), "the film first")
-        self.assertIn("Playing everywhere</span>", lead, "named for what's counted: how many theaters have it")
-        self.assertEqual(lead.count("<img"), 1, "the poster, and the band's photograph only where it could be copied")
-        self.assertNotIn("band.jpg", lead, "not loaded from the venue's server")
+        self.assertLess(lead.index('class="fresh"'), lead.index('class="lead-film"'), "what's announced first")
+        self.assertIn('<a class="lead-film" data-category="film" href="/?event=2026-09-20-wide-release">'
+                      '<span class="lead-tag">Playing everywhere</span><span class="lead-film-line">'
+                      '<span class="lead-film-name">Wide Release</span>', lead)
+        self.assertNotIn("<img", lead, "no pictures")
         self.assertNotIn("<script", lead, "and nothing that turns")
 
 
@@ -2349,58 +2320,3 @@ class Evenings(unittest.TestCase):
         self.assertIn('for (const li of lis) li.classList.toggle("evening-starts", li === starts);', build.INDEX_JS)
 
 
-class FreshPick(unittest.TestCase):
-    """The one announcement over the listings: the newest with a picture that can be copied in, and a line about it."""
-    built = datetime(2026, 9, 15, 16, 0, tzinfo=timezone.utc)
-    venue = source("aeg", "https://example.com", name="The Sinclair")
-    jpeg = b"\xff\xd8\xff" + b"\x00" * 64
-
-    def setUp(self):
-        for name, value in (("picture_venues", {"The Sinclair"}), ("skipped_pictures", set())):
-            patcher = mock.patch.object(build, name, return_value=value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    def announced(self, days_ahead, title, image="", about=()):
-        item = build.event(self.venue, title, date(2026, 9, 15) + timedelta(days=days_ahead), time(20), image=image)
-        return dict(item, added="2026-09-15", about=list(about))
-
-    def test_newest_with_a_picture_and_words(self):
-        bare = self.announced(1, "Bare")
-        pictured = self.announced(2, "Pictured", image="https://x/pictured.jpg")
-        described = self.announced(3, "Described", image="https://x/described.jpg", about=["A night of it."])
-        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg):
-            item, url = build.fresh_pick([bare, pictured, described], self.built)
-        self.assertEqual((item["title"], url), ("Described", "https://x/described.jpg"))
-
-    def test_a_picture_that_cant_be_copied_is_left_out(self):
-        pictured = self.announced(1, "Pictured", image="https://x/too-big.jpg")
-        with mock.patch.object(build, "picture_bytes", return_value=None):
-            self.assertEqual(build.fresh_pick([pictured], self.built), (pictured, ""))
-        self.assertIsNone(build.fresh_pick([], self.built))
-
-    def test_drawn_with_its_picture(self):
-        item = self.announced(1, "Pictured", image="https://x/pictured.jpg", about=["A night of it."])
-        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg):
-            lead = build.render_lead([item], self.built)[0]
-        self.assertIn('<img class="biggest-picture" src="', lead)
-        self.assertIn('<a class="biggest standing"', lead)
-        self.assertIn('width="76" height="114"', lead, "in a poster's shape, the same size as the film's beside it")
-        self.assertIn('<span class="biggest-about">A night of it.</span>', lead)
-
-    def test_only_a_listed_venues_and_not_a_skipped_one(self):
-        item = self.announced(1, "Pictured", image="https://x/pictured.jpg")
-        ident = build.listing_id(item["date"], item["title"], item["venue"])[0]
-        with mock.patch.object(build, "picture_bytes", return_value=self.jpeg):
-            self.assertEqual(build.fresh_pick([item], self.built)[1], "https://x/pictured.jpg")
-            with mock.patch.object(build, "picture_venues", return_value={"ICA"}):
-                self.assertEqual(build.fresh_pick([item], self.built), (item, ""), "a venue not listed: in words")
-            for skipped in (ident, "https://x/pictured.jpg"):
-                with mock.patch.object(build, "skipped_pictures", return_value={skipped}):
-                    self.assertEqual(build.fresh_pick([item], self.built), (item, ""), f"skipped by {skipped}")
-
-    def test_the_lists_are_read_without_their_comments(self):
-        self.assertIn("ICA", build.listed(build.PICTURE_VENUES_FILE))
-        self.assertFalse(any(line.startswith("#") for line in build.listed(build.PICTURE_VENUES_FILE)))
-        self.assertTrue(build.PICTURE_SKIP_FILE.exists())
-        self.assertEqual(build.listed(Path("/nonexistent")), set())
