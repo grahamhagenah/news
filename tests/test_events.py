@@ -1276,6 +1276,15 @@ class JustAnnounced(unittest.TestCase):
         found = build.newly_added([older, fresh, film, soonest], self.built)
         self.assertEqual([item["title"] for item in found], ["Sooner", "A show"], "this week's, soonest first; films stay out")
 
+    def test_the_list_is_unpainted_until_the_script_has_run(self):
+        """What's passed since the build would show for a moment and then go: nothing under the header is painted
+        until the page has been read through and its script has run, and then it shows, the script or not."""
+        page = build.render_index([dict(self.listing(20), added="2026-09-15")], [self.venue], [], [], self.built, public=True)
+        start = page.index('<script>document.documentElement.classList.add("settling");')
+        self.assertLess(start, page.index('class="filter"'), "marked before any of it is read")
+        self.assertIn('addEventListener("DOMContentLoaded", () => document.documentElement.classList.remove("settling"));', page)
+        self.assertIn(".settling main > :not(header):not(.tagline) { visibility: hidden; }", page)
+
     def test_sally_obriens_is_never_announced(self):
         """Its page is written by hand, and a night's name there is as often notes and set times as a band's."""
         sally = dict(self.listing(20, "Bluegrass Jam 8pm followed by"), venue="Sally O'Brien's", added="2026-09-15")

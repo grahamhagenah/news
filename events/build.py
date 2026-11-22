@@ -4017,6 +4017,13 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     empty, narrowed = (("No new events this week. Check back as venues announce more.", "Nothing added in the last week")
                        if added else ("Nothing coming up.", "Nothing coming up"))
     body = (
+        # Nothing below the header is painted until the script at the end has run: a page is two megabytes, which a
+        # phone shows as it arrives, and the script then drops what's passed since the build (hours of it, by its
+        # last), puts today's in the order of what's next and hides what's past the first page, so what showed
+        # first would move under the reader. Hidden rather than gone, so it keeps its room and nothing jumps when
+        # it shows. It shows once the page is all read, even if the script fails.
+        '<script>document.documentElement.classList.add("settling");'
+        'addEventListener("DOMContentLoaded", () => document.documentElement.classList.remove("settling"));</script>'
         # The kinds, when and where together (a phone's row of chips), then the search (its box, on a line above).
         f'<div class="bar-mark" aria-hidden="true"></div><nav class="filter" aria-label="Show"{filter_attributes}>'
         f'<span class="chips">{buttons}{when_links}{said_over(venue_menu(venues, towns, events), "Where")}</span>'
@@ -6005,6 +6012,9 @@ PUBLIC_CSS = """
 
 # The events page's own styles, on top of the ones it shares with the newsfeed (shared/site.py).
 CSS = """
+  /* Until the page's script has run, everything under the header and the page's line about itself unpainted,
+     though in its place (render_index). */
+  .settling main > :not(header):not(.tagline) { visibility: hidden; }
   /* Category colors, for the marks in the list and on the filter: violet music, amber film, blue art & talks. */
   :root { --music: #a78bfa; --film: #fbbf24; --art: #60a5fa; }
   .icon { color: var(--dot); }
