@@ -3763,6 +3763,16 @@ def said_over(menu, word):
     return f'<span class="pick-box"><span class="pick-said" aria-hidden="true">{word}</span>{menu}</span>' if menu else ""
 
 
+def menu_option(name):
+    """A venue in the menu by the word it's filed under, without its "The" ("Platform", among the P's, as the
+    menu sorts it), so typing in the menu finds it where it is: a browser's menu goes to what starts with what's
+    typed, and "pla" found nothing while it read "The Platform". The whole name is its value, and data-name for
+    the script to show once chosen."""
+    filed = re.sub(r"^the\s+", "", name, flags=re.I)
+    named = f' data-name="{html.escape(name)}"' if filed != name else ""
+    return f'<option value="{html.escape(name)}"{named}>{html.escape(filed)}</option>'
+
+
 def venue_menu(venues, towns, events):
     """The venue menu, its venues under the towns they're in, the town with the most going on first, each led by
     the whole of it where it has more than one ("All of Cambridge"): a night out is usually spent in one part of
@@ -3779,7 +3789,7 @@ def venue_menu(venues, towns, events):
         the = "the " * bool(re.search(r"\bSide$|^(East|West) Village$|^Bronx$|\bDistrict$", town))
         choices = ([f'<option value="town:{html.escape(town)}">All of {the}{html.escape(town)}</option>']
                    if town and len(names) > 1 else [])
-        choices += [f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in names]
+        choices += [menu_option(name) for name in names]
         options += (f'<optgroup label="{html.escape(town)}">' + "".join(choices) + "</optgroup>" if town
                     else "".join(choices))
     return f'<select class="pick" aria-label="Venue">{options}</select>'
@@ -4893,7 +4903,8 @@ INDEX_JS = """
   // On a phone the venue's menu is a chip that says "Where" until something's chosen, and then what is;
   // and tells a screen reader what's chosen, as a wide screen's menu says it itself.
   const sayChosen = (menu, word, label, chosen) => {
-    const box = menu.closest(".pick-box"), name = menu.options[menu.selectedIndex].textContent.trim();
+    const option = menu.options[menu.selectedIndex];
+    const box = menu.closest(".pick-box"), name = option.dataset.name || option.textContent.trim();  // "The Platform"
     if (box) {
       // A whole town or neighborhood by its name alone ("Bushwick"), which is short enough to show whole.
       box.querySelector(".pick-said").textContent = chosen ? name.replace(/^All of (the )?/, "") : word;
@@ -5702,7 +5713,7 @@ PIN_CSS = """
   .when-links .later, .when-links .said-short { display: none; }
   /* Each kind's mark before its word, in its color (.icon's own), set by the middle of the letters. */
   /* Centered on the word's capitals: at -2px, the marks' drawings sat half a pixel high of them. */
-  .filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2.5px; }
+  .filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -1px; }
   .filter .chips [data-show] > .icon { flex: none; }  /* Next weekend: a phone's row has the room (below); here, the weekend's page links to it. */
   /* The kinds, when and where are wrapped together for a phone's row of chips; on a wide screen they sit in the
      bar itself, the venue's menu at the end of it beside the search. */
@@ -6033,9 +6044,12 @@ CSS = """
   @media not all and (max-width: 34rem) {
     .day > ul > li.row:not(.combined), .combined > details > summary {
       display: grid; grid-template-columns: 7.8rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
-    .clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(13px + .45em); }
+    .clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(15px + .45em); }
     /* The kind's mark in the time's cell, before it, so the columns stay where they were. */
-    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { grid-column: 1; grid-row: 1; }
+    /* Centered on the row, whose height is the name's, larger than the time, it sat a pixel high of the time's
+       figures beside it: brought down to their middle. */
+    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
+      grid-column: 1; grid-row: 1; position: relative; top: 1.2px; }
     .day .headline { grid-column: 2; grid-row: 1; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
@@ -6070,6 +6084,10 @@ CSS = """
   .lead.one { grid-template-columns: minmax(0, 1fr); }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
   .lead > * { min-width: 0; }
+  /* Beside the film's taller card, what's announced in the middle of the room under its heading, not at the top
+     of it with a gap below. */
+  .lead > .fresh { display: flex; flex-direction: column; }
+  .lead > .fresh > .fresh-list { margin: auto 0; }
   .lead-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .75rem;
                padding: .25rem 0 .45rem; border-bottom: 1px solid #1c1c1c; }
   .lead-tag { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
@@ -6093,7 +6111,7 @@ CSS = """
   .fresh-meta .lead-day { color: #aaa; }
   .fresh-time { color: #d4d4d4; font-weight: 400; }
   /* Each line led by its kind's mark, as each listing below is, in its color. */
-  .fresh-list a > .icon { width: 13px; height: 13px; align-self: center; margin-right: -.1em; }
+  .fresh-list a > .icon { width: 15px; height: 15px; align-self: center; margin-right: -.1em; }
   /* The film: its picture beside its words in its own shape, a poster standing, a still lying on its side, a
      little smaller on a phone, where the words beside it have less room. */
   .biggest { display: flex; align-items: center; gap: .9rem; color: inherit; }
@@ -6135,10 +6153,10 @@ CSS = """
        times and the venue as much as on the name itself. */
     .day > ul > li.row:hover .title { text-decoration: underline; }
   }
-  /* Each row's mark at thirteen pixels, as the filter's are, a little over the height of the time's figures: at
-     their height its lines come to a pixel thick and what tells the kinds apart — a film frame's sprockets, the
-     lines in a speech bubble — runs together. */
-  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { width: 13px; height: 13px; }
+  /* Each row's mark at fifteen pixels, half again the height of the time's figures: at their height its lines
+     come to a pixel thick and what tells the kinds apart — a film frame's sprockets, the lines in a speech bubble
+     — runs together, and at the filter's thirteen it read as smaller than the time beside it. */
+  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { width: 15px; height: 15px; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
      way to the venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
@@ -6222,7 +6240,7 @@ CSS = """
   /* Its day as a listing's small line says it, over the name, led by the dot in its kind's color the list has. */
   .event-where { display: flex; align-items: center; gap: .45em; margin: 0 2.5rem .35rem 0; color: #777; font-size: .85rem; }
   .event-where .event-icon { display: flex; flex: none; }  /* Its kind's mark, as its row's small line has. */
-  .event-where .icon { width: 13px; height: 13px; }
+  .event-where .icon { width: 15px; height: 15px; }
   /* The name, the list's own weight, larger; the dot over it says its kind, so no mark beside it. */
   .event-title { margin: 0 2rem .35rem 0; color: #fff; font-size: 1.4rem; font-weight: 400; letter-spacing: -.01em;
                  line-height: 1.3; text-transform: none; }

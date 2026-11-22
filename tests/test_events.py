@@ -1401,11 +1401,11 @@ class TimeColumn(unittest.TestCase):
         # the time's own cell.
         self.assertIn(".clock b { color: #d4d4d4; font-weight: 400; }", page)
         self.assertNotIn(".clock::before", page, "the mark, not a dot")
-        self.assertIn(".clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(13px + .45em); }", page)
+        self.assertIn(".clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(15px + .45em); }", page)
         # A listing opened drawn as the list is: its day a small line led by that dot, the name the list's weight,
         # no mark beside it.
         self.assertIn('<p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>', page)
-        self.assertIn(".event-where .icon { width: 13px; height: 13px; }", page)
+        self.assertIn(".event-where .icon { width: 15px; height: 15px; }", page)
         self.assertNotIn(".event-where::before", page, "its kind's mark, not a dot")
         # The script says it again as what's shown changes, and puts each day in the column's order.
         self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
@@ -1805,7 +1805,10 @@ class VenueMenu(unittest.TestCase):
         menu = build.venue_menu(set(towns) | {"Somewhere"}, towns, events)
         self.assertTrue(menu.startswith('<select class="pick" aria-label="Venue"><option value="">All venues</option>'
                                         '<optgroup label="Cambridge"><option value="town:Cambridge">All of Cambridge</option>'
-                                        '<option value="The Brattle">The Brattle</option><option value="The Sinclair">The Sinclair</option></optgroup>'))
+                                        '<option value="The Brattle" data-name="The Brattle">Brattle</option>'
+                                        '<option value="The Sinclair" data-name="The Sinclair">Sinclair</option></optgroup>'),
+                        "filed under what follows its The, so typing its name finds it")
+        self.assertIn("name = option.dataset.name || option.textContent.trim();", build.INDEX_JS, "shown whole once chosen")
         self.assertIn('<optgroup label="Medford"><option value="Deep Cuts">Deep Cuts</option></optgroup>', menu,
                       "no All of Medford, with one venue in it")
         self.assertTrue(menu.endswith('<option value="Somewhere">Somewhere</option></select>'), "no known town, last")
@@ -1886,7 +1889,7 @@ class HomePage(unittest.TestCase):
         self.assertIn(f'<a data-show="film" href="{R}film/"><svg class="icon" aria-hidden="true"><use href="#icon-film"/></svg>Film</a>', home)
         tonight = self.page(tonight=True)
         self.assertIn('<button data-show="music"><svg class="icon" aria-hidden="true"><use href="#icon-music"/></svg>Music</button>', tonight)
-        self.assertIn(".filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -2.5px; }", home)
+        self.assertIn(".filter [data-show] > .icon { width: 13px; height: 13px; margin-right: .4em; vertical-align: -1px; }", home)
 
     def test_on_a_phone_the_filter_is_a_search_box_over_a_row_of_chips(self):
         """The kinds, when and where are wrapped together, to be one row a phone swipes along; the search after
