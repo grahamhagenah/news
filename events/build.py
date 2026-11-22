@@ -3453,12 +3453,17 @@ def listing_id(day, title, venue=""):
 # Just announced: concerts and talks first seen in the last week. Not films, whose theaters add showtimes
 # every day, which would crowd out everything else.
 NEW_KINDS = {"music", "art"}
+# Venues whose listings are never announced: Sally O'Brien's page is written by hand, and what it names a night
+# is as often a run of notes and set times as a band's name, which reads oddly as a headline. Its nights are
+# still in the list below, each in its day.
+NEW_SKIP = {"Sally O'Brien's"}
 
 
 def newly_added(events, built_at):
     """The listings first seen in the last NEW_DAYS days, newest first, then soonest."""
     since = (built_at.astimezone(PUBLIC_ZONE).date() - timedelta(days=NEW_DAYS)).isoformat()
-    fresh = [item for item in events if item["category"] in NEW_KINDS and item.get("added", "") > since]
+    fresh = [item for item in events if item["category"] in NEW_KINDS and item.get("added", "") > since
+             and item["venue"] not in NEW_SKIP]
     return sorted(fresh, key=lambda item: (item["added"], [-part for part in item["date"].timetuple()[:3]]), reverse=True)
 
 

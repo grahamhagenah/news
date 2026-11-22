@@ -1276,6 +1276,12 @@ class JustAnnounced(unittest.TestCase):
         found = build.newly_added([older, fresh, film, soonest], self.built)
         self.assertEqual([item["title"] for item in found], ["Sooner", "A show"], "this week's, soonest first; films stay out")
 
+    def test_sally_obriens_is_never_announced(self):
+        """Its page is written by hand, and a night's name there is as often notes and set times as a band's."""
+        sally = dict(self.listing(20, "Bluegrass Jam 8pm followed by"), venue="Sally O'Brien's", added="2026-09-15")
+        found = build.newly_added([sally, dict(self.listing(21), added="2026-09-15")], self.built)
+        self.assertEqual([item["venue"] for item in found], ["The Sinclair"])
+
     def test_a_name_all_in_capitals_is_calmed_over_the_listings(self):
         """Three names shouting are most of what's announced there. Only one that's nearly all capitals: a band
         that writes itself so among others that don't keeps its own, and the list below keeps every name."""
