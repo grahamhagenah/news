@@ -5876,6 +5876,14 @@ CSS = """
   /* No room kept at the edge for a mark, on a phone; a pointer's band keeps its own. */
   @media (max-width: 34rem) { body .day > ul > li.row { padding-left: 0; } }
   @media (hover: hover) and (pointer: fine) and (max-width: 34rem) { body .day > ul > li.row { padding-left: .6rem; } }
+  /* More room between listings than within one, so each reads as its own rather than the list running together;
+     on a phone, where each is two lines, a hairline between them too, over every listing with one shown before it
+     (not the first the filter leaves, under the day's own line, nor the first of the evening, under its label).
+     A wide screen's timetable, a line each, needs no rules: its rows are told apart by their lines alone. */
+  .day > ul > li.row { padding-top: .75rem; padding-bottom: .75rem; }
+  @media (max-width: 34rem) {
+    .day > ul > li:not([hidden]) ~ li.row:not(.evening-starts) { border-top: 1px solid #161616; }
+  }
   .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
               font-size: .75rem; font-weight: 500; line-height: 1.4; white-space: nowrap; }
   /* Over the listings on the home page: the newest few announced, in words, a line each; and beside them on a wide

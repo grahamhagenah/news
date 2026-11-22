@@ -1202,6 +1202,10 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(".fresh-name { flex: 0 1 auto; min-width: 3em;", page)
         self.assertIn(".fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
         self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);", page)
+        # Room between the listings, and on a phone alone a hairline: not over the first the filter leaves.
+        self.assertIn(".day > ul > li.row { padding-top: .75rem; padding-bottom: .75rem; }", page)
+        self.assertIn("@media (max-width: 34rem) {\n    .day > ul > li:not([hidden]) ~ li.row:not(.evening-starts) "
+                      "{ border-top: 1px solid #161616; }", page)
 
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]
