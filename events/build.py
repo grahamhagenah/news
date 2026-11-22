@@ -3269,6 +3269,10 @@ BIGGEST_DAYS = 7  # How far ahead to look for the biggest film.
 BIGGEST_SHARE = 3
 BIGGEST_FLOOR = 3
 FRESH_SHOWN = 3  # How many of the newest announcements are listed.
+# And how many more are in the page, unseen, to take the place of one that's started by the time it's read: the
+# script drops a listing of today's once its last showing has, and with it its line here, whose link would
+# otherwise open a listing the page no longer has (".fresh-list li:nth-child(n+4)" in CSS hides the rest).
+FRESH_SPARE = 3
 # Where a film's own art comes from, in the order they're preferred (a poster from any of them still comes before
 # a still from any): a film database's or a chain's own, never a theater's photograph, as often its lobby as the film.
 PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
@@ -3449,7 +3453,7 @@ def render_lead(events, built_at, before=""):
     each a way to its row in the list below. Either on its own where there's only it; nothing where there's
     neither. Nothing moves: the film is the biggest there is until something bigger turns up, and what's
     announced is the newest, in the order it was."""
-    film, fresh = biggest_film(events, built_at, before), newly_added(events, built_at)[:FRESH_SHOWN]
+    film, fresh = biggest_film(events, built_at, before), newly_added(events, built_at)[:FRESH_SHOWN + FRESH_SPARE]
     parts = []
     # A day as a listing's is said: Today or Tomorrow as of this build, there as the page first shows, which the
     # script says again by the reader's day, going back to the date itself (data-said) for a page read the day
@@ -5044,6 +5048,22 @@ INDEX_JS = """
   const view = document.querySelector("dialog.event");
   const part = name => view.querySelector(".event-" + name);
   const rowWith = id => [...document.querySelectorAll(".day > ul > li[data-id]")].find(li => li.dataset.id === id);
+  // A listing gone (it's passed, and the page has dropped it): the next of its series, if there's one to come.
+  const nextOf = id => [...document.querySelectorAll(".day > ul > li[data-series]")].find(other => id.endsWith("-" + other.dataset.series) && id.slice(0, 10) <= other.dataset.id.slice(0, 10));
+  // Over the list, nothing that would open a listing the page no longer has: an announcement whose listing has
+  // started goes, and the next of the spares takes its place; the film, gone today, opens its next showing, and
+  // goes only where there's none.
+  {
+    const lead = document.querySelector(".lead");
+    for (const link of lead ? lead.querySelectorAll("a[href*='?event=']") : []) {
+      const id = new URL(link.href, location.href).searchParams.get("event");
+      if (rowWith(id)) continue;
+      if (link.closest(".fresh-list")) link.closest("li").remove();
+      else if (!nextOf(id)) link.closest(".biggest-part").remove();
+    }
+    if (lead && !lead.querySelector(".fresh-list li")) lead.querySelector(".fresh")?.remove();
+    if (lead) { const left = lead.children.length; if (!left) lead.remove(); else lead.classList.toggle("one", left === 1); }
+  }
   const dated = date => new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   const dayName = date => date === today ? "Today" : date === tomorrow ? "Tomorrow" : dated(date);
   // Over the name, where the day is the listing's own and worth saying in full: Today, and which day that is,
@@ -5300,10 +5320,10 @@ INDEX_JS = """
   document.addEventListener("click", event => {
     const link = event.target.closest(".lead a[href*='?event=']");
     if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const li = rowWith(new URL(link.href, location.href).searchParams.get("event"));
-    if (!li) return;
+    const id = new URL(link.href, location.href).searchParams.get("event"), li = rowWith(id), next = li || nextOf(id);
+    if (!next) return;
     event.preventDefault();
-    openEvent(li, true);
+    openEvent(next, true, li ? "" : "Today's showings have all started; this is the next one.");
   });
   document.addEventListener("click", event => {
     const li = event.target.closest(".day > ul > li.row");
@@ -5324,7 +5344,7 @@ INDEX_JS = """
     const id = eventInAddress();
     if (id) {
       const li = rowWith(id);
-      const next = li || [...document.querySelectorAll(".day > ul > li[data-series]")].find(other => id.endsWith("-" + other.dataset.series) && id.slice(0, 10) <= other.dataset.id.slice(0, 10));
+      const next = li || nextOf(id);
       if (next) openEvent(next, false, li ? "" : "The showing you were sent has passed; this is the next one.");
       else { history.replaceState(null, "", withEvent(null)); toast("That listing has passed"); }
     }
@@ -5907,6 +5927,7 @@ CSS = """
   .fresh-list { margin: 0; padding: 0; list-style: none; }
   .fresh-list li { break-inside: avoid; }
   .fresh-list li + li { margin-top: .45rem; }
+  .fresh-list li:nth-child(n+4) { display: none; }  /* The spares (FRESH_SPARE), past the three shown. */
   .fresh-list a { display: flex; align-items: baseline; gap: .55em; min-width: 0; color: inherit; white-space: nowrap; }
   .fresh-list a:hover { text-decoration: none; }
   .fresh-list a:hover .fresh-name { text-decoration: underline; }

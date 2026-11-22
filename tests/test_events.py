@@ -1212,7 +1212,13 @@ class JustAnnounced(unittest.TestCase):
         lead, film = build.render_lead(events, self.built)
         self.assertEqual(film, "", "no film among them")
         self.assertIn('<div class="lead one">', lead, "on its own, with no film big enough beside it")
-        self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN, "the newest few, a line each")
+        self.assertEqual(lead.count("<li>"), build.FRESH_SHOWN + build.FRESH_SPARE,
+                         "the newest few, a line each, and spares for any that's started by the time it's read")
+        page = build.render_index(events, [self.venue], [], [], self.built, public=True)
+        self.assertIn(f".fresh-list li:nth-child(n+{build.FRESH_SHOWN + 1}) {{ display: none; }}", page,
+                      "the spares unseen until one before them goes")
+        # One whose listing the page has dropped goes, rather than opening a listing that's not there.
+        self.assertIn('if (link.closest(".fresh-list")) link.closest("li").remove();', page)
         self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music">'
                       '<span class="fresh-name">Show 0</span><span class="fresh-meta">'
                       '<span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span> · '
