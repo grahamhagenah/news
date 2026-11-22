@@ -1988,7 +1988,7 @@ class Biggest(unittest.TestCase):
             self.assertNotIn("<img", build.render_lead(poster, self.built)[0])
 
     def test_the_film_a_card_beside_whats_announced(self):
-        """What's announced in words, first; the film a card with its poster, after it: on its right on a wide
+        """The film a card with its poster, first; what's announced in words after it: on its right on a wide
         screen, under it on a phone."""
         films = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         announced = [dict(build.event(source("aeg", "x", "music", "The Sinclair"), "A show", date(2026, 9, 22), time(20),
@@ -1996,7 +1996,7 @@ class Biggest(unittest.TestCase):
         lead, film = build.render_lead(films + announced, self.built)
         self.assertEqual(film, "wide release", "what the next build keeps, unless something's bigger")
         self.assertIn('<div class="lead">', lead)
-        self.assertLess(lead.index('class="fresh"'), lead.index('class="biggest-part"'), "what's announced first, the film after")
+        self.assertLess(lead.index('class="biggest-part"'), lead.index('class="fresh"'), "the film first, what's announced after")
         self.assertIn("Playing everywhere</span>", lead, "named for what's counted: how many theaters have it")
         self.assertEqual(lead.count("<img"), 1, "the film's poster, and no picture of what's announced")
         self.assertNotIn("band.jpg", lead)

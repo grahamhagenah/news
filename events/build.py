@@ -3268,7 +3268,7 @@ BIGGEST_DAYS = 7  # How far ahead to look for the biggest film.
 # no film reaches it there's no biggest film that week, and none is shown.
 BIGGEST_SHARE = 3
 BIGGEST_FLOOR = 3
-FRESH_SHOWN = 5  # How many of the newest announcements are listed.
+FRESH_SHOWN = 3  # How many of the newest announcements are listed.
 # Where a film's own art comes from, in the order they're preferred (a poster from any of them still comes before
 # a still from any): a film database's or a chain's own, never a theater's photograph, as often its lobby as the film.
 PICTURE_HOSTS = ("image.tmdb.org", "img-assets.drafthouse.com", "cms-assets.webediamovies.pro",
@@ -3457,9 +3457,9 @@ def render_lead(events, built_at, before=""):
     # a datetime: the shared script reads every datetime as a timestamp to age ("18h").
     said = lambda day: (f'<span class="lead-day" data-date="{day.isoformat()}" data-said="{day:%a, %b} {day.day}">'
                         f'{lead_day(day, built_at)}</span>')
-    # Words alone: the newest few announced, a line each, its name and then when and where; and under them the film
-    # playing everywhere, a line of its own. Pictures made the top of the page heavy, and showed one announcement
-    # where a list shows a few.
+    # The film first, on the left (over the rest on a phone); then the newest few announced in words alone, a line
+    # each, its name and then when and where. Pictures of them made the top of the page heavy, and showed one
+    # announcement where a list shows a few; three lines stand as tall as the film's card beside them.
     if fresh:
         rows = "".join(
             f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}" '
@@ -3479,7 +3479,7 @@ def render_lead(events, built_at, before=""):
         box = (76, 114) if film["standing"] else (160, 90)
         picture = (f'<img class="biggest-picture" src="{html.escape(kept_picture(film["image"]))}" alt="" '
                    f'width="{box[0]}" height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if film["image"] else ""
-        parts.append(
+        parts.insert(0,
             '<div class="biggest-part"><div class="lead-head"><span class="lead-tag">Playing everywhere</span></div>'
             f'<a class="biggest{" standing" if film["standing"] else ""}" data-category="film" '
             f'href="{PUBLIC_ROOT}?{urlencode({"event": film["id"]})}">{picture}'
