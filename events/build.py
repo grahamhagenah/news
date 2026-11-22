@@ -3327,10 +3327,12 @@ def tabler(paths, css_class):
 # A listing's copy-link button's icon (Tabler's "link").
 SHARE_MARK = tabler(["M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1", "M12 14v-11",
                      "M9 6l3 -3l3 3"], "share-mark")
-# Before Just announced, Tabler's "sparkles".
+# Before Just announced, Tabler's "sparkles": what's new.
 SPARK_MARK = tabler(["M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
                      "M16 6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
-                     "M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"], "spark-mark")
+                     "M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z"], "lead-mark")
+# Before Playing everywhere, film's own mark, the filter's and its rows', in the heading's grey.
+FILM_MARK = '<svg class="icon lead-mark" aria-hidden="true"><use href="#icon-film"/></svg>'
 # Its add-to-calendar button's, Tabler's "calendar-plus".
 CALENDAR_MARK = tabler(["M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5", "M16 3v4", "M8 3v4",
                         "M4 11h16", "M16 19h6", "M19 16v6"], "calendar-mark")
@@ -3679,7 +3681,7 @@ def render_lead(events, built_at, before=""):
             for item in fresh)
         parts.append(
             f'<div class="fresh"><div class="lead-head"><a class="lead-tag fresh-tag" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">'
-            'Just announced</a>'
+            f'{SPARK_MARK}Just announced</a>'
             f'<a class="fresh-more" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">See all →</a></div>'
             f'<ul class="fresh-list">{rows}</ul></div>')
     if film:
@@ -3689,7 +3691,7 @@ def render_lead(events, built_at, before=""):
         picture = (f'<img class="biggest-picture" src="{html.escape(kept_picture(film["image"]))}" alt="" '
                    f'width="{box[0]}" height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if film["image"] else ""
         parts.insert(0,
-            '<div class="biggest-part"><div class="lead-head"><span class="lead-tag">Playing everywhere</span></div>'
+            f'<div class="biggest-part"><div class="lead-head"><span class="lead-tag">{FILM_MARK}Playing everywhere</span></div>'
             f'<a class="biggest{" standing" if film["standing"] else ""}" data-category="film" '
             f'href="{PUBLIC_ROOT}?{urlencode({"event": film["id"]})}">{picture}'
             f'<span class="biggest-said"><span class="biggest-facts">{said(film["day"])} · {film["theaters"]} theaters</span>'
@@ -6183,7 +6185,10 @@ CSS = """
   .lead-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .75rem;
                padding: .25rem 0 .45rem; border-bottom: 1px solid #1c1c1c; }
   .lead-tag { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
-  .spark-mark { width: 12px; height: 12px; margin-right: .45em; vertical-align: -1px; }
+  /* Each heading led by a small grey mark of what it's about, in the label's own grey: sparkles for what's new,
+     film's mark for the film. */
+  .lead-tag .lead-mark { color: inherit; }
+  .lead-mark { width: 13px; height: 13px; margin-right: .5em; vertical-align: -2px; }
   /* The heading goes to the rest of what's announced too, as See all at the end of its line does. */
   .fresh-tag:hover { color: #bbb; text-decoration: none; }
   .fresh-more { flex: none; color: #777; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
