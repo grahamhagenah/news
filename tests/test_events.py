@@ -1398,6 +1398,10 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".clock { order: 1; display: flex;", page)
         self.assertIn(".day .row .source { order: 2; display: block; max-width: none;", page)
         self.assertIn(".day .headline { order: 3; flex-basis: 100%; }", page)
+        # On a phone the name first, led by its mark; the time and venue under it, lined up with the name.
+        self.assertIn("    .day .headline { order: 1; flex: 0 0 calc(100% - 15px - .5rem); min-width: 0; }\n"
+                      "    .day .row > .when { order: 2; margin-left: calc(15px + .5rem); }\n"
+                      "    .clock { order: 3; margin-left: calc(15px + .5rem); }", page)
         self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {\n"
                       "    display: block; order: 1; position: static; align-self: center; margin-right: .45em; }", page)
         # Wider than a phone, one column of a timetable's lines: the time, the name, the venue at the right.

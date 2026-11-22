@@ -6013,8 +6013,8 @@ CSS = """
      its view, the search and the script, but not shown: the small line says it. */
   .day > ul > li.row:not(.combined), .combined > details > summary {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 0; }
-  /* Its kind's mark, in the kind's color, leading the small line, just before the time: the filter's own marks,
-     so the key to them is in the bar over the list. */
+  /* Its kind's mark, in the kind's color: the filter's own marks, so the key to them is in the bar over the list.
+     On a wide screen it leads the time; on a phone, the name (below). */
   .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
     display: block; order: 1; position: static; align-self: center; margin-right: .45em; }
   .day .headline > .times, .day .headline .tail, .day .headline > .later { display: none; }
@@ -6038,6 +6038,18 @@ CSS = """
   /* On Recently added, the day each is on leads the line: "Sat, Nov 21 · 7pm · Union Pool". */
   .day .row > .when { order: 0; margin: 0; color: #aaa; font-size: .9rem; }
   .day .row > .when::after { content: "·"; margin: 0 .35em; color: #555; }
+  /* On a phone the name comes first, led by its kind's mark, and its time and venue on a small line under it, lined
+     up with the name rather than the mark: a row read as what it is, then when and where. The day's list is in
+     order of time already, its evening set apart under a label of its own. */
+  @media (max-width: 34rem) {
+    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
+      order: 0; align-self: flex-start; margin: calc((1.125rem * 1.45 - 15px) / 2) .5rem 0 0; }
+    .day .headline { order: 1; flex: 0 0 calc(100% - 15px - .5rem); min-width: 0; }
+    .day .row > .when { order: 2; margin-left: calc(15px + .5rem); }
+    .clock { order: 3; margin-left: calc(15px + .5rem); }
+    .day .row > .when ~ .clock { margin-left: 0; }
+    .day .row .source { order: 4; }
+  }
   /* Wider than a phone, the search at the end of the chips' line, as wide as is left of it, rather than a row the
      page's width of its own; the whole bar stays at the top of the window, a line high. Next weekend is the
      weekend's own page's to link to, as it was, for the room. Where the line hasn't room for all the chips and a
