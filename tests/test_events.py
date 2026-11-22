@@ -1353,7 +1353,17 @@ class TimeColumn(unittest.TestCase):
     def test_the_first_and_how_many_more(self):
         self.assertEqual(build.render_clock([time(21), time(19), time(19)]), '<span class="clock"><b>7pm</b><small title="1 more showtime">+1 more</small></span>')
         self.assertEqual(build.render_clock([time(20, 30)]), '<span class="clock"><b>8:30pm</b></span>')
-        self.assertEqual(build.render_clock([]), '<span class="clock"></span>', "no time given: an empty column")
+        # No time given: said in a word, the script's to say again.
+        self.assertEqual(build.render_clock([]), '<span class="clock" data-untimed="Time TBA"><i class="untimed">Time TBA</i></span>')
+        self.assertIn(">All day</i>", build.render_clock([], category="art"), "an exhibition's day")
+        # And after the day's timetable, not over it, in the build and in the script.
+        built = datetime(2026, 9, 15, 16, 0, tzinfo=timezone.utc)
+        venue = source("aeg", "https://example.com", name="The Sinclair")
+        untimed = build.event(venue, "Untimed", date(2026, 9, 20))
+        timed = build.event(venue, "Timed", date(2026, 9, 20), time(20, 0))
+        page = build.render_index([untimed, timed], [venue], [], [], built, public=True)
+        self.assertLess(page.index(">Timed<"), page.index(">Untimed<"))
+        self.assertIn('const firstOf = li => li.dataset.first || "~";', page)
 
     def test_after_the_mark_and_before_the_name(self):
         row = build.render_row(build.event(self.venue, "A Show", self.day, time(20)))
@@ -1394,8 +1404,9 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(13px + .45em); }", page)
         # A listing opened drawn as the list is: its day a small line led by that dot, the name the list's weight,
         # no mark beside it.
-        self.assertIn(".event-where::before { content: \"\"; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }", page)
-        self.assertIn(".event-title .event-icon { display: none; }", page)
+        self.assertIn('<p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>', page)
+        self.assertIn(".event-where .icon { width: 13px; height: 13px; }", page)
+        self.assertNotIn(".event-where::before", page, "its kind's mark, not a dot")
         # The script says it again as what's shown changes, and puts each day in the column's order.
         self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
         self.assertIn('document.querySelectorAll(".day:not([data-added]) > ul")', build.INDEX_JS, "not Recently added's, newest first")
@@ -1605,6 +1616,25 @@ class ArtAndTalks(unittest.TestCase):
         self.assertIn("Great Decisions — Multilateral Institutions", venues)
         # Left out: a virtual business class, a teens' workshop, and an exhibition open since last year.
         self.assertFalse([title for title in venues if "Tech Talk" in title or "Adulting" in title or "Becoming Boston" in title])
+
+    def test_a_library_exhibition_once_and_all_day_not_at_midnight(self):
+        def day(n, title="Places Known and Remembered: An Art Exhibition by \ufeffLaura Gatzos", tag="Exhibitions"):
+            start = datetime(2026, 11, n, 5, tzinfo=timezone.utc)  # Midnight in Boston, to the next midnight.
+            return (f"<item><title><![CDATA[{title}]]></title><link>https://bpl.bibliocommons.com/events/{n}</link>"
+                    f"<category><![CDATA[{tag}]]></category><bc:start_date>{start:%Y-%m-%dT%H:%M:%SZ}</bc:start_date>"
+                    f"<bc:end_date>{start + timedelta(hours=23, minutes=59, seconds=59):%Y-%m-%dT%H:%M:%SZ}</bc:end_date>"
+                    f"<bc:end_date_local>2026-11-{n}</bc:end_date_local><bc:location><bc:name>West Roxbury</bc:name>"
+                    f"</bc:location></item>")
+        feed = "<rss>" + day(21) + day(22) + day(23) + day(22, "Knitting Circle", "Visual Arts") + "</rss>"
+        pages = lambda url: feed if url.endswith("page=1") else "<rss></rss>"
+        with mock.patch.object(build, "today", lambda: date(2026, 11, 21)), mock.patch.object(build, "fetch", pages):
+            found = build.read_bibliocommons(source("bibliocommons", "https://gateway.bibliocommons.com/x?types=t", "art", "Boston Public Library"))
+        shown = {(item["title"], item["date"], tuple(item["times"]), item["detail"], item["venue"]) for item in found}
+        self.assertEqual(shown, {
+            ("Places Known and Remembered: An Art Exhibition by Laura Gatzos", date(2026, 11, 21), (), "through Nov 23",
+             "West Roxbury Library"),  # Once, without the mark hidden in its name.
+            ("Knitting Circle", date(2026, 11, 22), (), "", "West Roxbury Library"),  # All day, not 12am.
+        })
 
     def test_mfa_programs_by_kind(self):
         # Each kind from its own page, which says what it is: no guided tours or studio classes to skip.

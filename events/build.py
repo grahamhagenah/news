@@ -259,7 +259,8 @@ def fetch(url, attempts=3, timeout=20, user_agent=None, encoding="utf-8"):
 
 
 def text(markup):
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", markup or ""))).strip()
+    # Without the invisible marks an editor leaves in ("by \ufeffLaura Gatzos"), which a search for the name misses.
+    return re.sub(r"\s+", " ", re.sub("[\ufeff\u200b]", "", html.unescape(re.sub(r"<[^>]+>", " ", markup or "")))).strip()
 
 
 # What a listing costs and who it's for, as its view shows them up top: "$18–$20", "Free"; "All ages", "18+", "21+".
@@ -1894,9 +1895,11 @@ LIBRARY_AUDIENCES = LIBRARY_YOUNG | {"All Adults", "College Students", "Older Ad
 
 def read_bibliocommons(source):
     """A library's events feed from BiblioCommons (the Boston Public Library's), filtered by type in its URL
-    (?types=…), 25 to a page in date order, which the rest of its own filters can't narrow further."""
+    (?types=…), 25 to a page in date order, which the rest of its own filters can't narrow further. One that
+    runs from midnight to midnight is all day, with no time (not "12am"). An exhibition is listed once, on its
+    first day here, through its last: the feed has one, or one for each day it's open, all day."""
     end = window_end(source["category"])
-    events = []
+    events, shows = [], {}
     for page in range(1, 21):
         feed = fetch(f"{source['url']}&page={page}")
         items = re.findall(r"<item>(.*?)</item>", feed, re.S)
@@ -1906,7 +1909,11 @@ def read_bibliocommons(source):
                 return html.unescape(found.group(1).strip()) if found else ""
             tags = {html.unescape(tag) for tag in re.findall(r"<category>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</category>", item)}
             audiences = tags & LIBRARY_AUDIENCES
-            day, start = at_venue(datetime.fromisoformat(field("bc:start_date").replace("Z", "+00:00")), source.get("zone", BOSTON))
+            began = datetime.fromisoformat(field("bc:start_date").replace("Z", "+00:00"))
+            day, start = at_venue(began, source.get("zone", BOSTON))
+            ended = field("bc:end_date")
+            if start == time(0) and ended and datetime.fromisoformat(ended.replace("Z", "+00:00")) - began >= timedelta(hours=23):
+                start = None
             if (field("bc:is_cancelled") == "true" or field("bc:is_virtual") == "true" or tags & LIBRARY_SKIP
                     or (audiences and audiences <= LIBRARY_YOUNG)):
                 continue
@@ -1919,12 +1926,17 @@ def read_bibliocommons(source):
             street = " ".join(part for part in (field("bc:number"), field("bc:street")) if part)
             place = (street, field("bc:city") or "Boston", field("bc:zip")) if street else None
             last = date.fromisoformat((field("bc:end_date_local") or day.isoformat())[:10])
-            if "Exhibitions" in tags and last > day:
-                events += [dict(listing, venue=venue) for listing in opening(source, title, day, last, link, about=described, image=picture)]
+            if "Exhibitions" in tags:
+                first, until, *rest = shows.get((title, venue), (day, last, link, described, picture))
+                shows[(title, venue)] = (min(first, day), max(until, last), *rest)
             else:
                 events.append(event(source, title, day, start, link=link, venue=venue, about=described, address=place, image=picture))
         if not items or day > end:
             break
+    for (title, venue), (first, last, link, described, picture) in shows.items():
+        listed = opening(source, title, first, last, link, about=described, image=picture) if last > first else [
+            event(source, title, first, link=link, about=described, image=picture)] if first >= today() else []
+        events += [dict(listing, venue=venue) for listing in listed]
     return events
 
 
@@ -3282,8 +3294,8 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <p class="event-said" role="status" aria-live="polite" aria-atomic="true"></p>
 <div class="event-body">
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"><img class="event-backdrop" alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer"></div>
-<p class="event-where"><span class="event-day"></span></p>
-<h2 class="event-title" id="event-title"><span class="event-icon"></span><span class="event-name"></span></h2>
+<p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>
+<h2 class="event-title" id="event-title"><span class="event-name"></span></h2>
 <p class="event-facts"></p>
 <p class="event-detail"></p>
 <p class="event-note"></p>
@@ -3318,14 +3330,22 @@ def render_times(moments, sold=()):
     return f'<span class="times">{times}</span>' if times else ""
 
 
-def render_clock(moments, sold=()):
+# What the time's column says for a listing with no time: an exhibition or a talk's day is open all of it; a
+# show's time just isn't out yet.
+UNTIMED = {"art": "All day"}
+UNTIMED_SHOW = "Time TBA"
+
+
+def render_clock(moments, sold=(), category=""):
     """A listing's time in a column of its own before its name, where an eye running down the list finds it
     without reading the names: its first showing, and how many more there are after it ("+6"), which its view
-    lists. None, a listing with no time given, is an empty column. The script says it again as today's showings
-    pass, and for the theaters chosen of a film at several. No <time>: the row's own times are what's counted."""
+    lists. A listing with no time given says so in a word, "Time TBA", or "All day" for art & talks (UNTIMED), as
+    data-untimed too, for the script. The script says it again as today's showings pass, and for the theaters
+    chosen of a film at several. No <time>: the row's own times are what's counted."""
     moments = sorted(set(moments))
     if not moments:
-        return '<span class="clock"></span>'
+        said = UNTIMED.get(category, UNTIMED_SHOW)
+        return f'<span class="clock" data-untimed="{said}"><i class="untimed">{said}</i></span>'
     first = moments[0]
     struck = ' class="sold"' if f"{first:%H:%M}" in sold else ""
     # "+6 more": a bare "+6" read as a price or an age as often as as more showtimes.
@@ -3657,7 +3677,7 @@ def part_attribute(item):
 
 
 def evening_start(rows):
-    """Where a day's list (in order, untimed first) is headed "Evening": its first row from EVENING on, where there's
+    """Where a day's list (in order, untimed last) is headed "Evening": its first row from EVENING on, where there's
     something timed before it. A day all evening, or all before it, has no such heading. The page's script says it
     again as what's shown changes."""
     before = False
@@ -3690,7 +3710,7 @@ def render_row(item):
     return (
         f'<li class="row{row_class(item)}" data-id="{ident}" data-series="{series}" data-category="{item["category"]}"{part_attribute(item)} '
         f'data-sources="{html.escape(item["source"])}"{address_attribute(item)}{facts_attributes(item)}>'
-        f'{icon(item["category"])}{when}{render_clock(part_times(item), sold_times(item))}'
+        f'{icon(item["category"])}{when}{render_clock(part_times(item), sold_times(item), item["category"])}'
         f'<div class="headline"><a class="title" href="{html.escape(item["link"])}">{html.escape(item["title"])}</a> '
         + " ".join(part for part in (render_times(item["times"], sold_times(item)), once, detail) if part)
         + f'{shared.preview(item["title"], clip(item.get("about", []), ABOUT_CHARS))}</div> '
@@ -3829,9 +3849,9 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             rows = [dict(item, dated=True) for item in days[day]]
             heading = '<section class="day" data-added><h2><span class="date">Recently added</span></h2>\n'
         else:
-            # Untimed listings first, then by time, then by name.
+            # By time, then by name; untimed listings last, after the day's timetable rather than over it.
             rows = split_evenings(combine_films(days[day]))
-            rows.sort(key=lambda item: (bool(item["times"]), part_times(item)[:1], item["title"].casefold()))
+            rows.sort(key=lambda item: (not item["times"], part_times(item)[:1], item["title"].casefold()))
             heading = (f'<section class="day" data-date="{day.isoformat()}">'
                        # The day in full and the month short, "Thursday, Nov 19": a day's heading has a line of its
                        # own, and a whole month's name would take a long one, "Tomorrow Wednesday, September 30",
@@ -4772,14 +4792,16 @@ INDEX_JS = """
       .filter(t => inPart(li, t)).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1);
     const more = new Set(times.map(t => t.dataset.time)).size - 1;
     const struck = times[0]?.classList.contains("sold") && !li.matches(".combined") ? ' class="sold"' : "";
-    column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small title="${more} more showtime${more > 1 ? "s" : ""}">+${more} more</small>` : "") : "";
+    column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small title="${more} more showtime${more > 1 ? "s" : ""}">+${more} more</small>` : "")
+      : column.dataset.untimed ? `<i class="untimed">${column.dataset.untimed}</i>` : "";
     li.dataset.first = times[0]?.dataset.time || "";
   };
   // Each day's rows in the order of the times in the column: a film at several theaters is placed by its first
   // showing at any of them, and with a theater or a town chosen, its first there can be later than the rows
-  // after it. Those without a time first, as the build has them; a tie as it was. Not Recently added's, which
+  // after it. Those without a time last, as the build has them; a tie as it was. Not Recently added's, which
   // is newest first, its column the time on the day each is.
-  const byFirst = (a, b) => a.dataset.first < b.dataset.first ? -1 : a.dataset.first > b.dataset.first ? 1 : 0;
+  const firstOf = li => li.dataset.first || "~";  // After every time.
+  const byFirst = (a, b) => firstOf(a) < firstOf(b) ? -1 : firstOf(a) > firstOf(b) ? 1 : 0;
   const inOrder = () => {
     for (const list of document.querySelectorAll(".day:not([data-added]) > ul")) {
       const lis = allRows.filter(li => li.parentElement === list).sort(byFirst);
@@ -5976,6 +5998,7 @@ CSS = """
   .clock b { color: #d4d4d4; font-weight: 400; }
   .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .clock small { color: #666; font-size: inherit; }
+  .clock .untimed { color: #888; font-style: normal; }  /* "Time TBA", "All day": a word, quieter than a time. */
   .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .9rem; text-align: left; }
   .day .row .source::before { content: none; }
   /* Where the evening starts in a day's list, a quiet label over its first row: a listing on both before and after
@@ -6198,9 +6221,9 @@ CSS = """
                 font-size: .8rem; font-variant-numeric: tabular-nums; }
   /* Its day as a listing's small line says it, over the name, led by the dot in its kind's color the list has. */
   .event-where { display: flex; align-items: center; gap: .45em; margin: 0 2.5rem .35rem 0; color: #777; font-size: .85rem; }
-  .event-where::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }
+  .event-where .event-icon { display: flex; flex: none; }  /* Its kind's mark, as its row's small line has. */
+  .event-where .icon { width: 13px; height: 13px; }
   /* The name, the list's own weight, larger; the dot over it says its kind, so no mark beside it. */
-  .event-title .event-icon { display: none; }
   .event-title { margin: 0 2rem .35rem 0; color: #fff; font-size: 1.4rem; font-weight: 400; letter-spacing: -.01em;
                  line-height: 1.3; text-transform: none; }
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
