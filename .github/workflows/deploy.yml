@@ -56,17 +56,38 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist/news
-      # Its failing doesn't stop the other sites being published after it: GitHub Pages refuses a deployment
-      # while it counts another as in progress, which it can for minutes after a push cancels a run partway
-      # through deploying (the push's own run then can't deploy the newsfeed, but can still publish Pushpin).
-      # The run is still marked failed at the end, so the newsfeed's not going out isn't missed.
+      # Its failing doesn't stop the alerts after it: GitHub Pages refuses a deployment while it counts another
+      # as in progress, which it can for minutes after a push cancels a run partway through deploying. The run
+      # is still marked failed at the end, so the newsfeed's not going out isn't missed.
       - id: deployment
         uses: actions/deploy-pages@v4
         continue-on-error: true
 
-      # The events page, after the newsfeed is out, so a problem with it never holds the newsfeed up. Its
-      # listings change slowly, so it rebuilds every three hours, or at once after a push or when "Run
-      # workflow" is started with its events box ticked.
+      # An issue for any newsfeed source failing for hours (GitHub emails about it); never holds the page up.
+      - if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: python3 -m shared.alerts news=dist/news/feeds.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Fail the run if the newsfeed didn't deploy
+        if: ${{ !cancelled() && steps.deployment.outcome == 'failure' }}
+        run: |
+          echo "::error::The newsfeed wasn't deployed (see the deploy-pages step)."
+          exit 1
+
+  # The other sites, alongside the newsfeed rather than after it: none of them reads anything the newsfeed's build
+  # writes, and the newsfeed takes minutes to read its feeds, which Pushpin, built in under one, was left waiting
+  # for after every push. Each is pushed to a repo of its own, so neither job holds the other up.
+  sites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # The tests again, as this job doesn't wait for the other's: a change that breaks a reader isn't published.
+      - run: python3 -m unittest
+
+      # The events page. Its listings change slowly, so it rebuilds every three hours, or at once after a push
+      # or when "Run workflow" is started with its events box ticked.
       - run: python3 -m events.build
         env:
           # A free Ticketmaster Discovery API key, for venues like the Paradise.
@@ -171,19 +192,13 @@ jobs:
           GIT_SSH_COMMAND="ssh -i ~/.ssh/jobs -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
             git push -qf git@github.com:grahamhagenah/jobs.git gh-pages
 
-      # An issue for any source failing for hours (GitHub emails about it); never holds up either page. A page
-      # not built this run is left out, so its issues stay as they are.
+      # An issue for any events source failing for hours. The events page not built this run (it's not due) is
+      # left out, so its issues stay as they are.
       - if: ${{ !cancelled() }}
         continue-on-error: true
-        run: python3 -m shared.alerts news=dist/news/feeds.json events=dist/events/listings.json
+        run: python3 -m shared.alerts events=dist/events/listings.json
         env:
           GH_TOKEN: ${{ github.token }}
-
-      - name: Fail the run if the newsfeed didn't deploy
-        if: ${{ !cancelled() && steps.deployment.outcome == 'failure' }}
-        run: |
-          echo "::error::The newsfeed wasn't deployed (see the deploy-pages step); the other sites were published."
-          exit 1
 
   # GitHub turns off scheduled workflows after 60 days without a commit, which would freeze both pages;
   # it disables the whole workflow, so cron-job.org's workflow_dispatch calls would stop working too.

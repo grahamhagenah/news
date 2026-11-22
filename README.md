@@ -146,7 +146,7 @@ Pushpin Boston's visits are counted with [GoatCounter](https://www.goatcounter.c
 
 ## Publishing
 
-`deploy.yml` runs the tests, then builds and publishes both pages:
+`deploy.yml` runs the tests, then builds and publishes the pages, in two jobs side by side: `deploy`, the newsfeed, which takes a few minutes to read its feeds; and `sites`, Pushpin, the housing tracker and the job board, which read nothing the newsfeed writes, so a push is on pushpin.city in a couple of minutes rather than waiting on the newsfeed:
 
 - The newsfeed is this repo's GitHub Pages site.
 - A repo can publish only one Pages site, so what's left at events.grahamhagenah.com (its listings and the page pointing on to Pushpin) is pushed to the `gh-pages` branch of [grahamhagenah/events](https://github.com/grahamhagenah/events). The push uses a deploy key that can write to that repo only, kept as the `EVENTS_DEPLOY_KEY` secret here (its public half is under that repo's Settings → Deploy keys). Deploy keys don't expire.
