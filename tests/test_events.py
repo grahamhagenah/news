@@ -1300,6 +1300,7 @@ class JustAnnounced(unittest.TestCase):
         # One whose listing the page has dropped goes, rather than opening a listing that's not there.
         self.assertIn('if (link.closest(".fresh-list")) link.closest("li").remove();', page)
         self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music">'
+                      '<svg class="icon" role="img" aria-label="Music"><use href="#icon-music"/></svg>'
                       '<span class="fresh-name">Show 0</span><span class="fresh-meta">'
                       '<span class="lead-day" data-date="2026-09-20" data-said="Sep 20">Sep 20</span> · '
                       '<b class="fresh-time">8pm</b> · The Sinclair</span></a></li>', lead,
@@ -1380,14 +1381,17 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".clock { order: 1; display: flex;", page)
         self.assertIn(".day .row .source { order: 2; display: block; max-width: none;", page)
         self.assertIn(".day .headline { order: 3; flex-basis: 100%; }", page)
-        self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }", page)
+        self.assertIn(".day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {\n"
+                      "    display: block; order: 1; position: static; align-self: center; margin-right: .45em; }", page)
         # Wider than a phone, one column of a timetable's lines: the time, the name, the venue at the right.
         self.assertIn("@media not all and (max-width: 34rem) {\n    .day > ul > li.row:not(.combined), .combined > details > summary {\n"
                       "      display: grid; grid-template-columns: 7.8rem minmax(0, 1fr) auto;", page)
         self.assertNotIn("max-width: 64rem", page, "not two columns in a wider page")
-        # The time grey, its kind a small dot in its color before it, not the whole time in color.
+        # The time grey, its kind's mark in its color before it, not the whole time in color; a wide screen's in
+        # the time's own cell.
         self.assertIn(".clock b { color: #d4d4d4; font-weight: 400; }", page)
-        self.assertIn(".clock::before { content: \"\"; flex: none; align-self: center; width: 6px; height: 6px;", page)
+        self.assertNotIn(".clock::before", page, "the mark, not a dot")
+        self.assertIn(".clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(13px + .45em); }", page)
         # A listing opened drawn as the list is: its day a small line led by that dot, the name the list's weight,
         # no mark beside it.
         self.assertIn(".event-where::before { content: \"\"; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }", page)

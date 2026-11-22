@@ -3599,7 +3599,7 @@ def render_lead(events, built_at, before=""):
     if fresh:
         rows = "".join(
             f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}" '
-            f'data-category="{item["category"]}"><span class="fresh-name">{html.escape(calm(item["title"]))}</span>'
+            f'data-category="{item["category"]}">{icon(item["category"])}<span class="fresh-name">{html.escape(calm(item["title"]))}</span>'
             f'<span class="fresh-meta">{said(item["date"], weekday=False)} · '
             + (f'<b class="fresh-time">{clock(item["times"][0])}</b> · ' if item["times"] else "")
             + f'{html.escape(item["venue"])}</span></a></li>'
@@ -5965,15 +5965,15 @@ CSS = """
      its view, the search and the script, but not shown: the small line says it. */
   .day > ul > li.row:not(.combined), .combined > details > summary {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 0; }
-  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { display: none; }
+  /* Its kind's mark, in the kind's color, leading the small line, just before the time: the filter's own marks,
+     so the key to them is in the bar over the list. */
+  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
+    display: block; order: 1; position: static; align-self: center; margin-right: .45em; }
   .day .headline > .times, .day .headline .tail { display: none; }
   .clock { order: 1; display: flex; align-items: baseline; gap: .3em; min-width: 0; font-size: .9rem;
            font-variant-numeric: tabular-nums; white-space: nowrap; }
-  /* The time in grey, and before it a small dot in its kind's color: the kind at a glance, a mark rather than a
-     whole word in color, the venue and the filter saying the rest. A listing with no time has the dot alone. */
+  /* The time in grey, after its kind's mark. */
   .clock b { color: #d4d4d4; font-weight: 400; }
-  .clock::before { content: ""; flex: none; align-self: center; width: 6px; height: 6px; margin-right: .15em;
-                   border-radius: 50%; background: var(--dot); }
   .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .clock small { color: #666; font-size: inherit; }
   .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .9rem; text-align: left; }
@@ -6010,7 +6010,9 @@ CSS = """
   @media not all and (max-width: 34rem) {
     .day > ul > li.row:not(.combined), .combined > details > summary {
       display: grid; grid-template-columns: 7.8rem minmax(0, 1fr) auto; column-gap: 1rem; align-items: baseline; }
-    .clock { grid-column: 1; grid-row: 1; font-size: .85rem; }
+    .clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(13px + .45em); }
+    /* The kind's mark in the time's cell, before it, so the columns stay where they were. */
+    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { grid-column: 1; grid-row: 1; }
     .day .headline { grid-column: 2; grid-row: 1; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
@@ -6018,7 +6020,7 @@ CSS = """
     .day[data-added] > ul > li.row { grid-template-columns: 6.2rem 7.8rem minmax(0, 1fr) auto; }
     .day[data-added] .row > .when { grid-column: 1; grid-row: 1; }
     .day[data-added] .row > .when::after { content: none; }
-    .day[data-added] .clock { grid-column: 2; }
+    .day[data-added] .clock, .day[data-added] .row > .icon { grid-column: 2; }
     .day[data-added] .headline { grid-column: 3; }
     .day[data-added] .row .source { grid-column: 4; }
   }
@@ -6067,8 +6069,8 @@ CSS = """
   .fresh-meta { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; color: #777; font-size: .85rem; }
   .fresh-meta .lead-day { color: #aaa; }
   .fresh-time { color: #d4d4d4; font-weight: 400; }
-  .fresh-time::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: .4em; border-radius: 50%;
-                        background: var(--dot); vertical-align: 1px; }
+  /* Each line led by its kind's mark, as each listing below is, in its color. */
+  .fresh-list a > .icon { width: 13px; height: 13px; align-self: center; margin-right: -.1em; }
   /* The film: its picture beside its words in its own shape, a poster standing, a still lying on its side, a
      little smaller on a phone, where the words beside it have less room. */
   .biggest { display: flex; align-items: center; gap: .9rem; color: inherit; }
@@ -6110,23 +6112,10 @@ CSS = """
        times and the venue as much as on the name itself. */
     .day > ul > li.row:hover .title { text-decoration: underline; }
   }
-  /* Each row's mark at fourteen pixels, a little over the height of the capitals beside it: at their height,
-     twelve, its lines come to a pixel thick and what tells the kinds apart — a film frame's sprockets, the lines
-     in a speech bubble — runs together. */
-  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { width: 14px; height: 14px; }
-  /* On a phone, thirteen, in a slot with less room after it than the newsfeed's: a row's words start that much
-     nearer the edge and wrap that much less. Set by the middle of the letters, as the slot it replaces was. */
-  @media (max-width: 34rem) {
-    .day > ul > li.row { padding-left: calc(13px + .5em); }
-    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon {
-      width: 13px; height: 13px; top: calc(.4rem + .72em - 6.5px); }
-  }
-  /* A narrow window with a pointer has both: the band's room at the edge and the icon's slot after it. The
-     band's padding would otherwise stand in for the slot, and the icon, still at the edge, sit on the name. */
-  @media (hover: hover) and (pointer: fine) and (max-width: 34rem) {
-    .day > ul > li.row { padding-left: calc(.6rem + 13px + .5em); }
-    .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { left: .6rem; }
-  }
+  /* Each row's mark at thirteen pixels, as the filter's are, a little over the height of the time's figures: at
+     their height its lines come to a pixel thick and what tells the kinds apart — a film frame's sprockets, the
+     lines in a speech bubble — runs together. */
+  .day > ul > li.row > .icon, .day > ul > li.combined > details > summary > .icon { width: 13px; height: 13px; }
   .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* A listing's own view: a panel in from the right on a wide screen, a sheet up from the bottom on a phone. Its
      way to the venue's page (for tickets) first and plainest; its times, each adding that showing to a calendar. */
