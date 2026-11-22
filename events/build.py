@@ -98,6 +98,7 @@ VENUE_ADDRESSES = {
     "The Lilypad": ("1353 Cambridge St", "Cambridge", "02139"),
     "Club Passim": ("47 Palmer St", "Cambridge", "02138"),
     "Arts at the Armory": ("191 Highland Ave", "Somerville", "02143"),
+    "Arts Collaborative Medford": ("162 Mystic Ave", "Medford", "02155"),
     "The Burren": ("247 Elm St", "Somerville", "02144"),
     "Berklee Performance Center": ("136 Massachusetts Ave", "Boston", "02115"),
     "MIT": ("77 Massachusetts Ave", "Cambridge", "02139"),
@@ -1095,6 +1096,37 @@ def read_armory(source):
     """Arts at the Armory's calendar feed, kept to its concerts, readings and talks, and screenings; not a
     show it still lists after moving it to another venue, "[Moved to the Royale]"."""
     return [listing for listing in read_ics(source, ARMORY_KINDS) if not re.search(r"\[moved to", listing["title"], re.I)]
+
+
+# What an arts center's events are, from their names and what's said of them, as MembershipWorks files them under
+# "Events" alone: its concerts and jams, and its readings and talks; not its markets, shopping nights or meetings.
+MEMBERSHIPWORKS_MUSIC = re.compile(r"\b(concert|fiddle|blues|jam|jazz|folk|band|quartet|trio|choir|singer|songwriter|"
+                                   r"live music|recital)\b", re.I)
+MEMBERSHIPWORKS_SKIP = re.compile(r"\b(market|shop|sale|meeting|fundraiser|gala)\b", re.I)
+EVENT_NS = {"ev": "http://purl.org/rss/1.0/modules/event/", "content": "http://purl.org/rss/1.0/modules/content/",
+            "media": "http://search.yahoo.com/mrss/"}
+
+
+def read_membershipworks(source):
+    """An arts center's events from its MembershipWorks calendar's feed (Arts Collaborative Medford's), with
+    ?grp= kept to the group that holds its events rather than its workshops and classes. Each sorted into music or
+    art and talks by what it is; its markets and meetings left out."""
+    from xml.etree import ElementTree
+    feed = ElementTree.fromstring(re.sub(r"^\s*<\?xml[^>]*\?>", "", fetch(source["url"])))
+    events = []
+    for item in feed.iter("item"):
+        title = re.sub(r"\s+", " ", html.unescape(item.findtext("title") or "")).strip()
+        described = item.findtext("content:encoded", "", EVENT_NS)
+        said = f"{title} {re.sub(r'<[^>]+>', ' ', html.unescape(described))}"
+        if not title or MEMBERSHIPWORKS_SKIP.search(title):
+            continue
+        day, start = at_venue(datetime.fromisoformat(item.findtext("ev:startdate", "", EVENT_NS)), source.get("zone", BOSTON))
+        picture = item.find("media:content", EVENT_NS)
+        listing = event(source, title, day, start, link=item.findtext("link") or "", about=about(described),
+                        image=picture.get("url", "") if picture is not None else "")
+        listing["category"] = "music" if MEMBERSHIPWORKS_MUSIC.search(said) else "art"
+        events.append(listing)
+    return events
 
 
 # A show's supporting acts, after its name: "Dylan Earl w/ Olivia Ellen Lloyd", "MINI TREES - w/ Frown Line".
@@ -3101,6 +3133,7 @@ READERS = {
     "landmark": read_landmark,
     "ics": read_ics,
     "armory": read_armory,
+    "membershipworks": read_membershipworks,
     "showare": read_showare,
     "sally": read_sally,
     "plough": read_plough,
