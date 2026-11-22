@@ -6224,7 +6224,7 @@ CSS = """
      screen (under them on a phone), the film playing everywhere, a card with its picture. Each headed as a day is, a
      small grey label in capitals over a hairline. */
   /* The film's card two parts, what's announced three: its lines are long and the card's words wrap. */
-  .lead { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 1.6rem 3.5rem; margin: 0 0 2rem; }
+  .lead { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 1.6rem 3.5rem; margin: 0 0 3.25rem; }
   .lead.one { grid-template-columns: minmax(0, 1fr); }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
   .lead > * { min-width: 0; }
@@ -6280,7 +6280,7 @@ CSS = """
     .biggest { flex: 1 1 auto; }
   }
   /* The filter as a whole a little nearer the listings than the film and what's announced over it, on a phone. */
-  @media (max-width: 34rem) { .lead { margin-bottom: 1.6rem; } }
+  @media (max-width: 34rem) { .lead { margin-bottom: 2.75rem; } }
   /* On Just announced, where a heading is the day a listing turned up, each says the day it's on. */
   .when { flex: none; margin-left: .6em; color: #aaa; font-size: .9em; white-space: nowrap; }
   /* A listing opens its own view (below) wherever it's clicked. */
