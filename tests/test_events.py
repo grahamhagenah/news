@@ -1434,8 +1434,9 @@ class TimeColumn(unittest.TestCase):
         self.assertIn(".clock { grid-column: 1; grid-row: 1; font-size: .85rem; padding-left: calc(15px + .45em); }", page)
         # A listing opened drawn as the list is: its day a small line led by that dot, the name the list's weight,
         # no mark beside it.
-        self.assertIn('<p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>', page)
-        self.assertIn(".event-where .icon { width: 15px; height: 15px; }", page)
+        self.assertIn('<h2 class="event-title" id="event-title"><span class="event-icon"></span><span class="event-name"></span></h2>\n'
+                      '<p class="event-where"><span class="event-day"></span></p>', page, "the name first, led by its mark")
+        self.assertIn(".event-title .icon { width: 18px; height: 18px; }", page)
         self.assertNotIn(".event-where::before", page, "its kind's mark, not a dot")
         # The script says it again as what's shown changes, and puts each day in the column's order.
         self.assertIn("for (const li of allRows) clockOf(li);\n    inOrder();", build.INDEX_JS)
