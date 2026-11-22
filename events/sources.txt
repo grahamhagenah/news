@@ -47,6 +47,8 @@
 #   platform   The Platform's shows, music and dance, from the Algolia search index its calendar page is filled
 #              from (the application id and search-only key are the ones that page gives every visitor)
 #   berklee    the Berklee Performance Center's full calendar page
+#   conservatory  Boston Conservatory at Berklee's events page: its concerts, opera, dance and theater, not its
+#              students' recitals
 #   squarespace  a Squarespace site's events page, from the data it gives with ?format=json (The Lilypad)
 #   passim     Club Passim's live music page, whose calendar is in its script
 #   tribe      a WordPress site's The Events Calendar API, /wp-json/tribe/events/v1/events, optionally with
@@ -96,6 +98,7 @@ toad       https://core.service.elfsight.com/p/boot/?page=https%3A%2F%2Fwww.mcca
 sociablekit  https://data.accentapi.com/feed/87910.json   music   The Jungle
 platform   https://y1vsi41hoc-dsn.algolia.net/1/indexes/wp_platform_searchable_posts?query=&hitsPerPage=1000&x-algolia-application-id=Y1VSI41HOC&x-algolia-api-key=906fcb304f59c27fc5e38065cffa2da4   music   The Platform
 berklee    https://www.berklee.edu/BPC/full-calendar-of-events-at-the-bpc   music   Berklee Performance Center
+conservatory  https://bostonconservatory.berklee.edu/events   music   Boston Conservatory
 
 # Art & talks
 mit        https://calendar.mit.edu/api/2/events   art   MIT

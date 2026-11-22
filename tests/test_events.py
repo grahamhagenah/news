@@ -35,7 +35,9 @@ ROUTES = [
     ("calendar.ploughandstars.com/events/calendar", "plough.html"),
     ("mccarthystoad.com", "toad.json"),  # Before the Iron Horse's: the same widget's address, another page's.
     ("data.accentapi.com/feed/87910.json", "jungle.json"),
-    ("algolia.net/1/indexes/wp_platform_searchable_posts", "platform.json"),  # Its other shows' pages: no show time on them, so door times.
+    ("algolia.net/1/indexes/wp_platform_searchable_posts", "platform.json"),
+    ("bostonconservatory.berklee.edu/events?page=", "bpl_end.xml"),  # Its later pages: none left.
+    ("bostonconservatory.berklee.edu/events", "conservatory.html"),  # Its other shows' pages: no show time on them, so door times.
     ("mideastclub.com", "mideast.html"),
     ("brattlefilm.org", "brattle.html"),
     ("houseofblues.com", "houseofblues.html"),
@@ -290,6 +292,23 @@ class Readers(unittest.TestCase):
         self.assertNotIn("Chuwi", titles, "not the site's Spanish copies")
         self.assertEqual(len(titles), len(set((item["title"], item["date"], tuple(item["times"])) for item in found)), "each once")
         self.assertTrue(all(item["link"].startswith("https://www.theplatformkendall.org/") for item in found))
+
+    def test_boston_conservatory_without_its_students_recitals(self):
+        found = self.read("conservatory", "https://bostonconservatory.berklee.edu/events", "music", "Boston Conservatory",
+                          sorts_its_own=True)
+        by_title = {}
+        for item in found:
+            by_title.setdefault(item["title"], item)
+        carols = by_title["Boston Conservatory Choirs: Carols at St. Clements—Welcoming Winter"]
+        self.assertEqual((carols["date"], carols["times"], carols["category"], carols["detail"], carols["price"]),
+                         (date(2026, 12, 1), [time(19, 30)], "music", "St. Clements", "Free"), "its hall, past its label")
+        self.assertEqual(carols["address"], ["1105 Boylston St", "Boston", "02215"])
+        self.assertTrue(carols["about"][0].startswith("Boston Conservatory choirs gather"), "its own words, not its address")
+        self.assertEqual(by_title["Contemporary Theater Capstone: Double Sixes"]["category"], "art", "theater, by its name")
+        self.assertEqual(by_title["Composers Recital Series"]["category"], "music")
+        self.assertNotIn("Class Recital: Sophomore Alexander Technique", by_title, "not a class's recital")
+        self.assertEqual(len(found), 9)
+        self.assertIn("Faculty Recital: Preludes, Featuring Max Levinson, Piano", by_title)
 
     def test_sally_obriens_nights_from_its_handwritten_page(self):
         class November(datetime):

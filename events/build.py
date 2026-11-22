@@ -92,6 +92,7 @@ VENUE_ADDRESSES = {
     "Toad": ("1912 Massachusetts Ave", "Cambridge", "02140"),
     "The Jungle": ("6 Sanborn Ct", "Somerville", "02143"),
     "The Platform": ("315 Kendall St", "Cambridge", "02142"),
+    "Boston Conservatory": ("8 The Fenway", "Boston", "02215"),
     "Sally O'Brien's": ("335 Somerville Ave", "Somerville", "02143"),
     "The Rockwell": ("255 Elm St", "Somerville", "02144"),
     "The Lilypad": ("1353 Cambridge St", "Cambridge", "02139"),
@@ -1256,6 +1257,58 @@ def read_showare(source):
         if (found.get("settings") or {}).get("endOfList", True) or not found.get("performance") or page >= 10:
             return events
         page += 1
+
+
+# What Boston Conservatory lists that's its students' coursework more than a night out, and most of its calendar:
+# each student's recital, a voice teacher's students', a class's.
+CONSERVATORY_SKIP = re.compile(r"^(student|studio|class) recital\b", re.I)
+
+
+def read_conservatory(source):
+    """Boston Conservatory at Berklee's events page, ten to a page (?page=1 on), soonest first: each event's
+    name, its upcoming dates and times (one listing a day), its hall and address, a line about it, its admission
+    and its picture. Not a student's, a studio's or a class's recital (CONSERVATORY_SKIP); its dance and theater
+    are art & talks, the rest music."""
+    events = []
+    for page in range(15):
+        markup = fetch(source["url"] + (f"?page={page}" if page else ""))
+        rows = markup.split('<div class="views-row">')[1:]
+        for row in rows:
+            named = re.search(r'<div class="title">\s*<a href="([^"]+)"[^>]*>(.*?)</a>', row, re.S)
+            if not named:
+                continue
+            title = text(named.group(2))
+            if CONSERVATORY_SKIP.search(title):
+                continue
+            # A field's value, past the label some carry for screen readers ("Venue Title", at a hall off campus).
+            field = lambda name: text((re.search(rf'field--name-field-{name}[^>]*>(?:\s*<div class="field__label[^"]*">.*?</div>)?'
+                                                 rf'\s*(?:<div class="field__item">)?(.*?)</div>', row, re.S) or [None, ""])[1])
+            hall, street = field("event-venue-title"), re.sub(r",\s*(floor|suite|room)\b.*$", "", field("event-address"), flags=re.I)
+            place = (street, field("event-city") or "Boston", field("event-zip")) if street else None
+            # What it says about itself: the paragraphs after where it is, before its admission.
+            said = row.split("fieldgroup-event-venue", 1)[-1].split("fieldgroup-event-ticket", 1)[0]
+            described = about("".join(re.findall(r"<p\b.*?</p>", said, re.S)))
+            admission = re.search(r'field--name-field-admission.*?<div class="field__item">(.*?)</div>', row, re.S)
+            picture = re.search(r'data-full-src="([^"]+)"', row)
+            # Dance and theater, by its name or its own words ("Senior Choreographers Concert", "David Adjmi's play").
+            staged = re.search(r"\bdanc|\bchoreograph|\btheat(er|re)\b", title, re.I) or re.search(
+                r"\b(dance|choreograph\w*|[’']s play|a play|new play)\b", " ".join(described), re.I)
+            kind = "art" if staged else guess_kind(title, " ".join(described))
+            if not kind:
+                continue
+            days = {}
+            for moment in re.findall(r'<time datetime="([^"]+)"', row):
+                day, start = at_venue(datetime.fromisoformat(moment), source.get("zone", BOSTON))
+                days.setdefault(day, []).append(start)
+            for day, starts in days.items():
+                listing = event(source, title, day, min(starts), link=urljoin(source["url"], named.group(1)), detail=hall,
+                                about=described, address=place, image=urljoin(source["url"], html.unescape(picture.group(1))) if picture else "",
+                                price=price_from(text(admission.group(1))) if admission else "")
+                listing["times"] = sorted(set(starts))
+                events.append(dict(listing, category=kind))
+        if not rows:
+            break
+    return events
 
 
 def read_berklee(source):
@@ -3055,6 +3108,7 @@ READERS = {
     "sociablekit": read_sociablekit,
     "platform": read_platform,
     "berklee": read_berklee,
+    "conservatory": read_conservatory,
     "squarespace": read_squarespace,
     "passim": read_passim,
     "tribe": read_tribe,
