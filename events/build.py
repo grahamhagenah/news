@@ -127,7 +127,7 @@ VENUE_ADDRESSES = {
     "YBCA": ("701 Mission St", "San Francisco", "CA", "94103"),
     "Oakland Museum": ("1000 Oak St", "Oakland", "CA", "94607"),
     "BAMPFA": ("2155 Center St", "Berkeley", "CA", "94704"),
-    "Kendall Square": ("355 Binney St", "Cambridge", "02142"),
+    "Kendall Square Cinema": ("355 Binney St", "Cambridge", "02142"),
     "Alamo Drafthouse": ("60 Seaport Blvd", "Boston", "02210"),
     # Western Mass.
     "Mass MoCA": ("1040 Mass MoCA Way", "North Adams", "01247"),
@@ -946,7 +946,7 @@ LANDMARK_API = "https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi"
 
 
 def read_landmark(source):
-    """Landmark theaters (Kendall Square), by theater id, through the schedule service their site uses."""
+    """Landmark theaters (Kendall Square Cinema), by theater id, through the schedule service their site uses."""
     today = datetime.now(source.get("zone", BOSTON)).date()
     theater = json.dumps({"id": source["url"], "timeZone": "America/New_York"}, separators=(",", ":"))
     query = urlencode({

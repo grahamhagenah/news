@@ -14,7 +14,7 @@
 #                 Find a venue's id with Actions → "Find a Ticketmaster venue" on GitHub.
 #   alamo      an Alamo Drafthouse market's schedule JSON (Boston, which is the Seaport); a market holding
 #              several theaters names the one it wants after a # (.../market/sf#new-mission)
-#   landmark   a Landmark Theatres theater id in place of the URL (Kendall Square)
+#   landmark   a Landmark Theatres theater id in place of the URL (Kendall Square Cinema)
 #   hfa        the Harvard Film Archive's calendar page
 #   frenchlibrary  the French Library's upcoming events page: its screenings, talks and exhibitions
 #   ica        the ICA's calendar page: its concerts, screenings, talks, dance and First Fridays
@@ -115,5 +115,5 @@ veezi      https://www.westnewtoncinema.com/   film   West Newton Cinema
 tapos      https://www.internet-ticketing.com/websales/sales/LEXLEX/start   film   Lexington Venue
 wptheatre  https://www.somervilletheatre.com/#CSBSOM   film   Somerville Theatre
 wptheatre  https://www.capitoltheatreusa.com/#CSBARL   film   Capitol Theatre
-landmark   X019B   film   Kendall Square
+landmark   X019B   film   Kendall Square Cinema
 alamo      https://drafthouse.com/s/mother/v2/schedule/market/boston   film   Alamo Drafthouse
