@@ -1304,7 +1304,7 @@ class JustAnnounced(unittest.TestCase):
                       '<svg class="icon" role="img" aria-label="Music"><use href="#icon-music"/></svg>'
                       '<span class="fresh-name">Show 0</span><span class="fresh-meta">'
                       '<span class="lead-day" data-date="2026-09-20" data-said="Sep 20">Sep 20</span> · '
-                      '<b class="fresh-time">8pm</b> · The Sinclair</span></a></li>', lead,
+                      'The Sinclair</span></a></li>', lead,
                       "its name, and after it when and where: its date without its weekday, to leave the name room")
         # Today's and tomorrow's say so, as the film's day does; the script says them again by the reader's day.
         soon = [dict(self.listing(15, "Tonight's"), added="2026-09-15"), dict(self.listing(16, "Tomorrow's"), added="2026-09-15")]
@@ -2145,11 +2145,11 @@ class Biggest(unittest.TestCase):
         events = [self.showing("Wide Release", f"Theater {n}", image=POSTER) for n in range(4)]
         standing, _ = build.render_lead(events, self.built)
         self.assertIn('class="biggest standing"', standing)
-        self.assertIn('width="76" height="114"', standing)
+        self.assertIn('width="64" height="96"', standing)
         with mock.patch.object(build, "picture_shape", return_value=(1920, 1080)):
             lying, _ = build.render_lead(events, self.built)
         self.assertIn('class="biggest" data-category="film"', lying)
-        self.assertIn('width="160" height="90"', lying)
+        self.assertIn('width="136" height="76"', lying)
 
 
 class Fallback(unittest.TestCase):

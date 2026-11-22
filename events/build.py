@@ -3620,9 +3620,8 @@ def render_lead(events, built_at, before=""):
         rows = "".join(
             f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}" '
             f'data-category="{item["category"]}">{icon(item["category"])}<span class="fresh-name">{html.escape(calm(item["title"]))}</span>'
-            f'<span class="fresh-meta">{said(item["date"], weekday=False)} · '
-            + (f'<b class="fresh-time">{clock(item["times"][0])}</b> · ' if item["times"] else "")
-            + f'{html.escape(item["venue"])}</span></a></li>'
+            # When and where, its day and venue: not its time, which took the room a name wants, and is its view's to say.
+            f'<span class="fresh-meta">{said(item["date"], weekday=False)} · {html.escape(item["venue"])}</span></a></li>'
             for item in fresh)
         parts.append(
             f'<div class="fresh"><div class="lead-head"><a class="lead-tag fresh-tag" href="{PUBLIC_ROOT}{PUBLIC_NEW[0]}">'
@@ -3632,7 +3631,7 @@ def render_lead(events, built_at, before=""):
     if film:
         # The film a card of its own, its picture beside its words in its own shape: a poster standing on its end, a
         # still from the film lying on its side (cut to a poster's shape, a still lost most of its scene).
-        box = (76, 114) if film["standing"] else (160, 90)
+        box = (64, 96) if film["standing"] else (136, 76)
         picture = (f'<img class="biggest-picture" src="{html.escape(kept_picture(film["image"]))}" alt="" '
                    f'width="{box[0]}" height="{box[1]}" decoding="async" referrerpolicy="no-referrer">') if film["image"] else ""
         parts.insert(0,
@@ -6132,9 +6131,8 @@ CSS = """
   .fresh-tag:hover { color: #bbb; text-decoration: none; }
   .fresh-more { flex: none; color: #777; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
   .fresh-more:hover { color: #fff; text-decoration: none; }
-  /* What's announced, a line each: its name, and after it when and where, said whole (the time led by its kind's
-     dot, as the list's are), the name what's cut short with "…" where the line runs out. Where and when at most
-     most of the line, so a name always has some. On a wide screen, two columns of them, down and across. */
+  /* What's announced, a line each: its name, and after it its day and venue, said whole, the name what's cut short
+     with "…" where the line runs out. The day and venue at most most of the line, so a name always has some. */
   .fresh-list { margin: 0; padding: 0; list-style: none; }
   .fresh-list li { break-inside: avoid; }
   .fresh-list li + li { margin-top: .45rem; }
@@ -6145,16 +6143,15 @@ CSS = """
   .fresh-name { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; color: #fff; }
   .fresh-meta { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; color: #777; font-size: .85rem; }
   .fresh-meta .lead-day { color: #aaa; }
-  .fresh-time { color: #d4d4d4; font-weight: 400; }
   /* Each line led by its kind's mark, as each listing below is, in its color. */
   .fresh-list a > .icon { width: 15px; height: 15px; align-self: center; margin-right: -.1em; }
   /* The film: its picture beside its words in its own shape, a poster standing, a still lying on its side, a
      little smaller on a phone, where the words beside it have less room. */
   .biggest { display: flex; align-items: center; gap: .9rem; color: inherit; }
   .biggest:hover { text-decoration: none; }
-  .biggest-picture { flex: none; width: 160px; height: 90px; border-radius: 4px; object-fit: cover; background: #161616; }
-  .biggest.standing .biggest-picture { width: 76px; height: 114px; }
-  @media (max-width: 34rem) { .biggest:not(.standing) .biggest-picture { width: 120px; height: 68px; } }
+  .biggest-picture { flex: none; width: 136px; height: 76px; border-radius: 4px; object-fit: cover; background: #161616; }
+  .biggest.standing .biggest-picture { width: 64px; height: 96px; }
+  @media (max-width: 34rem) { .biggest:not(.standing) .biggest-picture { width: 104px; height: 58px; } }
   .biggest-said { display: grid; gap: .15rem; min-width: 0; }
   .biggest-facts { display: block; color: #777; font-size: .85rem; line-height: 1.4; }  /* As a listing's line of when and where. */
   .biggest-facts .lead-day { color: #aaa; }
