@@ -1284,8 +1284,9 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);", page)
         # Room between the listings, and on a phone alone a hairline: not over the first the filter leaves.
         self.assertIn(".day > ul > li.row { padding-top: .45rem; padding-bottom: .45rem; }", page)
-        self.assertIn("@media (max-width: 34rem) {\n    .day > ul > li:not([hidden]) ~ li.row:not(.evening-starts) "
-                      "{ border-top: 1px solid #161616; }", page)
+        self.assertIn("    .day > ul > li.row { padding-top: .65rem; padding-bottom: .65rem; }\n"
+                      "    .day > ul > li:not([hidden]) ~ li.row:not(.evening-starts) { border-top: 1px solid #161616; }", page,
+                      "a phone's two lines a little more room")
 
     def test_the_list_and_the_page(self):
         events = [dict(self.listing(20 + n, f"Show {n}"), added="2026-09-15") for n in range(10)]

@@ -6095,6 +6095,8 @@ CSS = """
      A wide screen's timetable, a line each, needs no rules: its rows are told apart by their lines alone. */
   .day > ul > li.row { padding-top: .45rem; padding-bottom: .45rem; }
   @media (max-width: 34rem) {
+    /* A phone's listing is two lines, its name the larger: a little more room around it than a wide screen's one. */
+    .day > ul > li.row { padding-top: .65rem; padding-bottom: .65rem; }
     .day > ul > li:not([hidden]) ~ li.row:not(.evening-starts) { border-top: 1px solid #161616; }
   }
   .sold-tag, .once-tag { flex: none; display: inline-block; align-self: center; margin-left: .6em; padding: .05rem .45rem; border: 1px solid #333; border-radius: 999px; color: #999;
