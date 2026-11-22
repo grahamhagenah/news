@@ -31,7 +31,11 @@ ROUTES = [
     ("berklee.edu/BPC/full-calendar-of-events-at-the-bpc", "berklee.html"),
     ("lilypadinman.com/home?format=json", "lilypad.json"),
     ("passim.org/live-music", "passim.html"),
-    ("sallyobriensbar.com/music", "sally.html"),  # Its other shows' pages: no show time on them, so door times.
+    ("sallyobriensbar.com/music", "sally.html"),
+    ("calendar.ploughandstars.com/events/calendar", "plough.html"),
+    ("mccarthystoad.com", "toad.json"),  # Before the Iron Horse's: the same widget's address, another page's.
+    ("data.accentapi.com/feed/87910.json", "jungle.json"),
+    ("algolia.net/1/indexes/wp_platform_searchable_posts", "platform.json"),  # Its other shows' pages: no show time on them, so door times.
     ("mideastclub.com", "mideast.html"),
     ("brattlefilm.org", "brattle.html"),
     ("houseofblues.com", "houseofblues.html"),
@@ -210,6 +214,82 @@ class Readers(unittest.TestCase):
         self.assertEqual(first["link"], "https://www.lilypadinman.com/home/2026/bach-and-beer-with-aaron-larget-caplan")
         self.assertTrue(first["about"][0].startswith("$25 admission"))
         self.assertFalse(any("--sqs" in line or "{" in line for item in found for line in item["about"]), "not its styles")
+
+    def test_plough_and_stars_nights_from_its_month_grid(self):
+        class November(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 11, 19, 12, tzinfo=tz)
+        with mock.patch.object(build, "datetime", November):
+            found = self.read("plough", "https://calendar.ploughandstars.com/events/calendar", "music", "The Plough and Stars")
+        shows = [(item["date"], item["times"], item["title"], item["detail"]) for item in found]
+        # From today on, each month once (the sample stands for every month asked for); its start alone ("4-6p").
+        self.assertEqual(shows[:5], [
+            (date(2026, 11, 19), [time(22, 0)], "Fat n’ Gristle Blues Band", ""),
+            (date(2026, 11, 20), [time(22, 0)], "The Handymen", ""),
+            (date(2026, 11, 21), [time(22, 0)], "KaBeatles", "Hosted by MC Kabir"),
+            (date(2026, 11, 21), [time(16, 0)], "Mean Black Spider", ""),
+            (date(2026, 11, 22), [time(16, 0)], "The Starlings", ""),  # Not its stray "with".
+        ])
+        self.assertEqual(len(found), 11)
+        self.assertIn((date(2026, 11, 22), [], "MBF", ""), shows, "no time given: none")
+        titles = {item["title"] for item in found}
+        self.assertNotIn("Trivia Night", titles)
+        self.assertNotIn("No Live Music", titles, "not Thanksgiving, when there's none")
+
+    def test_toad_shows_from_the_calendar_it_shares_with_mccarthys(self):
+        url = "https://core.service.elfsight.com/p/boot/?page=https%3A%2F%2Fwww.mccarthystoad.com%2Fcalendar&w=3fdd143a-e20d-4e92-9fcb-84d101240a59"
+        found = self.read("toad", url, "music", "Toad")
+        # The band as its name, the night it's in as its detail; not Upstairs at McCarthy's, or a weekly night.
+        self.assertEqual([(item["date"], item["times"], item["title"], item["detail"]) for item in found][:4], [
+            (date(2026, 11, 20), [time(18, 0)], "Jake Clough", "Friday club"),
+            (date(2026, 11, 20), [time(22, 30)], "Prestige Worldwide", "Late Night Cover Band"),
+            (date(2026, 11, 21), [time(16, 0)], "Stan Martin Band", "Saturday Revival"),
+            (date(2026, 11, 22), [time(16, 0)], "Dennis Brennan Band", "Sunday Revival Series"),
+        ])
+        self.assertEqual(len(found), 8)
+        titles = {item["title"] for item in found}
+        self.assertNotIn("Late Night Cover Band", titles, "a night whose band isn't named yet")
+        self.assertFalse(titles & {"Monday Open Mic", "Baker Thomas Band Wednesdays"}, "nor one every week")
+        self.assertFalse(any("McCarthy" in title for title in titles), "nor upstairs")
+        self.assertEqual(build.TOAD_NIGHT.match("Late Night band 'Jumper Cable'").groups(), ("Late Night band", "Jumper Cable"))
+
+    def test_the_jungles_eventbrite_shows_from_its_sites_widget(self):
+        found = self.read("sociablekit", "https://data.accentapi.com/feed/87910.json", "music", "The Jungle")
+        first = found[0]
+        self.assertEqual((first["date"], first["times"], first["title"]),
+                         (date(2026, 11, 21), [time(16, 0)], "Monty Neysmith's Original Symarip, Riki Rocksteady"))
+        self.assertTrue(first["sold_out"], "its description says so")
+        self.assertTrue(first["link"].startswith("https://www.eventbrite.com/e/"))
+        self.assertTrue(first["image"].startswith("https://img.evbuc.com/"))
+        by_title = {item["title"]: item for item in found}
+        # A bill's bands by commas, whether "|", "//" or "/" set them apart.
+        self.assertIn("Irrational Apparatus, JB & The Weather Machine, Drip Dry", by_title)
+        self.assertIn("The Glow, Konaa Kateru, BUND, Corinna Parrish", by_title)
+        self.assertEqual(by_title["Vices inc, Type 66, Jacob Hebert"]["price"], "Free")
+        self.assertEqual(by_title["Cold Start, Dogtown, Yopoh"]["price"], "$11.85–$17.15")
+        # Not its open mics, karaoke, comedy or trivia, or the night it closes early.
+        self.assertFalse([title for title in by_title if re.search(r"open mic|karaoke|trivia|comedy|closed", title, re.I)])
+        self.assertEqual(len(found), 14)
+        self.assertEqual(re.sub(r"(?:[,/\s]+TBA)?[,/\s]*$", "", "KK Gordon, TBA"), "KK Gordon")
+
+    def test_the_platforms_music_and_dance_from_its_search_index(self):
+        url = "https://y1vsi41hoc-dsn.algolia.net/1/indexes/wp_platform_searchable_posts?query=&hitsPerPage=1000"
+        found = self.read("platform", url, "music", "The Platform", sorts_its_own=True)
+        shows = {(item["date"], item["times"][0], item["title"], item["category"], item["detail"]) for item in found}
+        # A performance a listing, by its show's name as written, filed by its show's genres: dance is art & talks.
+        self.assertIn((date(2026, 11, 21), time(20, 0), "BalletX", "art", "Takeda Theater"), shows)
+        self.assertIn((date(2026, 11, 22), time(15, 0), "BalletX", "art", "Takeda Theater"), shows)
+        self.assertIn((date(2027, 2, 6), time(20, 0), "The Hot Sardines", "music", "Takeda Theater"), shows)
+        # Not in capitals, nor with the season it's filed under.
+        self.assertIn((date(2026, 12, 12), time(19, 30), "Across the Ocean: Voices from Southeast Asia", "music", "Tempo Stage"), shows)
+        self.assertIn((date(2027, 3, 6), time(20, 0), "Cassie Kollman", "music", "Tempo Stage"), shows)
+        titles = [item["title"] for item in found]
+        self.assertFalse([title for title in titles if "test" in title.lower() or "Koubi" in title],
+                         "not a test, nor one with no date")
+        self.assertNotIn("Chuwi", titles, "not the site's Spanish copies")
+        self.assertEqual(len(titles), len(set((item["title"], item["date"], tuple(item["times"])) for item in found)), "each once")
+        self.assertTrue(all(item["link"].startswith("https://www.theplatformkendall.org/") for item in found))
 
     def test_sally_obriens_nights_from_its_handwritten_page(self):
         class November(datetime):
@@ -1203,7 +1283,7 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn(".fresh-meta { flex: 0 0 auto; max-width: 62%;", page)
         self.assertIn(".lead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);", page)
         # Room between the listings, and on a phone alone a hairline: not over the first the filter leaves.
-        self.assertIn(".day > ul > li.row { padding-top: .75rem; padding-bottom: .75rem; }", page)
+        self.assertIn(".day > ul > li.row { padding-top: .45rem; padding-bottom: .45rem; }", page)
         self.assertIn("@media (max-width: 34rem) {\n    .day > ul > li:not([hidden]) ~ li.row:not(.evening-starts) "
                       "{ border-top: 1px solid #161616; }", page)
 
@@ -1221,16 +1301,16 @@ class JustAnnounced(unittest.TestCase):
         self.assertIn('if (link.closest(".fresh-list")) link.closest("li").remove();', page)
         self.assertIn(f'<li><a href="{R}?event=2026-09-20-show-0-the-sinclair" data-category="music">'
                       '<span class="fresh-name">Show 0</span><span class="fresh-meta">'
-                      '<span class="lead-day" data-date="2026-09-20" data-said="Sun, Sep 20">Sun, Sep 20</span> · '
+                      '<span class="lead-day" data-date="2026-09-20" data-said="Sep 20">Sep 20</span> · '
                       '<b class="fresh-time">8pm</b> · The Sinclair</span></a></li>', lead,
-                      "its name, and after it when and where")
-        self.assertNotIn("<img", lead, "words alone")
+                      "its name, and after it when and where: its date without its weekday, to leave the name room")
         # Today's and tomorrow's say so, as the film's day does; the script says them again by the reader's day.
         soon = [dict(self.listing(15, "Tonight's"), added="2026-09-15"), dict(self.listing(16, "Tomorrow's"), added="2026-09-15")]
         said = build.render_lead(soon[:1], self.built)[0]
-        self.assertIn('<span class="lead-day" data-date="2026-09-15" data-said="Tue, Sep 15">Today</span>', said)
+        self.assertIn('<span class="lead-day" data-date="2026-09-15" data-said="Sep 15">Today</span>', said)
         said = build.render_lead(soon[1:], self.built)[0]
-        self.assertIn('<span class="lead-day" data-date="2026-09-16" data-said="Wed, Sep 16">Tomorrow</span>', said)
+        self.assertIn('<span class="lead-day" data-date="2026-09-16" data-said="Sep 16">Tomorrow</span>', said)
+        self.assertNotIn("<img", lead, "words alone")
         self.assertIn(f'<a class="fresh-more" href="{R}new/">See all →</a></div><ul class="fresh-list">', lead,
                       "the way to the rest in the heading's line, not one of its own")
         # Nothing new and nothing big: nothing over the list at all.
@@ -2341,3 +2421,11 @@ class Evenings(unittest.TestCase):
         self.assertIn('for (const li of lis) li.classList.toggle("evening-starts", li === starts);', build.INDEX_JS)
 
 
+
+
+class Fetch(unittest.TestCase):
+    def test_a_page_in_windows_1252_is_read_as_one(self):
+        page = "Fat n’ Gristle".encode("cp1252")
+        with mock.patch.object(build.shared, "fetch", return_value=("", page)):
+            self.assertEqual(build.fetch("https://example.com/windows-1252", encoding="cp1252"), "Fat n’ Gristle")
+            self.assertEqual(build.fetch("https://example.com/said-to-be-utf-8"), "Fat n\ufffd Gristle")

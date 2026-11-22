@@ -39,6 +39,13 @@
 #   showare    a venue's shows on an accesso ShoWare ticket site, from the list its performance page loads,
 #              ending ?venue=<its id> (The Burren, on 24 Hour Music's; the id is in that site's venue listing)
 #   sally      Sally O'Brien's music page, written by hand on its BentoBox site: a section for each night
+#   plough     the Plough and Stars' calendar, a month's grid to a page
+#   toad       Toad's shows, from the Elfsight calendar widget it shares with McCarthy's (its boot address,
+#              as an elfsight line's: the page it's on, and the widget's id)
+#   sociablekit  a venue's Eventbrite events, from the feed of the SociableKit widget on its site (The Jungle;
+#              the id is the widget's data-embed-id)
+#   platform   The Platform's shows, music and dance, from the Algolia search index its calendar page is filled
+#              from (the application id and search-only key are the ones that page gives every visitor)
 #   berklee    the Berklee Performance Center's full calendar page
 #   squarespace  a Squarespace site's events page, from the data it gives with ?format=json (The Lilypad)
 #   passim     Club Passim's live music page, whose calendar is in its script
@@ -84,6 +91,10 @@ passim     https://www.passim.org/live-music/   music   Club Passim
 armory     https://artsatthearmory.org/events.ics   music   Arts at the Armory
 showare    https://tickets.24hourmusic.com/include/widgets/events/performancelist.asp?venue=1   music   The Burren
 sally      https://www.sallyobriensbar.com/music/   music   Sally O'Brien's
+plough     https://calendar.ploughandstars.com/events/calendar   music   The Plough and Stars
+toad       https://core.service.elfsight.com/p/boot/?page=https%3A%2F%2Fwww.mccarthystoad.com%2Fcalendar&w=3fdd143a-e20d-4e92-9fcb-84d101240a59   music   Toad
+sociablekit  https://data.accentapi.com/feed/87910.json   music   The Jungle
+platform   https://y1vsi41hoc-dsn.algolia.net/1/indexes/wp_platform_searchable_posts?query=&hitsPerPage=1000&x-algolia-application-id=Y1VSI41HOC&x-algolia-api-key=906fcb304f59c27fc5e38065cffa2da4   music   The Platform
 berklee    https://www.berklee.edu/BPC/full-calendar-of-events-at-the-bpc   music   Berklee Performance Center
 
 # Art & talks

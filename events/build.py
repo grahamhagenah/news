@@ -88,6 +88,10 @@ VENUE_ADDRESSES = {
     "Deep Cuts": ("21 Main St", "Medford", "02155"),
     "Midway Cafe": ("3496 Washington St", "Boston", "02130"),
     "Lizard Lounge": ("1667 Massachusetts Ave", "Cambridge", "02138"),
+    "The Plough and Stars": ("912 Massachusetts Ave", "Cambridge", "02139"),
+    "Toad": ("1912 Massachusetts Ave", "Cambridge", "02140"),
+    "The Jungle": ("6 Sanborn Ct", "Somerville", "02143"),
+    "The Platform": ("315 Kendall St", "Cambridge", "02142"),
     "Sally O'Brien's": ("335 Somerville Ave", "Somerville", "02143"),
     "The Rockwell": ("255 Elm St", "Somerville", "02144"),
     "The Lilypad": ("1353 Cambridge St", "Cambridge", "02139"),
@@ -236,10 +240,11 @@ def skipping():
 _fetched, _fetching = {}, threading.Lock()
 
 
-def fetch(url, attempts=3, timeout=20, user_agent=None):
+def fetch(url, attempts=3, timeout=20, user_agent=None, encoding="utf-8"):
     """The page or data at url, as text. Each address is downloaded once a build, however many times it's
     read (an ICA event's page, for each of its dates). user_agent names us differently to a site that turns
-    the usual one away (the Somerville Theatre's)."""
+    the usual one away (the Somerville Theatre's); encoding reads a page that isn't in UTF-8 and doesn't say
+    so (the Plough and Stars', in Windows-1252, whose apostrophes would otherwise come out as "\ufffd")."""
     address = url
     with _fetching:
         pending, first = _fetched.get(address), address not in _fetched
@@ -247,7 +252,7 @@ def fetch(url, attempts=3, timeout=20, user_agent=None):
             pending = _fetched[address] = Future()
     if first:
         try:
-            pending.set_result(shared.fetch(address, user_agent or USER_AGENT, attempts, timeout)[1].decode("utf-8", "replace"))
+            pending.set_result(shared.fetch(address, user_agent or USER_AGENT, attempts, timeout)[1].decode(encoding, "replace"))
         except Exception as error:
             pending.set_exception(error)
     return pending.result()
@@ -1193,6 +1198,38 @@ def read_sally(source):
     return events
 
 
+# The Plough and Stars' times: "10p", "4-6p", "7pm", "9:30p", its start alone.
+PLOUGH_TIME = re.compile(r"^(\d{1,2})(?::(\d\d))?(?:\s*-\s*\d{1,2}(?::\d\d)?)?\s*([ap])", re.I)
+PLOUGH_NOT_SHOW = re.compile(r"\btrivia\b|\bno live music\b", re.I)
+
+
+def read_plough(source):
+    """The Plough and Stars' calendar, a month's grid to a page (?month=12&year=2026), from this month's on to
+    the end of the window: each night's band, its start, and a line under it ("With Keith Bennett + Jason
+    Hazlett"). The page is in Windows-1252. Not its trivia nights, or a night it says has no music."""
+    start, end = today(), window_end(source["category"])
+    months = sorted({(day.year, day.month) for day in (start + timedelta(days=n) for n in range((end - start).days + 1))})
+    events = []
+    for year, month in months:
+        page = fetch(f"{source['url']}?month={month}&year={year}", encoding="cp1252")
+        cells = re.split(r"<div id='(\d{8})' class='day[^']*'>", page)
+        for stamp, cell in zip(cells[1::2], cells[2::2]):
+            day = datetime.strptime(stamp, "%Y%m%d").date()
+            if (day.year, day.month) != (year, month) or not start <= day <= end:
+                continue
+            for row in cell.split("<div class='row'>")[1:]:
+                name, line = (re.search(rf"<div class='{part}'>(.*?)</div>", row, re.S) for part in ("event", "additional"))
+                said = re.search(r"flex_item_left'>([^<]*)<", row)
+                said = text(said.group(1)) if said else ""
+                title = re.sub(r"\s+with$", "", text(name.group(1)) if name else "", flags=re.I)
+                detail = re.sub(r"^With\b", "with", text(line.group(1)) if line else "")
+                clock = PLOUGH_TIME.match(said)
+                if not title or PLOUGH_NOT_SHOW.search(f"{title} {detail}") or (said and not clock):
+                    continue
+                events.append(event(source, title, day, clock_of(*clock.groups()) if clock else None, detail=detail))
+    return events
+
+
 def read_showare(source):
     """A venue's shows on an accesso ShoWare ticket site (The Burren's, on 24 Hour Music's), from the list its
     performance page loads: each show's name, start, what it says about it, its price and its picture; not its
@@ -1351,6 +1388,94 @@ def read_elfsight(source):
                             detail=support, about=about(item.get("description") or ""), image=picture,
                             price=price_from(caption) or ("Free" if "FREE EVENT" in kinds else ""),
                             sold_out=any((action.get("text") or "").casefold() == "sold out" for action in actions)))
+    return events
+
+
+# Toad's nights: a night of its week and its band, quoted, "Saturday Revival with 'Stan Martin Band'", "Friday club
+# with ‘Greg Klyma'", "Late Night band 'Jumper Cable'".
+TOAD_NIGHT = re.compile(r"^(.+?)\s+(?:with\s+)?['‘’\"](.+?)['‘’\"]*$")
+
+
+def read_toad(source):
+    """Toad's shows, on the Elfsight calendar it shares with McCarthy's next door (read_elfsight, Toad's room
+    alone): each night's band as its name, and the night it plays in ("Saturday Revival") as its detail. A night
+    whose band isn't named yet ("Late Night Cover Band", where another week's is "Late Night Cover Band with
+    'Prestige Worldwide'") isn't one."""
+    found = read_elfsight(source)
+    nights = {named.group(1).casefold() for named in map(TOAD_NIGHT.match, (item["title"] for item in found)) if named}
+    events = []
+    for item in found:
+        named = TOAD_NIGHT.match(item["title"])
+        if named:
+            night = " · ".join(filter(None, [named.group(1).strip(), item["detail"]]))
+            events.append(dict(item, title=named.group(2).strip(), detail=night))
+        elif item["title"].casefold() not in nights:
+            events.append(item)
+    return events
+
+
+# What The Jungle lists that isn't a show: its open mics, karaoke and trivia, a private party, a night it closes
+# early, and the blank events it copies new ones from ("Ticketed - Dummy event to copy").
+SOCIABLEKIT_SKIP = re.compile(r"open mic|karaoke|trivia|private event|^closed\b|\bdummy\b", re.I)
+
+
+def read_sociablekit(source):
+    """A venue's Eventbrite events as a SociableKit widget on its own site shows them (The Jungle's), from the
+    feed the widget loads (data.accentapi.com/feed/<its id>.json): Eventbrite's own page has only the next dozen.
+    Each show's bands, a line or two about it, its price and its picture. A bill's bands, set apart by "|", "//"
+    or "/", are set apart by commas, as other venues' are; a "TBA" at the end goes."""
+    events = []
+    for item in json.loads(fetch(source["url"])).get("events") or []:
+        title = re.sub(r"\s*(?:\|+|//)\s*|(?<=\w)/(?=\w)", ", ", html.unescape(item.get("name") or ""))
+        title = re.sub(r"(?:[,/\s]+TBA)?[,/\s]*$", "", title).strip()
+        described = item.get("description") or ""
+        if not title or SOCIABLEKIT_SKIP.search(title) or guess_kind(title) is None:
+            continue
+        moment = datetime.strptime(item["start_time_raw"], "%Y-%m-%d %H:%M:%S")
+        events.append(event(source, title, moment.date(), moment.time(), link=item.get("ticket_uri") or "",
+                            about=about(described), image=item.get("pic_big") or "",
+                            price=price_from(item.get("price_range")),
+                            sold_out=item.get("is_sold_out") == "true" or bool(re.search(r"\bsold out\b", text(described), re.I))))
+    return events
+
+
+# The Platform's genres that make a show dance (art & talks): "Dance", "Contemporary dance", "Danza", "Tap",
+# "Acrobatic" (Cirque Kalabanté).
+PLATFORM_DANCE = re.compile(r"\bdanc|\bdanza\b|\btap\b|\bacrobat", re.I)
+
+
+def read_platform(source):
+    """The Platform's shows (Global Arts Live's, in Kendall Square), from the search index its calendar and event
+    list are filled from (Algolia's, with the search-only key those pages give every visitor; Global Arts Live
+    publishes no feed, and its own site's pages give a show's dates one page at a time). Each performance is
+    one record, its show (production) another: the performance its day and time, the show its proper name (the
+    performance's is in capitals), its stage, its genres and its picture. A show with a dance genre is art &
+    talks, one with none is guessed from its name; the rest are music. Not the site's Spanish copies, a
+    performance with no date, or a test one."""
+    hits = json.loads(fetch(source["url"])).get("hits") or []
+    shows = {hit["permalink"]: hit for hit in hits if hit.get("post_type") == "production" and hit.get("language") != "es"}
+    events, seen = [], set()
+    for hit in hits:
+        when = hit.get("performance_date")
+        if hit.get("post_type") != "performance" or hit.get("language") == "es" or not when or re.search(r"\btest\b", hit.get("post_title", ""), re.I):
+            continue
+        linked = hit.get("production") or {}
+        show = shows.get(linked.get("permalink"), {})
+        # Its name as the show's is written, without the season it's filed under ("CASSIE KOLLMAN FY27"), and not
+        # in capitals.
+        title = text(html.unescape(show.get("post_title") or "")) or text(hit.get("performance_title") or hit.get("post_title"))
+        title = calm(re.sub(r"\s+FY\d{2}$", "", title))
+        genres = [html.unescape(genre) for genre in show.get("genre") or []]
+        kind = ("art" if any(PLATFORM_DANCE.search(genre) for genre in genres) else "music" if genres
+                else guess_kind(title, show.get("alert_text") or ""))
+        moment = datetime.fromisoformat(when).astimezone(source.get("zone", BOSTON))
+        if not kind or (title, moment) in seen:
+            continue
+        seen.add((title, moment))
+        stage = (linked.get("venue") or show.get("venue") or {}).get("title", "")
+        events.append(dict(event(source, title, moment.date(), moment.time().replace(tzinfo=None),
+                                 link=linked.get("permalink") or hit.get("permalink") or "", detail=stage,
+                                 image=linked.get("listing_image") or show.get("listing_image") or ""), category=kind))
     return events
 
 
@@ -2913,6 +3038,10 @@ READERS = {
     "armory": read_armory,
     "showare": read_showare,
     "sally": read_sally,
+    "plough": read_plough,
+    "toad": read_toad,
+    "sociablekit": read_sociablekit,
+    "platform": read_platform,
     "berklee": read_berklee,
     "squarespace": read_squarespace,
     "passim": read_passim,
@@ -3432,10 +3561,12 @@ def biggest_film(events, built_at, before=""):
 
 
 
-def lead_day(day, built_at):
-    """The film's day as the lead says it: Today, Tomorrow, or "Thu, Nov 19", as of this build by the city's clock."""
+def lead_day(day, built_at, weekday=True):
+    """The film's day as the lead says it: Today, Tomorrow, or "Thu, Nov 19" ("Nov 19" without its weekday), as of
+    this build by the city's clock."""
     here = built_at.astimezone(PUBLIC_ZONE).date()
-    return "Today" if day == here else "Tomorrow" if day == here + timedelta(days=1) else f"{day:%a, %b} {day.day}"
+    return ("Today" if day == here else "Tomorrow" if day == here + timedelta(days=1)
+            else f"{day:%a, %b} {day.day}" if weekday else f"{day:%b} {day.day}")
 
 
 def calm(title):
@@ -3459,16 +3590,17 @@ def render_lead(events, built_at, before=""):
     # script says again by the reader's day, going back to the date itself (data-said) for a page read the day
     # after; any other with its weekday, which is how a night out is thought of ("Sat, Nov 21"). A data-date, not
     # a datetime: the shared script reads every datetime as a timestamp to age ("18h").
-    said = lambda day: (f'<span class="lead-day" data-date="{day.isoformat()}" data-said="{day:%a, %b} {day.day}">'
-                        f'{lead_day(day, built_at)}</span>')
+    said = lambda day, weekday=True: (
+        f'<span class="lead-day" data-date="{day.isoformat()}" data-said="{f"{day:%a, %b} {day.day}" if weekday else f"{day:%b} {day.day}"}">'
+        f'{lead_day(day, built_at, weekday)}</span>')
     # The film first, on the left (over the rest on a phone); then the newest few announced in words alone, a line
-    # each, its name and then when and where. Pictures of them made the top of the page heavy, and showed one
+    # each, its name and then when and where, its date without its weekday to leave the name room. Pictures of them made the top of the page heavy, and showed one
     # announcement where a list shows a few; three lines stand as tall as the film's card beside them.
     if fresh:
         rows = "".join(
             f'<li><a href="{PUBLIC_ROOT}?{urlencode({"event": listing_id(item["date"], item["title"], item["venue"])[0]})}" '
             f'data-category="{item["category"]}"><span class="fresh-name">{html.escape(calm(item["title"]))}</span>'
-            f'<span class="fresh-meta">{said(item["date"])} · '
+            f'<span class="fresh-meta">{said(item["date"], weekday=False)} · '
             + (f'<b class="fresh-time">{clock(item["times"][0])}</b> · ' if item["times"] else "")
             + f'{html.escape(item["venue"])}</span></a></li>'
             for item in fresh)
@@ -5900,7 +6032,7 @@ CSS = """
      on a phone, where each is two lines, a hairline between them too, over every listing with one shown before it
      (not the first the filter leaves, under the day's own line, nor the first of the evening, under its label).
      A wide screen's timetable, a line each, needs no rules: its rows are told apart by their lines alone. */
-  .day > ul > li.row { padding-top: .75rem; padding-bottom: .75rem; }
+  .day > ul > li.row { padding-top: .45rem; padding-bottom: .45rem; }
   @media (max-width: 34rem) {
     .day > ul > li:not([hidden]) ~ li.row:not(.evening-starts) { border-top: 1px solid #161616; }
   }
