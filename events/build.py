@@ -231,6 +231,13 @@ def read_sources(path=None, city="boston", zone=BOSTON):
     return sources
 
 
+# A venue's calendar saying it's shut that day, which some list as though it were a show: Club Passim's "club
+# closed", Midway Cafe's "**CLOSED**", "Closed for Christmas". The whole name only, so a band or a show with the
+# word in it ("Closed Circuit") stays.
+CLOSURE = re.compile(r"[\W_]*(?:(?:the )?(?:club|venue|bar|theat(?:re|er)|box office) )?(?:is )?closed\b(?: for [\w' ]+| today| tonight)?[\W_]*",
+                     re.I)
+
+
 def skipping():
     """skip.txt's words and phrases as one pattern, which finds any of them as whole words, in any case; None
     when there are none."""
@@ -6669,7 +6676,8 @@ def main():
     # Here, not in the readers, so it covers a source's listings from before too, and skip.txt takes effect at once.
     # Not films, whose names are a work's title ("God's Comedy"), not what kind of event it is.
     skip = skipping()
-    events = merge_showings([item for item in events if not (skip and item["category"] != "film" and skip.search(item["title"]))])
+    events = merge_showings([item for item in events if not (skip and item["category"] != "film" and skip.search(item["title"]))
+                             and not CLOSURE.fullmatch(item["title"])])
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "static", OUT_DIR, dirs_exist_ok=True)
     # The personal events page: Boston's. Its listings.json keeps every city's, for falling back on.

@@ -1306,6 +1306,14 @@ class JustAnnounced(unittest.TestCase):
                       "{ visibility: hidden; }", page, "the listings; what's over them shows at once")
         self.assertIn('</nav>\n<div class="skeleton" aria-hidden="true">', page, "an outline in their place meanwhile")
 
+    def test_a_venue_saying_its_closed_isnt_a_show(self):
+        """Club Passim's "club closed" and Midway Cafe's "**CLOSED**" are its calendar saying it's shut; a name with
+        the word in it is still a show."""
+        for notice in ["club closed", "**CLOSED**", "Closed for Christmas", "CLOSED TODAY!", "The Club Is Closed"]:
+            self.assertTrue(build.CLOSURE.fullmatch(notice), notice)
+        for name in ["Closed Circuit", "Doors Closed Live", "Holiday Party (closed to public)"]:
+            self.assertFalse(build.CLOSURE.fullmatch(name), name)
+
     def test_sally_obriens_is_never_announced(self):
         """Its page is written by hand, and a night's name there is as often notes and set times as a band's."""
         sally = dict(self.listing(20, "Bluegrass Jam 8pm followed by"), venue="Sally O'Brien's", added="2026-09-15")
