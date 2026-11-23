@@ -6399,11 +6399,15 @@ CSS = """
   .lead { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 1.6rem 3.5rem; margin: 0 0 3.25rem; }
   .lead.one { grid-template-columns: minmax(0, 1fr); }
   @media (max-width: 46rem) { .lead { grid-template-columns: minmax(0, 1fr); } }
-  .lead > * { min-width: 0; }
+  /* Each at least as tall as three lines announced under their heading, the film's card on its own too: Tonight's
+     can be the film alone and a weekend's what's announced alone, and the home page shows one in place of the other,
+     so the filter under them would jump between the two. */
+  .lead > * { min-width: 0; min-height: 8.125rem; }
   /* Beside the film's taller card, what's announced in the middle of the room under its heading, not at the top
-     of it with a gap below. */
+     of it with a gap below; on its own, fewer than three at the top of it. */
   .lead > .fresh { display: flex; flex-direction: column; }
   .lead > .fresh > .fresh-list { margin: auto 0; }
+  .lead.one > .fresh > .fresh-list { margin: 0 0 auto; }
   .lead-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .75rem;
                padding: .25rem 0 .45rem; border-bottom: 1px solid #1c1c1c; }
   .lead-tag { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
