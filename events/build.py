@@ -3448,7 +3448,15 @@ def render_clock(moments, sold=(), category=""):
     # "+6 more": a bare "+6" read as a price or an age as often as as more showtimes.
     count = len(moments) - 1
     more = f'<small title="{count} more showtime{"s" * (count > 1)}">+{count} more</small>' if count else ""
-    return f'<span class="clock"><b{struck}>{clock(first)}</b>{more}</span>'
+    return f'<span class="clock"><b{struck}>{column_clock(first)}</b>{more}</span>'
+
+
+def column_clock(moment):
+    """A time as the column says it: 7:30pm, and 8<span class="oclock">:00</span>pm, the minutes of a time on the
+    hour there for a wide screen's column of times to show, so they're all one width and line up, and hidden on
+    a phone, where the time is in a line of words ("8pm · Paradise")."""
+    said = clock(moment)
+    return said if moment.minute else f'{said[:-2]}<span class="oclock">:00</span>{said[-2:]}'
 
 
 def zone_of(item):
@@ -4938,6 +4946,8 @@ INDEX_JS = """
   // A listing's time, in the column before its name: the first of its times still to come, and how many more
   // ("+6"), which its view lists; for a film at several theaters, of those the venue menu leaves. Said again
   // whenever what's shown changes, today's showings having dropped off as they pass.
+  // A time as the column says it (column_clock): on the hour, its ":00" there for a wide screen alone.
+  const columnClock = t => t.textContent.replace(/^([0-9]+)(am|pm)$/, '$1<span class="oclock">:00</span>$2');
   const clockOf = li => {
     const column = li.querySelector(":scope > .clock, summary > .clock");
     if (!column) return;
@@ -4945,7 +4955,7 @@ INDEX_JS = """
       .filter(t => inPart(li, t)).sort((a, b) => a.dataset.time < b.dataset.time ? -1 : 1);
     const more = new Set(times.map(t => t.dataset.time)).size - 1;
     const struck = times[0]?.classList.contains("sold") && !li.matches(".combined") ? ' class="sold"' : "";
-    column.innerHTML = times.length ? `<b${struck}>${times[0].textContent}</b>` + (more > 0 ? `<small title="${more} more showtime${more > 1 ? "s" : ""}">+${more} more</small>` : "")
+    column.innerHTML = times.length ? `<b${struck}>${columnClock(times[0])}</b>` + (more > 0 ? `<small title="${more} more showtime${more > 1 ? "s" : ""}">+${more} more</small>` : "")
       : column.dataset.untimed ? `<i class="untimed">${column.dataset.untimed}</i>` : "";
     li.dataset.first = times[0]?.dataset.time || "";
     // A wide screen says what those more are, after the name: the next two of them, and how many past those
@@ -6210,6 +6220,8 @@ CSS = """
   .clock b.sold { color: #555; text-decoration: line-through; text-decoration-color: #555; }
   .clock small { color: #666; font-size: inherit; }
   .clock .untimed { color: #888; font-style: normal; }  /* "Time TBA", "All day": a word, quieter than a time. */
+  .oclock { display: none; }  /* A wide screen's (below). */
+  @media not all and (max-width: 34rem) { .day .row .clock .oclock { display: inline; } }
   .day .row .source { order: 2; display: block; max-width: none; color: #777; font-size: .9rem; text-align: left; }
   .day .row .source::before { content: none; }
   /* Where the evening starts in a day's list, a quiet label over its first row: a listing on both before and after
@@ -6270,8 +6282,8 @@ CSS = """
     .day .headline > .later small { margin-left: .45em; color: #555; font-size: inherit; }
     .day .headline > .later .sold { color: #444; text-decoration: line-through; }
     .day .row .clock small { display: none; }
-    /* The times set right in a width of the longest, "12:45pm", so their ends line up down the column as a
-       timetable's do, rather than a ragged edge of "10am" and "11:25am". */
+    /* The times all one width, "8:00pm" as "7:30pm" is (column_clock), set right so their colons line up down the
+       column as a timetable's do, rather than a ragged edge of "10am" and "11:25am". */
     .day .row .clock b { min-width: 3.75rem; text-align: right; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }

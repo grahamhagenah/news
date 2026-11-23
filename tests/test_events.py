@@ -1415,7 +1415,7 @@ class TimeColumn(unittest.TestCase):
     built = datetime(2026, 9, 13, tzinfo=timezone.utc)
 
     def test_the_first_and_how_many_more(self):
-        self.assertEqual(build.render_clock([time(21), time(19), time(19)]), '<span class="clock"><b>7pm</b><small title="1 more showtime">+1 more</small></span>')
+        self.assertEqual(build.render_clock([time(21), time(19), time(19)]), '<span class="clock"><b>7<span class="oclock">:00</span>pm</b><small title="1 more showtime">+1 more</small></span>')
         self.assertEqual(build.render_clock([time(20, 30)]), '<span class="clock"><b>8:30pm</b></span>')
         # No time given: said in a word, the script's to say again.
         self.assertEqual(build.render_clock([]), '<span class="clock" data-untimed="Time TBA"><i class="untimed">Time TBA</i></span>')
@@ -1431,7 +1431,7 @@ class TimeColumn(unittest.TestCase):
 
     def test_after_the_mark_and_before_the_name(self):
         row = build.render_row(build.event(self.venue, "A Show", self.day, time(20)))
-        self.assertIn('</svg><span class="clock"><b>8pm</b></span><div class="headline">', row)
+        self.assertIn('</svg><span class="clock"><b>8<span class="oclock">:00</span>pm</b></span><div class="headline">', row)
         self.assertNotIn("<time", row[row.index('class="clock"'):row.index('class="headline"')],
                          "no <time> in it: the row's own times are what the script counts and drops")
 
@@ -1442,7 +1442,7 @@ class TimeColumn(unittest.TestCase):
                     build.event(dict(film, name="Somerville"), "Wide Release", self.day, time(13))]
         combined = [item for item in build.combine_films(showings) if "showings" in item]
         self.assertEqual(len(combined), 1)
-        self.assertIn('<span class="clock"><b>1pm</b><small title="1 more showtime">+1 more</small></span><div class="headline"><span class="title">Wide Release',
+        self.assertIn('<span class="clock"><b>1<span class="oclock">:00</span>pm</b><small title="1 more showtime">+1 more</small></span><div class="headline"><span class="title">Wide Release',
                       build.render_row(combined[0]), "1pm at two of them and 4pm at the third: 1pm, and one more")
 
     def test_each_listing_one_block_on_a_phone_and_a_timetables_line_wider(self):
