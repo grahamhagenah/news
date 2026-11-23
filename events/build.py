@@ -6445,7 +6445,8 @@ CSS = """
   .biggest-facts .lead-day { color: #aaa; }
   /* Two lines at most, as what it's about under it has: a restoration's full billing ("Dr. Strangelove or: How I
      Learned to Stop Worrying… (50th Anniversary 4K Restoration)") would otherwise take four on a phone. */
-  .biggest-title { overflow: hidden; color: #fff; font-weight: 400; line-height: 1.35;
+  /* Semibold, as the days' headings are: the biggest words over the list, a weight above the rows' names under it. */
+  .biggest-title { overflow: hidden; color: #fff; font-weight: 600; letter-spacing: -.01em; line-height: 1.35;
                    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .biggest-about { overflow: hidden; color: #6c6c6c; font-size: .85rem; line-height: 1.4;
                    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -6561,7 +6562,7 @@ CSS = """
   /* Drawn as a phone's row is: the name first, led by its kind's mark, by the middle of its first line, and its day
      on a small line under it, lined up with the name. */
   .event-title { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: .55rem; margin: 0 2rem .2rem 0;
-                 color: #fff; font-size: 1.4rem; font-weight: 400; letter-spacing: -.01em; line-height: 1.3; text-transform: none; }
+                 color: #fff; font-size: 1.4rem; font-weight: 600; letter-spacing: -.015em; line-height: 1.3; text-transform: none; }
   .event-title .event-icon { display: flex; margin-top: calc((1.4rem * 1.3 - 18px) / 2); }
   .event-title .icon { width: 18px; height: 18px; }
   .event-where { margin: 0 2.5rem .35rem calc(18px + .55rem); color: #777; font-size: .85rem; }
