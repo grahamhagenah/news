@@ -5871,14 +5871,11 @@ PIN_CSS = """
      it has a line of its own under them, as every other page's does. */
   header h1.tagline { flex: 1 1 auto; min-width: 0; margin: 0; }  /* The header's own gap is room enough. */
   @media not all and (max-width: 34rem) { header:has(.sites .here:not([hidden])) h1.tagline { display: none; } }
-  /* On a phone too, beside the name, in two lines of even length ("Concerts, films, and talks / around Boston.")
-     rather than a word left on the second. It goes for the kind's name there as on a wide screen, but the header
-     keeps the two lines' height, so choosing a kind doesn't pull the filter and the listings up under the finger
-     that chose it. */
+  /* On a phone it stays, on its line under the name, whichever kind is showing: taking that line away when
+     a kind is chosen would pull the filter and the listings up under the finger that chose it. */
   @media (max-width: 34rem) {
-    header:has(h1.tagline) { flex-wrap: nowrap; align-items: center; min-height: calc(.9rem * 1.45 * 2); }
-    header h1.tagline { text-wrap: balance; }
-    header:has(.sites .here:not([hidden])) h1.tagline { display: none; }
+    header:has(h1.tagline) { flex-wrap: wrap; row-gap: .9rem; }
+    header h1.tagline { order: 3; flex-basis: 100%; margin: 0; }
   }
   h1.tagline + .bar-mark + .filter { margin-top: 0; }  /* The filter's own pull-up would leave the line on top of it. */
   /* The filter belongs to the listings it narrows, so it sits nearer them than what's above it: a full gap after
