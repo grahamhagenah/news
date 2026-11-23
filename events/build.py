@@ -3762,7 +3762,7 @@ def render_lead(events, built_at, before="", days=None, when=""):
             + '</span></a></div>')
     if not parts:
         return "", ""
-    marked = f' data-when="{when}" hidden' if when else ""
+    marked = f' data-when="{when}"' if when else ""
     return (f'<div class="lead{" one" if len(parts) == 1 else ""}"{marked}>\n' + "\n".join(parts) + "\n</div>\n"
             + LEAD_NOW.replace("ZONE", json.dumps(str(PUBLIC_ZONE))), film["key"] if film else "")
 
@@ -4072,12 +4072,14 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     # Just announced, a line over the home page's listings: one of the week's newest, which its script picks.
     home = public and not (category or tonight or added or weekend is not None)
     # Tonight's and the weekends' pages have one of their own nights; the home page has those too, hidden, for
-    # its script to show in place of its own when Tonight or a weekend is chosen (data-when).
+    # its script to show in place of its own when Tonight or a weekend is chosen (data-when). Those three one over
+    # another in the same place (.leads), its height the tallest's, so going from one to another moves nothing
+    # under them: a film's poster, or its name on two lines, is taller than three lines announced.
     ranges = {"tonight": (built_day, built_day)} | {str(ahead): weekend_days(built_day, ahead) for ahead in range(len(PUBLIC_WEEKENDS))}
     banner = ""
     if home:
-        banner = render_lead(events, built_at, biggest)[0] + "".join(
-            render_lead(events, built_at, biggest, days, when)[0] for when, days in ranges.items())
+        banner = (render_lead(events, built_at, biggest)[0] + '<div class="leads" hidden>' + "".join(
+            render_lead(events, built_at, biggest, days, when)[0] for when, days in ranges.items()) + "</div>\n")
     elif public and (tonight or weekend is not None):
         banner = render_lead(every, built_at, biggest, ranges["tonight" if tonight else str(weekend)])[0]
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
@@ -5339,7 +5341,13 @@ INDEX_JS = """
       // A weekend shown in place, the way to the other one under it, as its own page has.
       for (const nav of document.querySelectorAll(".weekends[data-on]")) nav.hidden = nav.dataset.on !== when?.dataset.when;
       // And over the list, the film and the announcements of those nights, not the week's (render_lead's days).
-      for (const lead of document.querySelectorAll(".lead")) lead.hidden = (lead.dataset.when || null) !== (when?.dataset.when || null);
+      // Theirs are one over another in the same place (.leads), the others there unseen, keeping its height.
+      for (const lead of document.querySelectorAll(".lead")) {
+        if (lead.dataset.when) lead.classList.toggle("away", lead.dataset.when !== when?.dataset.when);
+        else lead.hidden = Boolean(when);
+      }
+      const leads = document.querySelector(".leads");
+      if (leads) leads.hidden = !when;
     }
     document.querySelector("main").classList.add("paged");
     markStuck();
@@ -6403,6 +6411,11 @@ CSS = """
      can be the film alone and a weekend's what's announced alone, and the home page shows one in place of the other,
      so the filter under them would jump between the two. */
   .lead > * { min-width: 0; min-height: 8.125rem; }
+  /* The home page's for tonight and the weekends, one over another, as tall as the tallest: only the one chosen
+     seen, the others keeping their room, so the filter under them stays where it is going from one to another. */
+  .leads { display: grid; }
+  .leads > .lead { grid-area: 1 / 1; align-self: start; }
+  .leads > .lead.away { visibility: hidden; }
   /* Beside the film's taller card, what's announced in the middle of the room under its heading, not at the top
      of it with a gap below; on its own, fewer than three at the top of it. */
   .lead > .fresh { display: flex; flex-direction: column; }
