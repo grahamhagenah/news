@@ -6282,9 +6282,6 @@ CSS = """
     .day .headline > .later small { margin-left: .45em; color: #555; font-size: inherit; }
     .day .headline > .later .sold { color: #444; text-decoration: line-through; }
     .day .row .clock small { display: none; }
-    /* The times all one width, "8:00pm" as "7:30pm" is (column_clock), set right so their colons line up down the
-       column as a timetable's do, rather than a ragged edge of "10am" and "11:25am". */
-    .day .row .clock b { min-width: 3.75rem; text-align: right; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
     /* Recently added: the day each is on a column of its own, before its time. */
