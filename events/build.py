@@ -6536,9 +6536,12 @@ CSS = """
   .combined summary { display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline;
                       list-style: none; cursor: pointer; }
   .combined summary::-webkit-details-marker { display: none; }
-  /* Its ring, reached by the keys, drawn just inside it: outside, its ends showed past the day's heading as the
-     row went up under it. */
-  .combined summary:focus-visible { outline-offset: -2px; }
+  /* No box around a row or a line over the list that's reached by the keys: the row lit as under the pointer
+     instead, and its name underlined, so where the keys are is still plain to see. */
+  .day > ul > li.row :focus-visible, .lead a:focus-visible { outline: none; }
+  .day > ul > li.row:has(:focus-visible) { background: #0e0e0e; }
+  .day > ul > li.row:has(:focus-visible) .title, .lead a:focus-visible .fresh-name,
+  .lead a:focus-visible .biggest-title { text-decoration: underline; }
   .combined summary:hover .title { text-decoration: underline; }
   /* No preview on hover: a click opens the listing's view, which has it all. Rows keep theirs, unseen, for the
      view to show at once and for the search. */
