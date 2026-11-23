@@ -3644,19 +3644,20 @@ def biggest_picture(showings):
     return stills[0] if stills else ("", None)
 
 
-def biggest_film(events, built_at, before=""):
+def biggest_film(events, built_at, before="", days=None):
     """The film the most of the city's theaters have taken in the week ahead, as the day it's at the most of
     them on — or before, the one the last build showed, for as long as it's still on and nothing has passed
-    it. A film that ties it isn't bigger, so it doesn't take its place: what's at the top of the page changes
+    it. days, a first and last day, for the biggest of just those: tonight's, or a weekend's. A film that ties it isn't bigger, so it doesn't take its place: what's at the top of the page changes
     when something new is bigger, not when two are level and the order they were read in shifts. Theaters
     are counted a day at a time, so the number is true of a single evening rather than a week's worth of
     them added up. None where no film reaches the city's bar, which is most weeks somewhere small."""
     here = built_at.astimezone(PUBLIC_ZONE).date()
+    first, last = days or (here, here + timedelta(days=BIGGEST_DAYS))
     screens = {item["venue"] for item in events if item["category"] == "film"}
     least = max(BIGGEST_FLOOR, round(len(screens) / BIGGEST_SHARE))
     days = {}
     for item in events:
-        if item["category"] == "film" and here <= item["date"] <= here + timedelta(days=BIGGEST_DAYS):
+        if item["category"] == "film" and max(here, first) <= item["date"] <= last:
             days.setdefault((item["date"], film_key(item["title"])), []).append(item)
     best = {}
     for (day, key), showings in days.items():
@@ -3709,12 +3710,16 @@ def calm(title):
     return uncapped(title) if shouted else title
 
 
-def render_lead(events, built_at, before=""):
+def render_lead(events, built_at, before="", days=None, when=""):
     """What's over the listings on the home page: the week's biggest film beside the newest few announced,
     each a way to its row in the list below. Either on its own where there's only it; nothing where there's
     neither. Nothing moves: the film is the biggest there is until something bigger turns up, and what's
-    announced is the newest, in the order it was."""
-    film, fresh = biggest_film(events, built_at, before), newly_added(events, built_at)[:FRESH_SHOWN + FRESH_SPARE]
+    announced is the newest, in the order it was. With days, a first and last, only what's on then: over
+    tonight's listings or a weekend's, the film and the announcements of those nights, not of others. when
+    marks it as the home page's for one of those (data-when), which its script shows in place of its own."""
+    film = biggest_film(events, built_at, before, days)
+    fresh = [item for item in newly_added(events, built_at) if not days or days[0] <= item["date"] <= days[1]]
+    fresh = fresh[:FRESH_SHOWN + FRESH_SPARE]
     parts = []
     # A day as a listing's is said: Today or Tomorrow as of this build, there as the page first shows, which the
     # script says again by the reader's day, going back to the date itself (data-said) for a page read the day
@@ -3757,7 +3762,8 @@ def render_lead(events, built_at, before=""):
             + '</span></a></div>')
     if not parts:
         return "", ""
-    return (f'<div class="lead{" one" if len(parts) == 1 else ""}">\n' + "\n".join(parts) + "\n</div>\n"
+    marked = f' data-when="{when}" hidden' if when else ""
+    return (f'<div class="lead{" one" if len(parts) == 1 else ""}"{marked}>\n' + "\n".join(parts) + "\n</div>\n"
             + LEAD_NOW.replace("ZONE", json.dumps(str(PUBLIC_ZONE))), film["key"] if film else "")
 
 
@@ -3967,6 +3973,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         if area:
             towns.setdefault(item["source"], Counter())[area] += 1
     towns = {source: counted.most_common(1)[0][0] for source, counted in towns.items()}
+    every = events  # Every day's, for what's over the list on tonight's page and the weekends'.
     if public:
         if category:
             events = [item for item in events if item["category"] == category]
@@ -4064,7 +4071,15 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     places = {item["venue"]: written(VENUE_ADDRESSES[item["venue"]]) for item in events if item["venue"] in VENUE_ADDRESSES}
     # Just announced, a line over the home page's listings: one of the week's newest, which its script picks.
     home = public and not (category or tonight or added or weekend is not None)
-    banner = render_lead(events, built_at, biggest)[0] if home else ""
+    # Tonight's and the weekends' pages have one of their own nights; the home page has those too, hidden, for
+    # its script to show in place of its own when Tonight or a weekend is chosen (data-when).
+    ranges = {"tonight": (built_day, built_day)} | {str(ahead): weekend_days(built_day, ahead) for ahead in range(len(PUBLIC_WEEKENDS))}
+    banner = ""
+    if home:
+        banner = render_lead(events, built_at, biggest)[0] + "".join(
+            render_lead(events, built_at, biggest, days, when)[0] for when, days in ranges.items())
+    elif public and (tonight or weekend is not None):
+        banner = render_lead(every, built_at, biggest, ranges["tonight" if tonight else str(weekend)])[0]
     # Where this page is on the public site: a kind's page, a weekend's, or the home page.
     path = (PUBLIC_WEEKENDS[weekend][0] if weekend is not None else PUBLIC_TONIGHT[0] if tonight else
             PUBLIC_NEW[0] if added else f"{PUBLIC_PAGES[category][0]}/" if category else "")
@@ -5323,6 +5338,8 @@ INDEX_JS = """
       }
       // A weekend shown in place, the way to the other one under it, as its own page has.
       for (const nav of document.querySelectorAll(".weekends[data-on]")) nav.hidden = nav.dataset.on !== when?.dataset.when;
+      // And over the list, the film and the announcements of those nights, not the week's (render_lead's days).
+      for (const lead of document.querySelectorAll(".lead")) lead.hidden = (lead.dataset.when || null) !== (when?.dataset.when || null);
     }
     document.querySelector("main").classList.add("paged");
     markStuck();
@@ -5450,16 +5467,17 @@ INDEX_JS = """
   // Over the list, nothing that would open a listing the page no longer has: an announcement whose listing has
   // started goes, and the next of the spares takes its place; the film, gone today, opens its next showing, and
   // goes only where there's none.
-  {
-    const lead = document.querySelector(".lead");
-    for (const link of lead ? lead.querySelectorAll("a[href*='?event=']") : []) {
+  // The home page has one for each of tonight and the weekends too, which show in place of its own (showEvents).
+  for (const lead of document.querySelectorAll(".lead")) {
+    for (const link of lead.querySelectorAll("a[href*='?event=']")) {
       const id = new URL(link.href, location.href).searchParams.get("event");
       if (rowWith(id)) continue;
       if (link.closest(".fresh-list")) link.closest("li").remove();
       else if (!nextOf(id)) link.closest(".biggest-part").remove();
     }
-    if (lead && !lead.querySelector(".fresh-list li")) lead.querySelector(".fresh")?.remove();
-    if (lead) { const left = lead.children.length; if (!left) lead.remove(); else lead.classList.toggle("one", left === 1); }
+    if (!lead.querySelector(".fresh-list li")) lead.querySelector(".fresh")?.remove();
+    const left = lead.children.length;
+    if (!left) lead.remove(); else lead.classList.toggle("one", left === 1);
   }
   const dated = date => new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   const dayName = date => date === today ? "Today" : date === tomorrow ? "Tomorrow" : dated(date);

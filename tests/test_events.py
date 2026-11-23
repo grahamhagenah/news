@@ -2196,6 +2196,33 @@ class Biggest(unittest.TestCase):
         with mock.patch.object(build, "picture_shape", return_value=None):  # It wouldn't load, so no shape.
             self.assertNotIn("<img", build.render_lead(poster, self.built)[0])
 
+    def test_tonights_and_a_weekends_are_of_those_nights(self):
+        """Over tonight's listings or a weekend's, the film and the announcements of those nights: one that's on
+        another night isn't what's on then. Neither where there's nothing then; the home page's, hidden, for its
+        script to show in place."""
+        built = datetime(2026, 9, 17, 12, tzinfo=build.PUBLIC_ZONE)  # A Thursday: the weekend's the 18th to the 20th.
+        tonight = (date(2026, 9, 17),) * 2
+        weekend = build.weekend_days(date(2026, 9, 17))
+        films = [self.showing("Saturday Film", f"Theater {n}", days_ahead=-1) for n in range(4)]
+        announced = [dict(build.event(source("aeg", "x", "music", "The Sinclair"), "Tonight's Show", date(2026, 9, 17), time(21)),
+                          added="2026-09-16"),
+                     dict(build.event(source("aeg", "x", "music", "The Sinclair"), "Sunday Show", date(2026, 9, 20), time(20)),
+                          added="2026-09-16")]
+        week, _ = build.render_lead(films + announced, built)
+        self.assertIn("Saturday Film", week)
+        self.assertIn("Sunday Show", week)
+        night, _ = build.render_lead(films + announced, built, days=tonight)
+        self.assertIn("Tonight&#x27;s Show", night)
+        self.assertNotIn("Saturday Film", night, "not tonight's")
+        self.assertNotIn("Sunday Show", night)
+        saturday, _ = build.render_lead(films + announced, built, days=weekend, when="0")
+        self.assertIn('<div class="lead" data-when="0" hidden>', saturday)
+        self.assertIn("Saturday Film", saturday)
+        self.assertIn("Sunday Show", saturday)
+        self.assertNotIn("Tonight&#x27;s", saturday)
+        self.assertEqual(build.render_lead(films, built, days=tonight), ("", ""))
+        self.assertIn("lead.hidden = (lead.dataset.when || null) !== (when?.dataset.when || null);", build.INDEX_JS)
+
     def test_the_film_a_card_beside_whats_announced(self):
         """The film a card with its poster, first; what's announced in words after it: on its right on a wide
         screen, under it on a phone."""
