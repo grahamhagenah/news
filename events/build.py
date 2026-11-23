@@ -3391,8 +3391,8 @@ EVENT_VIEW = f"""<dialog class="event" aria-labelledby="event-title">
 <p class="event-said" role="status" aria-live="polite" aria-atomic="true"></p>
 <div class="event-body">
 <div class="event-image" hidden><img alt="" decoding="async" referrerpolicy="no-referrer"><img class="event-backdrop" alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer"></div>
-<h2 class="event-title" id="event-title"><span class="event-icon"></span><span class="event-name"></span></h2>
-<p class="event-where"><span class="event-day"></span></p>
+<h2 class="event-title" id="event-title"><span class="event-name"></span></h2>
+<p class="event-where"><span class="event-icon"></span><span class="event-day"></span></p>
 <p class="event-facts"></p>
 <p class="event-detail"></p>
 <p class="event-note"></p>
@@ -6559,13 +6559,12 @@ CSS = """
      the filter's chips are, not filled in. */
   .event-fact { padding: .1rem .6rem; border-radius: 999px; box-shadow: inset 0 0 0 1px #2a2a2a; color: #999;
                 font-size: .8rem; font-variant-numeric: tabular-nums; }
-  /* Drawn as a phone's row is: the name first, led by its kind's mark, by the middle of its first line, and its day
-     on a small line under it, lined up with the name. */
-  .event-title { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: .55rem; margin: 0 2rem .2rem 0;
+  /* The name first, at the edge everything under it starts at, and its day on a small line under it, led by its
+     kind's mark in its color: the mark beside the name took a column of its own, which nothing under it lined up with. */
+  .event-title { margin: 0 2rem .2rem 0;
                  color: #fff; font-size: 1.4rem; font-weight: 600; letter-spacing: -.015em; line-height: 1.3; text-transform: none; }
-  .event-title .event-icon { display: flex; margin-top: calc((1.4rem * 1.3 - 18px) / 2); }
-  .event-title .icon { width: 18px; height: 18px; }
-  .event-where { margin: 0 2.5rem .35rem calc(18px + .55rem); color: #777; font-size: .85rem; }
+  .event-where { margin: 0 2.5rem .35rem 0; color: #777; font-size: .85rem; }
+  .event-where .icon { width: 14px; height: 14px; margin-right: .4em; vertical-align: -2px; }
   .event-detail, .event-note { margin: 0 0 .3rem; color: #999; font-size: .85rem; }
   .event-detail:empty, .event-note:empty, .event-place:empty, .event-also:empty, .event-places:empty { display: none; }
   .event-note { color: #bbb; }
