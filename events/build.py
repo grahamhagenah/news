@@ -5583,9 +5583,14 @@ INDEX_JS = """
     stopViewing();
     restore();
   }
+  // Closed, the view gives the focus back to the row it was opened from, and the browser rings that row as if
+  // it had been reached by the keys, there for good, scrolling up under the bar. Opened by a click or a tap,
+  // the row is let go of instead (the keys still go on from it); opened from the keys, it keeps its ring.
+  let byPointer = false;
   view.addEventListener("close", () => {
     stopViewing();
     if (closing) closing = false; else restore();
+    if (byPointer && !view.contains(document.activeElement)) document.activeElement.blur();
   });
   view.addEventListener("cancel", event => { event.preventDefault(); closeEvent(); }); // Esc.
   part("close").addEventListener("click", closeEvent);
@@ -5649,6 +5654,7 @@ INDEX_JS = """
     const id = new URL(link.href, location.href).searchParams.get("event"), li = rowWith(id), next = li || nextOf(id);
     if (!next) return;
     event.preventDefault();
+    byPointer = event.detail > 0; // A click from the keys counts none.
     openEvent(next, true, li ? "" : "Today's showings have all started; this is the next one.");
   });
   document.addEventListener("click", event => {
@@ -5657,6 +5663,7 @@ INDEX_JS = """
     const a = event.target.closest("a");
     if (a && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return; // Straight to the venue.
     event.preventDefault(); // Also keeps a film at several theaters from opening in place.
+    byPointer = event.detail > 0;
     openEvent(li, true);
   });
   addEventListener("popstate", () => {
@@ -6529,6 +6536,9 @@ CSS = """
   .combined summary { display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem; align-items: baseline;
                       list-style: none; cursor: pointer; }
   .combined summary::-webkit-details-marker { display: none; }
+  /* Its ring, reached by the keys, drawn just inside it: outside, its ends showed past the day's heading as the
+     row went up under it. */
+  .combined summary:focus-visible { outline-offset: -2px; }
   .combined summary:hover .title { text-decoration: underline; }
   /* No preview on hover: a click opens the listing's view, which has it all. Rows keep theirs, unseen, for the
      view to show at once and for the search. */
