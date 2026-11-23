@@ -6107,8 +6107,8 @@ CSS = """
                 animation: sk-pulse 1.1s ease-in-out infinite alternate; }
   @keyframes sk-pulse { from { opacity: .5; } to { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .skeleton i { animation: none; } }
-  .sk-day { padding: 1.8rem 0 1.15rem; border-bottom: 1px solid #1c1c1c; }
-  .sk-day i { width: 9.5rem; height: .6rem; }
+  .sk-day { padding: 2.65rem 0 .8rem; border-bottom: 1px solid #1c1c1c; }
+  .sk-day i { width: 11rem; height: .7rem; }
   .sk-row { padding: .75rem 0; }
   .sk-day + .sk-row { margin-top: .35rem; }
   .sk-when { width: 8.5rem; height: .6rem !important; margin-bottom: .6rem; }
@@ -6141,14 +6141,16 @@ CSS = """
      is plain at a glance, and a little room between it and the first row. */
   .day > h2 { margin-bottom: .35rem; border-bottom: 1px solid #1c1c1c; }
   .day > h2 { padding-bottom: .45rem; }
-  /* A small label in capitals, "TODAY · TUESDAY, NOV 17", on a phone and a wide screen alike: under a search box
-     and a row of chips, a heading the kinds' size read as a third row of controls. The day in a lighter gray than
-     its date. */
+  /* A heading a size up from the list's small print, in ordinary capitals, as the day breaks are what a long list
+     is read by: the day in white and bolder, "Tomorrow", or the weekday after those, and its date in gray after
+     it, "Tomorrow Monday, Nov 23". The small capitals it had were the labels' over the list, and the day breaks
+     didn't stand out from them. */
   @media all {
-    .day > h2 { color: #777; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
-    .day > h2 .relative:not(:empty), .day > h2 .weekday, .day > h2 .relative:not(:empty) + .date .weekday { color: #bbb; }
-    .day > h2 .relative:not(:empty) { margin-right: .45em; }
-    .day > h2 .relative:not(:empty)::after { content: " ·"; color: #555; }
+    .day > h2 { padding-top: .45rem; color: #777; font-size: 1rem; letter-spacing: -.005em; text-transform: none; }
+    .day > h2 .relative:not(:empty), .day > h2 .relative:empty + .date .weekday, .day > h2 > .date:only-child {
+      color: #fff; font-weight: 600; }
+    .day > h2 .relative:not(:empty) + .date .weekday { color: inherit; font-weight: 400; }
+    .day > h2 .relative:not(:empty) { margin-right: .5em; }
   }
   /* Each day's heading held under the bar while its day is passing, black so the rows go under it, until the
      next day's pushes it up and away. Once it's held, the bar's shadow is its (the script marks it pinned). */
@@ -6212,7 +6214,7 @@ CSS = """
   .day .row .source::before { content: none; }
   /* Where the evening starts in a day's list, a quiet label over its first row: a listing on both before and after
      it is listed again under it. Quieter than the day's heading: no line under it, and not held at the top. */
-  .day > ul > li.row.evening-starts { margin-top: 1.9rem; }  /* Over the row's own margin, where it's lit under a pointer. */
+  .day > ul > li.row.evening-starts { margin-top: 2.6rem; }  /* Over the row's own margin, where it's lit under a pointer. */
   .day > ul > li.row.evening-starts::before { content: "Evening"; position: absolute; bottom: 100%; left: 0; padding-left: inherit;
                                           padding-bottom: .3rem; color: #666; font-size: .75rem; letter-spacing: .08em;
                                           text-transform: uppercase; pointer-events: none; }
@@ -6268,6 +6270,9 @@ CSS = """
     .day .headline > .later small { margin-left: .45em; color: #555; font-size: inherit; }
     .day .headline > .later .sold { color: #444; text-decoration: line-through; }
     .day .row .clock small { display: none; }
+    /* The times set right in a width of the longest, "12:45pm", so their ends line up down the column as a
+       timetable's do, rather than a ragged edge of "10am" and "11:25am". */
+    .day .row .clock b { min-width: 3.75rem; text-align: right; }
     .day .row .source { grid-column: 3; grid-row: 1; max-width: 14rem; font-size: .85rem; text-align: right; }
     .day .row .clock ~ .source::before, .day .row .clock ~ * .source::before { content: none; }
     /* Recently added: the day each is on a column of its own, before its time. */
@@ -6508,8 +6513,10 @@ CSS = """
   .event-share .check-mark, .event-share.copied .share-mark { display: none; }
   .event-share.copied .check-mark { display: block; color: #4ade80; }
   @media (max-width: 34rem) {
-    /* A sheet up from the bottom, as tall as it needs: a phone's screen is the frame that steadies it. */
-    dialog.event { width: 100%; max-width: 100%; height: auto; max-height: 88dvh; margin: auto 0 0;
+    /* A sheet up from the bottom, as tall as it needs: a phone's screen is the frame that steadies it. Its
+       content's height said outright: a modal dialog is held at the top and bottom of the screen, and a height
+       left to itself stretched it as tall as it could go, a gap over its buttons. */
+    dialog.event { width: 100%; max-width: 100%; height: fit-content; max-height: 88dvh; margin: auto 0 0;
                    border: 1px solid #262626; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
     .event-body { padding: 1.25rem 1.25rem 1.5rem; }
     .event-image { margin: -1.25rem -1.25rem 1rem; border-radius: 15px 15px 0 0; }  /* Inside the sheet's own corners. */
