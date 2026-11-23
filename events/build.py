@@ -4082,7 +4082,7 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
             _, title, description, tagline = PUBLIC_TONIGHT
         if added:
             _, title, description, tagline = PUBLIC_NEW
-    footer = (public_footer(path, failed_note, names) if public else
+    footer = (public_footer(path, failed_note, names, built_at) if public else
               f"<footer>\n<p>From {names}.</p>\n{failed_note}"
               f'<p><a href="{REPO_URL}/edit/main/events/sources.txt">Add a source</a></p>\n</footer>\n')
     others = ""
@@ -4196,10 +4196,11 @@ def shorter(paragraphs):
     return clip(paragraphs, PUBLIC_ABOUT_CHARS, 2, least=60)
 
 
-def public_footer(path, notes="", names=""):
+def public_footer(path, notes="", names="", updated=None):
     """The foot of each of the public site's pages: what the site is, the same on every page (its own page says
     what it is over its listings), then the site's pages in three short lists (this one marked), and, under a
-    list of events, where they come from, then any source it couldn't reach."""
+    list of events, where they come from and when they were last gathered ("Updated 3h ago", which the shared
+    script ages), then any source it couldn't reach."""
     root = PUBLIC_ROOT
     groups = [
         ("Browse", [("All events", "")] + [(label, f"{PUBLIC_PAGES[key][0]}/") for key, label in CATEGORIES.items()]
@@ -4216,7 +4217,9 @@ def public_footer(path, notes="", names=""):
         + "</ul></div>"
         for heading, links in groups
     )
-    where = f"<p>Listings from {names}, aggregated from their own calendars every few hours.</p>\n" if names else ""
+    when = (f' Updated <time class="updated" datetime="{updated.isoformat()}">{updated:%b} {updated.day}</time>.'
+            if updated else "")
+    where = f"<p>Listings from {names}, aggregated from their own calendars every few hours.{when}</p>\n" if names else ""
     said = f'<p class="tagline">{html.escape(PUBLIC_TAGLINE)}</p>\n'
     return (f'<footer>\n{said}<nav class="site-links" aria-label="{html.escape(PUBLIC_NAME)}">{lists}</nav>\n'
             f'{where}{notes}</footer>\n')
@@ -4268,8 +4271,10 @@ def public_page(path, title, body, built_at=None, description=None, data=None, s
     # around Boston"), and saying it twice in two lines is once more than it needs. The page's title, what a
     # tab or a search result shows, keeps the city.
     brand = PUBLIC_NAME.partition(" ")[0]
+    # When it was updated is said at its foot (public_footer), not in the header, which is the name and what the
+    # site is.
     return shared.page("events", title, body, css=CSS + PUBLIC_CSS, head=head, symbols=ICON_SYMBOLS,
-                       updated=built_at, links=links, indexable=True, said=said,
+                       links=links, indexable=True, said=said,
                        marked={PUBLIC_NAME: WORDMARK},
                        here=PAGE_NAMES.get(path, ""))
 
@@ -5866,11 +5871,14 @@ PIN_CSS = """
      it has a line of its own under them, as every other page's does. */
   header h1.tagline { flex: 1 1 auto; min-width: 0; margin: 0; }  /* The header's own gap is room enough. */
   @media not all and (max-width: 34rem) { header:has(.sites .here:not([hidden])) h1.tagline { display: none; } }
-  /* On a phone it stays, on its line under the name, whichever kind is showing: taking that line away when
-     a kind is chosen would pull the filter and the listings up under the finger that chose it. */
+  /* On a phone too, beside the name, in two lines of even length ("Concerts, films, and talks / around Boston.")
+     rather than a word left on the second. It goes for the kind's name there as on a wide screen, but the header
+     keeps the two lines' height, so choosing a kind doesn't pull the filter and the listings up under the finger
+     that chose it. */
   @media (max-width: 34rem) {
-    header:has(h1.tagline) { flex-wrap: wrap; row-gap: .9rem; }
-    header h1.tagline { order: 3; flex-basis: 100%; margin: 0; }
+    header:has(h1.tagline) { flex-wrap: nowrap; align-items: center; min-height: calc(.9rem * 1.45 * 2); }
+    header h1.tagline { text-wrap: balance; }
+    header:has(.sites .here:not([hidden])) h1.tagline { display: none; }
   }
   h1.tagline + .bar-mark + .filter { margin-top: 0; }  /* The filter's own pull-up would leave the line on top of it. */
   /* The filter belongs to the listings it narrows, so it sits nearer them than what's above it: a full gap after
