@@ -4043,14 +4043,15 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
     when_links = ""
     if public:
         now = PUBLIC_TONIGHT[0] if tonight else PUBLIC_WEEKENDS[weekend][0] if weekend is not None else None
-        whens = [(PUBLIC_TONIGHT[0], "Tonight", "")] + [(path, name, ' class="later"' * (at > 0))
-                                                         for at, (path, name, *_) in enumerate(PUBLIC_WEEKENDS)]
+        # Each says which days it is (data-when: today, or which weekend), for the home page to show them in place.
+        whens = [(PUBLIC_TONIGHT[0], "Tonight", "", "tonight")] + [(path, name, ' class="later"' * (at > 0), str(at))
+                                                                   for at, (path, name, *_) in enumerate(PUBLIC_WEEKENDS)]
         # This weekend is just "Weekend" where Next weekend isn't beside it (a wide screen's bar), to keep it narrow.
         said = lambda label: (f'<span class="said-long">{label}</span><span class="said-short">Weekend</span>'
                               if label == "This weekend" else label)
         when_links = '<span class="when-links">' + "".join(
-            f'<a{later} href="{root}{path}"{" aria-current=\"page\"" if path == now else ""}>{said(label)}</a>'
-            for path, label, later in whens) + "</span>"
+            f'<a{later} href="{root}{path}" data-when="{when}"{" aria-current=\"page\"" if path == now else ""}>{said(label)}</a>'
+            for path, label, later, when in whens) + "</span>"
     names =", ".join(html.escape(source["name"]) for source in sources)
     # Notices of sources that didn't load, marked as such, last in the footer.
     mark = shared.icon("notice")
@@ -4093,6 +4094,15 @@ def render_index(events, sources, failed, stale, built_at, public=False, categor
         name, href = PUBLIC_WEEKENDS[other][1], root + PUBLIC_WEEKENDS[other][0]
         others = (f'<nav class="weekends"><span></span><a href="{href}">{name}, {days} →</a></nav>\n' if other else
                   f'<nav class="weekends"><a href="{href}">← {name}, {days}</a><span></span></nav>\n')
+    elif home:
+        # The home page shows a weekend in place (its script), and the way to the other one with it, as a weekend's
+        # own page has: hidden until then.
+        today = built_at.astimezone(PUBLIC_ZONE).date()
+        (this_path, this_name, *_), (next_path, next_name, *_) = PUBLIC_WEEKENDS[:2]
+        others = (f'<nav class="weekends" data-on="0" hidden><span></span><a href="{root}{next_path}" data-to="1">'
+                  f'{next_name}, {weekend_span(*weekend_days(today, 1))} →</a></nav>\n'
+                  f'<nav class="weekends" data-on="1" hidden><a href="{root}{this_path}" data-to="0">'
+                  f'← {this_name}, {weekend_span(*weekend_days(today, 0))}</a><span></span></nav>\n')
     # What a page says with nothing on it: Just announced, that nothing's been added lately, not that there's
     # nothing on at all. The script says the same with a venue or a search narrowing it ("Nothing added in the
     # last week at The Sinclair").
@@ -5053,8 +5063,10 @@ INDEX_JS = """
   // with every word typed somewhere in their name, place or description (accents aside), and is kept in the
   // address (?q=). About a hundred of what's shown come first, in whole days, so the list never stops partway
   // through one; Load more, at the bottom, adds the next hundred's days under them, and ?page=2 keeps how many
-  // are showing, for Back and reloading. A weekend's page shows all of it.
-  const EVENTS_PER_PAGE = document.querySelector(".filter").hasAttribute("data-one-page") ? 100000 : 100; // A weekend, whole.
+  // are showing, for Back and reloading. A weekend's page shows all of it, as does the home page showing tonight
+  // or a weekend in place.
+  const onePage = document.querySelector(".filter").hasAttribute("data-one-page");
+  const perPage = () => onePage || when ? 100000 : 100; // A weekend, whole.
   const filter = document.querySelector(".filter");
   const search = document.querySelector(".search");
   const pager = document.querySelector(".pager");
@@ -5070,6 +5082,20 @@ INDEX_JS = """
   const everything = !kindPages || filter.dataset.current === "all";
   const remember = !kindPages && !filter.hasAttribute("data-here"); // The weekend page's choice isn't kept.
   let show = kindPages ? filter.dataset.current : "all";
+  // The home page shows tonight, or a weekend, in place too, as it does a kind, and along with one, so what's over
+  // the list stays: which, by its link (null for every day), and its days, from today by the city's clock, as
+  // weekend_days in the build has them. Its address is that page's, as a kind's is.
+  const inPlace = kindPages && everything;
+  const whenLinks = [...filter.querySelectorAll(".when-links a")];
+  let when = null;
+  const plusDays = (date, n) => new Date(Date.parse(date + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+  const daysOf = which => {
+    if (which === "tonight") return [today, today];
+    const weekday = (new Date(today + "T12:00:00Z").getUTCDay() + 6) % 7;  // Monday's 0, Friday's 4.
+    const friday = plusDays(today, 4 - weekday + 7 * Number(which));  // Back to it from Saturday or Sunday.
+    return [friday, plusDays(friday, 2)];
+  };
+  const pathOf = () => new URL((when || filter.querySelector(`a[data-show="${show}"]`)).dataset.href, location.href).pathname;
   if (remember) try { show = localStorage.getItem("events-show") || "all"; } catch (error) {}
   // The venue menu shows one venue's events, of every kind, kept in the address too (?venue=).
   const venue = document.querySelector(".filter .pick");
@@ -5224,7 +5250,9 @@ INDEX_JS = """
     narrow();
     for (const li of allRows) clockOf(li);
     inOrder();
+    const range = when ? daysOf(when.dataset.when) : null;
     const rows = allRows.filter(li => (show === "all" || li.dataset.category === show)
+      && (!range || (range[0] <= li.closest(".day").dataset.date && li.closest(".day").dataset.date <= range[1]))
       && li.dataset.sources.split("|").some(inChosen)
       // One of a listing's two rows with none of its part's times at the theaters chosen: the other row has them.
       && !(li.dataset.part && !li.dataset.first)
@@ -5239,7 +5267,7 @@ INDEX_JS = """
     for (const li of rows) {
       const day = dayOf.get(li);
       if (day !== lastDay) {
-        if (onThis && onThis + sizes.get(day) > EVENTS_PER_PAGE) { pages += 1; onThis = 0; }
+        if (onThis && onThis + sizes.get(day) > perPage()) { pages += 1; onThis = 0; }
         lastDay = day;
       }
       onThis += 1;
@@ -5288,15 +5316,24 @@ INDEX_JS = """
     }
     // And the search and the venue go along to tonight's and the weekend's, as they do from the phone's menu.
     for (const a of filter.querySelectorAll(".when-links a")) a.setAttribute("href", a.dataset.href + query());
+    if (inPlace) {
+      for (const a of whenLinks) {
+        if (a === when) a.setAttribute("aria-current", "page");
+        else a.removeAttribute("aria-current");
+      }
+      // A weekend shown in place, the way to the other one under it, as its own page has.
+      for (const nav of document.querySelectorAll(".weekends[data-on]")) nav.hidden = nav.dataset.on !== when?.dataset.when;
+    }
     document.querySelector("main").classList.add("paged");
     markStuck();
-    // The home page, showing a kind in place, names it in the header, as that kind's own page does.
+    // The home page, showing a kind in place, or tonight or a weekend, names it in the header, as its own page does.
     const here = document.querySelector(".sites .here");
-    if (here && kindPages && everything) {
-      here.textContent = show === "all" ? "" : filter.querySelector(`a[data-show="${show}"]`).textContent;
-      here.hidden = show === "all";
+    if (here && inPlace) {
+      const named = when ? when.querySelector(".said-long") || when : show === "all" ? null : filter.querySelector(`a[data-show="${show}"]`);
+      here.textContent = named ? named.textContent : "";
+      here.hidden = !named;
       const name = document.querySelector(".sites a");
-      if (show === "all") name.setAttribute("aria-current", "page");
+      if (!named) name.setAttribute("aria-current", "page");
       else name.removeAttribute("aria-current");
     }
     fitDetails();
@@ -5310,15 +5347,34 @@ INDEX_JS = """
     // With nothing left to load the button goes, so the reader carries on from the first of the new events.
     if (pager.hidden && first) first.querySelector("a").focus({ preventScroll: true });
   });
+  // Tonight or a weekend, on the home page: shown in place, or, pressed again, let go, back to every day.
+  const showWhen = link => {
+    when = link;
+    history.pushState(null, "", pathOf() + query());
+    window.goatcounter?.count?.({ path: location.pathname }); // Its page, shown in place, is a visit to it.
+    showEvents();
+    settleRow();
+    toList();
+  };
+  const modified = event => event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+  for (const a of document.querySelectorAll(".weekends[data-on] a")) a.addEventListener("click", event => {
+    if (modified(event)) return;
+    event.preventDefault();
+    showWhen(whenLinks.find(link => link.dataset.when === a.dataset.to));
+  });
   filter.addEventListener("click", event => {
-    const b = event.target.closest("[data-show]");
+    const b = event.target.closest("[data-show]"), w = inPlace ? event.target.closest(".when-links a") : null;
     // A kind's own page has only its events, so its links go to the others' pages; so does a click to open one
     // in a new tab.
-    if (!b || !everything || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (modified(event)) return;
+    if (w) { event.preventDefault(); showWhen(w === when ? null : w); return; }
+    if (!b || !everything) return;
     event.preventDefault();
     show = b.dataset.show;
-    if (kindPages) {
-      history.pushState(null, "", new URL(b.dataset.href, location.href).pathname + query());
+    if (kindPages && when) {
+      history.replaceState(null, "", address(1)); // Tonight's music, say: still tonight's address, as its page's own kinds.
+    } else if (kindPages) {
+      history.pushState(null, "", pathOf() + query());
       window.goatcounter?.count?.({ path: location.pathname }); // A kind's page, shown in place, is a visit to it.
     } else {
       if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
@@ -5328,9 +5384,11 @@ INDEX_JS = """
     toList();
   });
   // Back and forward between the kinds (and venues) the home page has shown.
-  if (kindPages && everything) addEventListener("popstate", () => {
-    const here = [...filter.querySelectorAll("a[data-show]")].find(a => new URL(a.dataset.href, location.href).pathname === location.pathname);
-    show = here ? here.dataset.show : "all";
+  if (inPlace) addEventListener("popstate", () => {
+    const at = a => new URL(a.dataset.href, location.href).pathname === location.pathname;
+    when = whenLinks.find(at) || null;
+    const here = [...filter.querySelectorAll("a[data-show]")].find(at);
+    if (!when) show = here ? here.dataset.show : "all";
     fromAddress();
     showEvents();
     settleRow();
@@ -5343,7 +5401,8 @@ INDEX_JS = """
     if (kindPages && !everything) { location.href = new URL(home.dataset.href, location.href).pathname + query(); return; }
     show = "all";
     if (remember) try { localStorage.setItem("events-show", show); } catch (error) {}
-    if (kindPages) history.pushState(null, "", new URL(home.dataset.href, location.href).pathname + query());
+    // On the home page, tonight or a weekend stays: tonight at the venue chosen.
+    if (kindPages) history.pushState(null, "", pathOf() + query());
     else history.replaceState(null, "", address(1));
     showEvents();
     settleRow();

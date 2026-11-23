@@ -1923,13 +1923,20 @@ class HomePage(unittest.TestCase):
         # Each says which weekend it is: a bare "Weekend" beside "Next weekend" had to be worked out.
         # On a wide screen, where Next weekend isn't beside it, This weekend is just "Weekend".
         this = '<span class="said-long">This weekend</span><span class="said-short">Weekend</span>'
-        self.assertIn(f'<span class="when-links"><a href="{R}tonight/">Tonight</a><a href="{R}weekend/">{this}</a>'
-                      f'<a class="later" href="{R}weekend/next/">Next weekend</a></span>', home)
-        self.assertIn(f'<a href="{R}tonight/" aria-current="page">Tonight</a>', self.page(tonight=True))
-        self.assertIn(f'<a href="{R}weekend/" aria-current="page">{this}</a>', self.page(weekend=0))
+        self.assertIn(f'<span class="when-links"><a href="{R}tonight/" data-when="tonight">Tonight</a>'
+                      f'<a href="{R}weekend/" data-when="0">{this}</a>'
+                      f'<a class="later" href="{R}weekend/next/" data-when="1">Next weekend</a></span>', home)
+        self.assertIn(f'<a href="{R}tonight/" data-when="tonight" aria-current="page">Tonight</a>', self.page(tonight=True))
+        self.assertIn(f'<a href="{R}weekend/" data-when="0" aria-current="page">{this}</a>', self.page(weekend=0))
         following = self.page(weekend=1)
         self.assertNotIn('aria-current="page">This weekend', following, "next weekend's isn't this one")
-        self.assertIn(f'<a class="later" href="{R}weekend/next/" aria-current="page">Next weekend</a>', following)
+        self.assertIn(f'<a class="later" href="{R}weekend/next/" data-when="1" aria-current="page">Next weekend</a>', following)
+        # The home page shows them in place, Just announced and the film still over the list, and a weekend with
+        # the way to the other one under it, hidden until then.
+        self.assertIn(f'<nav class="weekends" data-on="0" hidden><span></span><a href="{R}weekend/next/" data-to="1">', home)
+        self.assertIn(f'<nav class="weekends" data-on="1" hidden><a href="{R}weekend/" data-to="0">', home)
+        self.assertNotIn("data-on=", self.page(weekend=0))
+        self.assertIn("if (w) { event.preventDefault(); showWhen(w === when ? null : w); return; }", build.INDEX_JS)
         self.assertIn(".when-links .later, .when-links .said-short { display: none; }", home)
         self.assertIn("body .filter .when-links .later, body .filter .when-links .said-long { display: none; }", home)
         # The one the page is goes back to every day when it's pressed again.
